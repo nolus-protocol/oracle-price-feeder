@@ -1,0 +1,36 @@
+[package]
+name = "market-data-feeder"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "feeder"
+
+[dependencies]
+# [...]
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+secrecy = { version = "0.8", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+confy = "0.4.0"
+toml = "0.5"
+thiserror = "1.0.30"
+async-trait = "0.1.53"
+cosmwasm-std = "0.16.7"
+
+# cosmos sdk clients
+# cosmrs = { version = "0.5.1", features = ["dev", "rpc", "cosmwasm"]}
+deep_space = "2.11.0"
+cosmos-sdk-proto = {package = "cosmos-sdk-proto-althea", version = "0.12.4", features = ["cosmwasm"]}
+bech32 = "0.9.0"
+
+
+[dev-dependencies]
+# [...]
+tokio = { version = "1", features = ["rt", "macros"] }
+wiremock = "0.5.2"
