@@ -1,0 +1,19 @@
+title = "Market Data Feeder Configuration"
+
+continuous = true
+tick_time = 60
+
+
+[[providers]]
+main_type = "crypto"
+name = "osmosis"
+base_address = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/"
+
+[oracle]
+contract_addrs = "nolus17p9rzwnnfxcjp32un9ug7yhhzgtkhvl9jfksztgw5uh69wac2pgsmc5xhq"
+cosmos_url= "http://localhost:9090"
+prefix = "nolus"
+chain_id = "nolus-local"
+fee_denom = "unolus"
+funds_amount = 100
+gas_limit = 500_000

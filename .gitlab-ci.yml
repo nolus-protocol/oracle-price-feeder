@@ -1,0 +1,55 @@
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/cargo_home
+
+cache:
+  paths:
+    - target/
+    - cargo_home/
+
+default:
+  image: "rust:latest"
+  before_script:
+    - rustc --version 
+    - cargo --version
+
+stages:
+  - prepare
+  - test
+
+prepare_node:
+  stage: prepare
+  script:
+    - mkdir -p $CARGO_HOME
+    - rustc --version && cargo --version    
+    - du -hs target
+    - du -hs $CARGO_HOME
+
+test-code:
+  stage: test
+  artifacts:
+    when: always
+    reports:
+      cobertura: "cobertura.xml"
+  coverage: '/\d+\.\d+% coverage, /'
+  script:
+    - cargo test
+    - cargo install cargo-tarpaulin
+    - cargo tarpaulin --ignore-tests --out Xml
+
+lint-code:
+  stage: test
+  script:
+    - rustup component add clippy
+    - cargo clippy -- -D warnings
+    
+format-code:
+  stage: test
+  script:
+    - rustup component add rustfmt
+    - cargo fmt -- --check
+
+audit-code:
+  stage: test
+  script:
+    - cargo install cargo-audit
+    - cargo audit
