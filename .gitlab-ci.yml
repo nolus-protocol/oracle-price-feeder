@@ -21,16 +21,15 @@ prepare_node:
   script:
     - mkdir -p $CARGO_HOME
     - rustc --version && cargo --version    
-    - du -hs target
-    - du -hs $CARGO_HOME
 
 test-code:
   stage: test
   artifacts:
-    when: always
     reports:
-      cobertura: "cobertura.xml"
-  coverage: '/\d+\.\d+% coverage, /'
+      coverage_report:
+        coverage_format: cobertura
+        path: cobertura.xml
+  coverage: '/^\d+.\d+% coverage/'
   script:
     - cargo test
     - cargo install cargo-tarpaulin
