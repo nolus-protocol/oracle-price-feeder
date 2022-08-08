@@ -1,5 +1,5 @@
-use crate::provider::FeedProviderError;
-use cosmwasm_std::{Decimal256, Uint256};
+use crate::provider::{FeedProviderError, Price};
+
 use serde::Deserialize;
 
 trait Empty<T> {
@@ -116,45 +116,43 @@ impl Pool {
         &self,
         base_asset: &str,
         quote_asset: &str,
-    ) -> Result<Decimal256, FeedProviderError> {
+    ) -> Result<Price, FeedProviderError> {
         // spot_price is calculated with the following formula
         // (Base_supply / Weight_base) / (Quote_supply / Weight_quote)
+        // or this is equal to
+        // (Base_supply * Weight_quote) / (Quote_supply * Weight_base )
+        //
+        // Formula taken from here:
+        // https://docs.osmosis.zone/developing/osmosis-core/modules/spec-gamm.html#spot-price
+        // maybe we can switch to using grpc query about the spot price instead of parcing all available pools
+        // see https://github.com/cosmos/cosmos-rust/pull/270 for osmosis proto
+        // Also osmosis-std
+        // https://github.com/osmosis-labs/osmosis-rust/blob/5da0d5eace1bc39ac49b2f8682bfb3303bc402e6/packages/osmosis-std/src/types/osmosis/gamm/v1beta1.rs#L363
+
+        // TODO check again if weight is needed
 
         let asset_pair = self.parse_pool_assets_by_denoms(base_asset, quote_asset)?;
         if asset_pair.base.weight.is_empty() || asset_pair.quote.weight.is_empty() {
             return Err(FeedProviderError::InvalidPoolEmptyWeight);
         }
 
-        let numerator =
-            Decimal256::from_ratio(asset_pair.get_base_amount(), asset_pair.get_base_weight());
-        let denom =
-            Decimal256::from_ratio(asset_pair.get_quote_amount(), asset_pair.get_quote_weight());
-        let ratio = decimal_div(numerator, denom);
-        Ok(ratio)
+        // TODO avoid unchecked multiply
+        Ok(Price::new(
+            base_asset,
+            asset_pair.get_base_amount() * asset_pair.get_quote_weight(),
+            quote_asset,
+            asset_pair.get_quote_amount() * asset_pair.get_base_weight(),
+        ))
     }
-}
-
-fn decimal_div(numerator: Decimal256, denominator: Decimal256) -> Decimal256 {
-    let decimal_fractional: Uint256 = // 1*10**18
-        Uint256::from_be_bytes([
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 224, 182,
-            179, 167, 100, 0, 0,
-        ]);
-    Decimal256::from_ratio(
-        numerator * decimal_fractional,
-        denominator * decimal_fractional,
-    )
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
 
-    use cosmwasm_std::Decimal256;
-
-    use crate::provider::crypto::osmosis_pool::{Pool, PoolAsset, Token};
-
-    use super::decimal_div;
+    use crate::provider::{
+        crypto::osmosis_pool::{Pool, PoolAsset, Token},
+        Price,
+    };
 
     #[tokio::test]
     async fn get_spot_price() {
@@ -194,35 +192,14 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!("0.242408258936022297".to_string(), price.to_string())
-    }
-
-    #[test]
-    fn test_decimal_division() {
-        let nominator = Decimal256::from_str("4").unwrap();
-        let denominator = Decimal256::from_str("2").unwrap();
-
-        let ratio = decimal_div(nominator, denominator);
-        assert_eq!("2", ratio.to_string());
-
-        let nominator = Decimal256::from_str("2").unwrap();
-        let denominator = Decimal256::from_str("4").unwrap();
-        let ratio = decimal_div(nominator, denominator);
-        assert_eq!("0.5", ratio.to_string());
-
-        let nominator = Decimal256::from_str("10.10").unwrap();
-        let denominator = Decimal256::from_str("5.5").unwrap();
-        let ratio = decimal_div(nominator, denominator);
-        assert_eq!("1.836363636363636363", ratio.to_string());
-
-        let nominator = Decimal256::from_str("0.000000000124456789").unwrap();
-        let denominator = Decimal256::from_str("5.65").unwrap();
-        let ratio = decimal_div(nominator, denominator);
-        assert_eq!("0.00000000002202775", ratio.to_string());
-
-        let nominator = Decimal256::from_str("0.000000000124456789").unwrap();
-        let denominator = Decimal256::from_str("0.000000000856756789").unwrap();
-        let ratio = decimal_div(nominator, denominator);
-        assert_eq!("0.145265016394285029", ratio.to_string());
+        assert_eq!(
+            Price::new(
+                "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
+                3702798680064000000,
+                "uosmo",
+                15275051188224000000,
+            ),
+            price
+        )
     }
 }

@@ -1,6 +1,6 @@
 title = "Market Data Feeder Configuration"
 
-continuous = true
+continuous = false
 tick_time = 60
 
 
@@ -10,10 +10,16 @@ name = "osmosis"
 base_address = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/"
 
 [oracle]
-contract_addrs = "nolus17p9rzwnnfxcjp32un9ug7yhhzgtkhvl9jfksztgw5uh69wac2pgsmc5xhq"
-cosmos_url= "http://localhost:9090"
+contract_addrs = "nolus1mf6ptkssddfmxvhdx0ech0k03ktp6kf9yk59renau2gvht3nq2gqkxgywu"
+host_url= "http://localhost"
+grpc_port = 26615
+lcd_port = 26614
+rpc_port = 26612
 prefix = "nolus"
 chain_id = "nolus-local"
-fee_denom = "unolus"
-funds_amount = 100
+fee_denom = "unls"
+funds_amount = 1500
 gas_limit = 500_000
+
+# test mnemonic
+# glimpse drama thing brand detail frame spin boss warm people river echo situate creek decorate inhale leaf illness rose order project pear ball stick

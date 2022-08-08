@@ -1,69 +1,27 @@
-use std::{collections::HashSet, str::FromStr};
+use std::str::FromStr;
 
 use async_trait::async_trait;
-use cosmwasm_std::Decimal256;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use thiserror::Error;
 
 use crate::{
-    configuration,
-    cosm_client::CosmClient,
+    configuration::{self},
+    cosmos::{CosmosClient, QueryMsg},
     provider::{CryptoProviderType, CryptoProvidersFactory},
 };
 
-#[derive(Error, Debug)]
-pub enum FeedProviderError {
-    #[error("Asset pair not found in pool")]
-    AssetPairNotFound,
-
-    #[error("Denom {denom} not found")]
-    DenomNotFound { denom: String },
-
-    #[error("Invalid poll. Empty weight")]
-    InvalidPoolEmptyWeight,
-
-    #[error("No price found for pair [ {base} / {quote} ]")]
-    NoPriceFound { base: String, quote: String },
-
-    #[error("Request error. Cause: {message}")]
-    RequestError { message: String },
-
-    #[error("Invalid provider url {0}")]
-    InvalidProviderURL(String),
-
-    #[error("URL parsing error")]
-    URLParsingError,
-
-    #[error("Unexpected error")]
-    UnexpectedError,
-
-    #[error("Unsupported provider type {0}")]
-    UnsupportedProviderType(String),
-
-    #[error("{0}")]
-    ReqwestError(#[from] reqwest::Error),
-}
+use super::{FeedProviderError, Price};
 
 #[async_trait]
 pub trait Provider {
-    async fn get_spot_price(
-        &self,
-        base_denom: &str,
-        quote_denom: &str,
-    ) -> Result<Decimal256, FeedProviderError>;
-    async fn single_run(
-        &self,
-        denoms: &[Vec<String>],
-        cosm_client: &CosmClient,
-    ) -> Result<(), FeedProviderError>;
-
-    async fn continuous(
+    // async fn get_spot_price(
+    //     &self,
+    //     base_denom: &str,
+    //     quote_denom: &str,
+    // ) -> Result<Price, FeedProviderError>;
+    async fn get_spot_prices(
         &self,
         denoms: &[Vec<String>],
-        cosm_client: &CosmClient,
-        tick_time: u64,
-    ) -> Result<(), FeedProviderError>;
+        // cosm_client: &CosmosClient,
+    ) -> Result<Vec<Price>, FeedProviderError>;
 }
 
 #[derive(Debug, PartialEq)]
@@ -103,74 +61,12 @@ impl ProvidersFactory {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct DenomPairPrice {
-    pub base: String,
-    pub quote: String,
-    pub price: Decimal256,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct BaseDenomPrices {
-    pub base: String,
-    pub prices: Vec<(String, Decimal256)>,
-}
-
-pub async fn push_prices(prices: &[DenomPairPrice], cosm_client: &CosmClient) {
-    let unique_bases: HashSet<String> = prices
-        .iter()
-        .map(|price| price.base.clone())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-
-    let mut all_prices = vec![];
-
-    for base in unique_bases {
-        let base_prices = prices
-            .iter()
-            .filter(|el| el.base.eq(&base))
-            .map(|el| (el.quote.clone(), el.price))
-            .collect::<Vec<(String, Decimal256)>>();
-
-        all_prices.push(BaseDenomPrices {
-            base,
-            prices: base_prices,
-        });
-    }
-
-    if all_prices.is_empty() {
-        println!("No prices found to push");
-        return;
-    }
-
-    let price_feed_json = json!({
-        "feed_prices": {
-            "prices": all_prices
-        }
-    });
-
-    println!("JSON request: ");
-    println!("{}", price_feed_json);
-
-    let res = cosm_client
-        .generate_and_send_tx(&price_feed_json.to_string())
-        .await;
-
-    if res.is_err() {
-        println!("{:?}", res.unwrap_err());
-    }
-}
-
 pub async fn get_supported_denom_pairs(
-    cosm_client: &CosmClient,
-) -> Result<Vec<Vec<String>>, Box<dyn std::error::Error>> {
-    let query_json = json!({
-        "supported_denom_pairs": {}
-    });
-
-    let resp = cosm_client.query_message(&query_json.to_string()).await?;
-
+    cosm_client: &CosmosClient,
+) -> Result<Vec<Vec<String>>, FeedProviderError> {
+    let resp = cosm_client
+        .cosmwasm_query(&QueryMsg::SupportedDenomPairs {})
+        .await?;
     Ok(serde_json::from_slice(&resp.data)?)
 }
 

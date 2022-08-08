@@ -1,15 +1,11 @@
-use std::{time::Duration, vec};
+use std::vec;
 
 use super::osmosis_pool::Pool;
-use crate::{
-    cosm_client::CosmClient,
-    provider::{push_prices, DenomPairPrice, FeedProviderError, Provider},
-};
+use crate::provider::{FeedProviderError, Price, Provider};
 use async_trait::async_trait;
-use cosmwasm_std::Decimal256;
+
 use reqwest::{Client, RequestBuilder, Url};
 use serde::Deserialize;
-use tokio::time;
 
 #[derive(Deserialize, Debug)]
 pub struct OsmosisResponse {
@@ -65,13 +61,13 @@ impl OsmosisClient {
         pools: &[Pool],
         base_denom: &str,
         quote_denom: &str,
-    ) -> Result<Decimal256, FeedProviderError> {
+    ) -> Result<Price, FeedProviderError> {
         for pool in pools {
             let res = pool.spot_price(base_denom, quote_denom);
             if let Ok(..) = res {
                 let price = res.unwrap();
                 println!(
-                    "Assets pair found in pool with id {} price {}",
+                    "Assets pair found in pool with id {} price {:?}",
                     pool.id, price
                 );
                 return Ok(price);
@@ -87,48 +83,18 @@ impl OsmosisClient {
 
 #[async_trait]
 impl Provider for OsmosisClient {
-    async fn get_spot_price(
-        &self,
-        base_denom: &str,
-        quote_denom: &str,
-    ) -> Result<Decimal256, FeedProviderError> {
-        let resp = self.get_pools_count().await;
-        let all_pools_resp = match resp {
-            Ok(cnt) => self.get_pools(cnt).await,
-            Err(err) => {
-                return Err(FeedProviderError::RequestError {
-                    message: err.to_string(),
-                });
-            }
-        };
-
-        let res = match all_pools_resp {
-            Ok(pools) => OsmosisClient::walk_pools(&pools, base_denom, quote_denom),
-            Err(err) => {
-                return Err(FeedProviderError::RequestError {
-                    message: err.to_string(),
-                });
-            }
-        };
-
-        match res {
-            Ok(price) => return Ok(price),
-            Err(err) => return Err(err),
-        }
-    }
-
-    async fn single_run(
+    async fn get_spot_prices(
         &self,
         denoms: &[Vec<String>],
-        cosm_client: &CosmClient,
-    ) -> Result<(), FeedProviderError> {
+        // cosm_client: &CosmosClient,
+    ) -> Result<Vec<Price>, FeedProviderError> {
         let resp = self.get_pools_count().await;
         let all_pools_resp = match resp {
             Ok(cnt) => self.get_pools(cnt).await,
             Err(err) => return Err(err),
         };
 
-        let mut prices: Vec<DenomPairPrice> = vec![];
+        let mut prices: Vec<Price> = vec![];
         match all_pools_resp {
             Ok(pools) => {
                 for denom_pair in denoms {
@@ -143,11 +109,7 @@ impl Provider for OsmosisClient {
                     let price = OsmosisClient::walk_pools(&pools, base_denom, quote_denom)
                         .unwrap_or_default();
                     if !price.is_zero() {
-                        prices.push(DenomPairPrice {
-                            base: base_denom.to_string(),
-                            quote: quote_denom.to_string(),
-                            price,
-                        })
+                        prices.push(price)
                     } else {
                         println!(
                             "No price found for denom pair {} / {}",
@@ -162,24 +124,8 @@ impl Provider for OsmosisClient {
         println!("Prices: ");
         println!("{:?}", prices);
 
-        push_prices(&prices, cosm_client).await;
+        // push_prices(&prices, cosm_client).await;
 
-        Ok(())
-    }
-
-    async fn continuous(
-        &self,
-        denoms: &[Vec<String>],
-        cosm_client: &CosmClient,
-        tick_time: u64,
-    ) -> Result<(), FeedProviderError> {
-        let mut interval = time::interval(Duration::from_secs(tick_time));
-
-        for _i in 0.. {
-            interval.tick().await;
-            self.single_run(denoms, cosm_client).await?;
-        }
-
-        Err(FeedProviderError::UnexpectedError)
+        Ok(prices)
     }
 }
