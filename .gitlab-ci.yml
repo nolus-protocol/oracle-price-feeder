@@ -15,6 +15,7 @@ default:
 stages:
   - prepare
   - test
+  - build
 
 prepare_node:
   stage: prepare
@@ -53,3 +54,11 @@ audit-code:
   script:
     - cargo install cargo-audit
     - cargo audit
+
+build-binary:
+  stage: build
+  script:
+    - cargo build --release
+  artifacts:
+    paths:
+      - ./target/release/feeder
