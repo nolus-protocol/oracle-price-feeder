@@ -1,11 +1,9 @@
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::str::FromStr;
 
     use crate::provider::crypto::osmosis::OsmosisClient;
-    use crate::provider::Provider;
-    use cosmwasm_std::Decimal256;
+    use crate::provider::{Price, Provider};
     use wiremock::matchers::path_regex;
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -72,14 +70,22 @@ mod tests {
         let pool = res.get(96);
         assert_eq!(pool.unwrap().id, "97");
         let res = osmo_client
-            .get_spot_price(
-                "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
-                "uosmo",
-            )
-            .await;
+            .get_spot_prices(&[vec![
+                String::from(
+                    "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
+                ),
+                String::from("uosmo"),
+            ]])
+            .await
+            .unwrap();
         assert_eq!(
-            Decimal256::from_str("0.278046291279698547").unwrap(),
-            res.unwrap()
+            vec![Price::new(
+                "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
+                5018906164562667503616000000,
+                "uosmo",
+                18050613591942994329600000000,
+            )],
+            res
         )
     }
 }

@@ -1,5 +1,7 @@
+mod errors;
 mod provider;
 
+pub use errors::FeedProviderError;
 pub use provider::*;
 use serde::{Deserialize, Serialize};
 

@@ -13,7 +13,8 @@ name = "feeder"
 [dependencies]
 # [...]
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs"] }
+
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -21,16 +22,26 @@ confy = "0.4.0"
 toml = "0.5"
 thiserror = "1.0.30"
 async-trait = "0.1.53"
-cosmwasm-std = "0.16.7"
+tonic = { version = "0.7.2", features = ["compression", "tls", "tls-roots"]}
+prost = { version = "0.10.1"}
+prost-types = { version = "0.10.1" }
+
+
+# finance = { path = "../smart-contracts/packages/finance", version = "0.1.0", default-features = false }
+# finance = { git = "https://gitlab-nomo.credissimo.net/nomo/smart-contracts", package = "finance", version = "0.1.0", default-features = false }
+
+
 
 # cosmos sdk clients
-# cosmrs = { version = "0.5.1", features = ["dev", "rpc", "cosmwasm"]}
-deep_space = "2.11.0"
-cosmos-sdk-proto = {package = "cosmos-sdk-proto-althea", version = "0.12.4", features = ["cosmwasm"]}
-bech32 = "0.9.0"
+cosmrs = {version = "0.7.0", features = ["cosmwasm", "rpc"]}
+cosmos-sdk-proto = {version = "0.12.3", features = ["cosmwasm", "grpc-transport"]}
+
 
 
 [dev-dependencies]
 # [...]
 tokio = { version = "1", features = ["rt", "macros"] }
 wiremock = "0.5.2"
+actix-rt = "2.7.0"
+cosmrs = {version = "0.7.0", features = ["cosmwasm", "rpc", "dev"]}
+

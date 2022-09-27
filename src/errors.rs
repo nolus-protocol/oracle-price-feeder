@@ -1,4 +1,10 @@
 use thiserror::Error;
+use tonic::codegen::http;
+
+use crate::{
+    cosmos::error::{CosmosError, WalletError},
+    provider::FeedProviderError,
+};
 
 #[derive(Error, Debug)]
 pub enum FeederError {
@@ -13,4 +19,22 @@ pub enum FeederError {
 
     #[error("{0}")]
     ReqwestError(#[from] reqwest::Error),
+
+    #[error("{0}")]
+    InvalidUri(#[from] http::uri::InvalidUri),
+
+    #[error("{0}")]
+    StdError(#[from] std::io::Error),
+
+    #[error("{0}")]
+    WalletError(#[from] WalletError),
+
+    #[error("{0}")]
+    Provider(#[from] FeedProviderError),
+
+    #[error("{0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("{0}")]
+    Cosmos(#[from] CosmosError),
 }

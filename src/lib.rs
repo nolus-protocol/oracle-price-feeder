@@ -1,5 +1,6 @@
 pub mod configuration;
-pub mod provider;
-
-pub mod cosm_client;
+pub mod cosmos;
 pub mod errors;
+pub mod provider;
+#[cfg(test)]
+mod tests;
