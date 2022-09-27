@@ -12,19 +12,13 @@ use super::{FeedProviderError, Price};
 
 #[async_trait]
 pub trait Provider {
-    // async fn get_spot_price(
-    //     &self,
-    //     base_denom: &str,
-    //     quote_denom: &str,
-    // ) -> Result<Price, FeedProviderError>;
     async fn get_spot_prices(
         &self,
         denoms: &[Vec<String>],
-        // cosm_client: &CosmosClient,
     ) -> Result<Vec<Price>, FeedProviderError>;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ProviderType {
     Crypto,
 }

@@ -2,7 +2,7 @@ use super::OsmosisClient;
 use crate::provider::{FeedProviderError, Provider};
 use std::str::FromStr;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CryptoProviderType {
     Osmosis,
 }

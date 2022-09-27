@@ -22,13 +22,13 @@ use crate::{configuration::Oracle, provider::Price};
 
 use self::error::CosmosError;
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     SupportedDenomPairs {},
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     FeedPrices { prices: Vec<Price> },
