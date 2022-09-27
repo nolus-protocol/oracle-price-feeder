@@ -22,9 +22,9 @@ confy = "0.4.0"
 toml = "0.5"
 thiserror = "1.0.30"
 async-trait = "0.1.53"
-tonic = { version = "0.7.2", features = ["compression", "tls", "tls-roots"]}
-prost = { version = "0.10.1"}
-prost-types = { version = "0.10.1" }
+tonic = { version = "0.8.1", features = ["tls", "tls-roots"]}
+prost = "0.11"
+prost-types = "0.11"
 
 
 # finance = { path = "../smart-contracts/packages/finance", version = "0.1.0", default-features = false }
@@ -33,8 +33,8 @@ prost-types = { version = "0.10.1" }
 
 
 # cosmos sdk clients
-cosmrs = {version = "0.7.0", features = ["cosmwasm", "rpc"]}
-cosmos-sdk-proto = {version = "0.12.3", features = ["cosmwasm", "grpc-transport"]}
+cosmrs = {version = "0.9.0", features = ["cosmwasm", "rpc", "grpc"]}
+cosmos-sdk-proto = {version = "0.14.0", features = ["cosmwasm", "grpc-transport"]}
 
 
 
@@ -43,5 +43,5 @@ cosmos-sdk-proto = {version = "0.12.3", features = ["cosmwasm", "grpc-transport"
 tokio = { version = "1", features = ["rt", "macros"] }
 wiremock = "0.5.2"
 actix-rt = "2.7.0"
-cosmrs = {version = "0.7.0", features = ["cosmwasm", "rpc", "dev"]}
+cosmrs = {version = "0.9.0", features = ["cosmwasm", "rpc", "dev"]}
 
