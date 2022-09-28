@@ -78,7 +78,8 @@ Edit market-data-feeder.toml file
 
 
 
-* Start feeder service
+## Start feeder service
+from the same directory where market-data-feeder.toml is located
 ```
 ./target/release/feeder
 ```
