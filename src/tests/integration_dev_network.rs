@@ -9,7 +9,6 @@ async fn get_account_data_example() {
         "nolus1mf6ptkssddfmxvhdx0ech0k03ktp6kf9yk59renau2gvht3nq2gqkxgywu".to_owned(),
     )
     .host_url("https://net-dev.nolus.io")
-    .lcd_port(26619)
     .grpc_port(26625)
     .build();
     let client = CosmosClient::new(config.clone()).unwrap();
@@ -31,7 +30,6 @@ async fn get_supported_denom_pairs() {
         "nolus1mf6ptkssddfmxvhdx0ech0k03ktp6kf9yk59renau2gvht3nq2gqkxgywu".to_owned(),
     )
     .host_url("https://net-dev.nolus.io")
-    .lcd_port(26619)
     .grpc_port(26625)
     .build();
     let client = CosmosClient::new(config).unwrap();
@@ -55,7 +53,6 @@ async fn get_account_data_example_dev() {
         "nolus1mf6ptkssddfmxvhdx0ech0k03ktp6kf9yk59renau2gvht3nq2gqkxgywu".to_owned(),
     )
     .host_url("https://net-dev.nolus.io")
-    .lcd_port(26619)
     .grpc_port(26625)
     .build();
 

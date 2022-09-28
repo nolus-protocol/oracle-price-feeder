@@ -21,7 +21,6 @@ pub struct Oracle {
     pub(crate) host_url: String,
     pub(crate) rpc_port: u16,
     pub(crate) grpc_port: u16,
-    pub(crate) lcd_port: u16,
     pub(crate) prefix: String,
     pub(crate) chain_id: String,
     pub(crate) fee_denom: String,
@@ -36,7 +35,6 @@ impl Oracle {
             host_url: "http://localhost".to_string(),
             rpc_port: 26612,
             grpc_port: 26615,
-            lcd_port: 26614,
             prefix: "nolus".to_string(),
             chain_id: "nolus-local".to_string(),
             fee_denom: "unls".to_string(),
@@ -51,7 +49,6 @@ pub struct OracleBuilder {
     host_url: String,
     rpc_port: u16,
     grpc_port: u16,
-    lcd_port: u16,
     prefix: String,
     chain_id: String,
     fee_denom: String,
@@ -72,10 +69,6 @@ impl OracleBuilder {
         self.grpc_port = grpc_port;
         self
     }
-    pub fn lcd_port(&mut self, lcd_port: u16) -> &mut Self {
-        self.lcd_port = lcd_port;
-        self
-    }
 
     pub fn build(&self) -> Oracle {
         Oracle {
@@ -83,7 +76,6 @@ impl OracleBuilder {
             host_url: self.host_url.clone(),
             rpc_port: self.rpc_port,
             grpc_port: self.grpc_port,
-            lcd_port: self.lcd_port,
             prefix: self.prefix.clone(),
             chain_id: self.chain_id.clone(),
             fee_denom: self.fee_denom.clone(),
@@ -96,8 +88,8 @@ impl OracleBuilder {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            continuous: false,
-            tick_time: 5,
+            continuous: true,
+            tick_time: 60,
             providers: vec![],
             oracle: Oracle::create("".to_string()).build(),
         }
@@ -116,6 +108,6 @@ mod tests {
         assert_eq!("unls".to_string(), cfg.oracle.fee_denom);
         assert_eq!(500_000, cfg.oracle.gas_limit);
         assert_eq!(2500u32, cfg.oracle.funds_amount);
-        assert!(!cfg.continuous);
+        assert!(cfg.continuous);
     }
 }

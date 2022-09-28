@@ -13,13 +13,9 @@ base_address = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/"
 contract_addrs = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
 host_url= "http://localhost"
 grpc_port = 26615
-lcd_port = 26614
 rpc_port = 26612
 prefix = "nolus"
 chain_id = "nolus-local"
 fee_denom = "unls"
 funds_amount = 1500
 gas_limit = 500_000
-
-# test mnemonic
-# glimpse drama thing brand detail frame spin boss warm people river echo situate creek decorate inhale leaf illness rose order project pear ball stick
