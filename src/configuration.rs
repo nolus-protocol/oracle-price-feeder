@@ -90,8 +90,8 @@ impl Default for Config {
         Self {
             continuous: true,
             tick_time: 60,
-            providers: vec![],
-            oracle: Oracle::create("".to_string()).build(),
+            providers: Default::default(),
+            oracle: Oracle::create(String::default()).build(),
         }
     }
 }

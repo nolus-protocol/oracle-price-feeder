@@ -1,18 +1,17 @@
 use serde::{Deserialize, Serialize};
 
-pub use errors::FeedProviderError;
-pub use provider::*;
+pub use self::{errors::FeedProviderError, provider::*};
 
 mod errors;
 mod provider;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Coin {
     pub amount: u128,
     pub symbol: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Price {
     amount: Coin,
     amount_quote: Coin,
@@ -42,6 +41,7 @@ impl Price {
             amount_quote,
         }
     }
+
     pub fn is_zero(&self) -> bool {
         self.amount.amount == 0 || self.amount_quote.amount == 0
     }

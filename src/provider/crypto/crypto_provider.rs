@@ -11,6 +11,7 @@ pub enum CryptoProviderType {
 
 impl FromStr for CryptoProviderType {
     type Err = ();
+
     fn from_str(input: &str) -> Result<CryptoProviderType, Self::Err> {
         match input {
             "osmosis" => Ok(CryptoProviderType::Osmosis),
@@ -20,13 +21,14 @@ impl FromStr for CryptoProviderType {
 }
 
 pub struct CryptoProvidersFactory;
+
 impl CryptoProvidersFactory {
     pub fn new_provider(
         s: &CryptoProviderType,
         base_url: &str,
     ) -> Result<Box<dyn Provider>, FeedProviderError> {
         match s {
-            CryptoProviderType::Osmosis => Ok(Box::new(OsmosisClient::new(base_url)?)),
+            CryptoProviderType::Osmosis => OsmosisClient::new(base_url).map(|client| Box::new(client) as Box<dyn Provider>),
         }
     }
 }
@@ -35,7 +37,7 @@ impl CryptoProvidersFactory {
 mod tests {
     use std::str::FromStr;
 
-    use super::{CryptoProviderType, CryptoProvidersFactory};
+    use super::{CryptoProvidersFactory, CryptoProviderType};
 
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
 

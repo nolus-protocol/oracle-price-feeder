@@ -12,9 +12,7 @@ mod tests {
         let mock_server = MockServer::start().await;
         let osmo_client = OsmosisClient::new(&mock_server.uri()).unwrap();
 
-        let data = r#"{
-                            "numPools": "668"
-                        }"#;
+        let data = r#"{"numPools": "668"}"#;
         Mock::given(path_regex(r"^/num_pools$"))
             .respond_with(ResponseTemplate::new(200).set_body_string(data))
             .mount(&mock_server)
@@ -33,9 +31,7 @@ mod tests {
         let mock_server = MockServer::start().await;
         let osmo_client = OsmosisClient::new(&mock_server.uri()).unwrap();
 
-        let data = r#"{
-                            "numPools": "668"
-                        }"#;
+        let data = r#"{"numPools": "668"}"#;
         Mock::given(path_regex(r"^/num_pools$"))
             .respond_with(ResponseTemplate::new(200).set_body_string(data))
             .mount(&mock_server)

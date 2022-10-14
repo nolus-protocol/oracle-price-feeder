@@ -5,6 +5,7 @@ use cosmos_sdk_proto::{
         QuerySmartContractStateResponse,
     },
 };
+use prost::Message;
 use tonic::{
     codegen::http::uri::InvalidUri,
     transport::{Channel, Endpoint, Uri},
@@ -47,7 +48,7 @@ impl CosmosClient {
 
         // Build a new request
         let request = Request::new(QueryAccountRequest {
-            address: address.to_owned(),
+            address: ToOwned::to_owned(address),
         });
 
         // Send request and wait for response
@@ -60,11 +61,11 @@ impl CosmosClient {
         match response.account {
             Some(account) => {
                 // Decode response body into BaseAccount
-                let base_account: BaseAccount = prost::Message::decode(account.value.as_ref())?;
+                let base_account: BaseAccount = Message::decode(account.value.as_slice())?;
 
                 Ok(base_account)
             }
-            None => Err(CosmosError::AccountNotFound(address.to_owned())),
+            None => Err(CosmosError::AccountNotFound(ToOwned::to_owned(address))),
         }
     }
 
@@ -86,7 +87,7 @@ impl CosmosClient {
         // Send request and wait for response
         let response = client
             .smart_contract_state(QuerySmartContractStateRequest {
-                address: self.config.contract_addrs.to_owned(),
+                address: self.config.contract_addrs.clone(),
                 query_data: serde_json::to_vec(msg)?,
             })
             .await

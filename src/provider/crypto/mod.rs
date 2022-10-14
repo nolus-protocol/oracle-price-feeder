@@ -1,5 +1,7 @@
-pub use crypto_provider::{CryptoProviderType, CryptoProvidersFactory};
-pub use osmosis::OsmosisClient;
+pub use self::{
+    crypto_provider::{CryptoProvidersFactory, CryptoProviderType},
+    osmosis::OsmosisClient,
+};
 
 mod crypto_provider;
 mod osmosis;

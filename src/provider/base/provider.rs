@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use crate::{
     configuration::{self},
     cosmos::{CosmosClient, QueryMsg},
-    provider::{CryptoProviderType, CryptoProvidersFactory},
+    provider::{CryptoProvidersFactory, CryptoProviderType},
 };
 
 use super::{FeedProviderError, Price};
@@ -25,6 +25,7 @@ pub enum ProviderType {
 
 impl FromStr for ProviderType {
     type Err = ();
+
     fn from_str(input: &str) -> Result<ProviderType, Self::Err> {
         match input {
             "crypto" => Ok(ProviderType::Crypto),
@@ -34,6 +35,7 @@ impl FromStr for ProviderType {
 }
 
 pub struct ProvidersFactory;
+
 impl ProvidersFactory {
     pub fn new_provider(
         s: &ProviderType,
@@ -41,14 +43,9 @@ impl ProvidersFactory {
     ) -> Result<Box<dyn Provider>, FeedProviderError> {
         match s {
             ProviderType::Crypto => {
-                let provider_type = match CryptoProviderType::from_str(&cfg.name) {
-                    Ok(t) => t,
-                    Err(_) => {
-                        return Err(FeedProviderError::UnsupportedProviderType(
-                            cfg.name.to_owned(),
-                        ))
-                    }
-                };
+                let provider_type = CryptoProviderType::from_str(&cfg.name)
+                    .map_err(|_| FeedProviderError::UnsupportedProviderType(cfg.name.clone()))?;
+
                 CryptoProvidersFactory::new_provider(&provider_type, &cfg.base_address)
             }
         }
@@ -58,10 +55,11 @@ impl ProvidersFactory {
 pub async fn get_supported_denom_pairs(
     cosm_client: &CosmosClient,
 ) -> Result<Vec<Vec<String>>, FeedProviderError> {
-    let resp = cosm_client
+    cosm_client
         .cosmwasm_query(&QueryMsg::SupportedDenomPairs {})
-        .await?;
-    Ok(serde_json::from_slice(&resp.data)?)
+        .await
+        .map_err(Into::into)
+        .and_then(|resp| serde_json::from_slice(&resp.data).map_err(Into::into))
 }
 
 #[cfg(test)]
@@ -70,7 +68,7 @@ mod tests {
 
     use crate::{
         configuration::Providers,
-        provider::{ProviderType, ProvidersFactory},
+        provider::{ProvidersFactory, ProviderType},
     };
 
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
@@ -78,8 +76,11 @@ mod tests {
     #[test]
     fn get_provider() {
         let t = ProviderType::from_str("crypto").unwrap();
+
         assert_eq!(ProviderType::Crypto, t);
+
         ProviderType::from_str("invalid").unwrap_err();
+
         ProvidersFactory::new_provider(
             &ProviderType::Crypto,
             &Providers {
@@ -88,6 +89,6 @@ mod tests {
                 base_address: TEST_OSMOSIS_URL.to_string(),
             },
         )
-        .unwrap();
+            .unwrap();
     }
 }

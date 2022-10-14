@@ -71,9 +71,6 @@ pub enum WalletError {
     #[error("sign error: {0}")]
     Sign(String),
 
-    #[error("mnemonic error: {0}")]
-    Mnemonic(String),
-
     #[error("invalid derivation path: {0}")]
     DerivationPath(String),
 

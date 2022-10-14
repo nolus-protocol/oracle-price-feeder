@@ -2,21 +2,17 @@ use serde::Deserialize;
 
 use crate::provider::{FeedProviderError, Price};
 
-trait Empty<T> {
-    fn empty() -> T;
-}
-
 #[derive(Deserialize, Debug, Clone)]
 pub struct Token {
     denom: String,
     amount: String,
 }
 
-impl Empty<Token> for Token {
-    fn empty() -> Token {
-        Token {
-            denom: "".to_string(),
-            amount: "0".to_string(),
+impl Default for Token {
+    fn default() -> Self {
+        Self {
+            denom: String::default(),
+            amount: String::from("0"),
         }
     }
 }
@@ -48,31 +44,21 @@ pub struct PoolAsset {
     weight: String,
 }
 
-impl Empty<PoolAsset> for PoolAsset {
-    fn empty() -> PoolAsset {
-        PoolAsset {
-            token: Token::empty(),
-            weight: "0".to_string(),
+impl Default for PoolAsset {
+    fn default() -> Self {
+        Self {
+            token: Default::default(),
+            weight: String::from("0"),
         }
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 pub struct Pool {
     pub address: String,
     pub id: String,
     #[serde(rename = "poolAssets")]
     pool_assets: Vec<PoolAsset>,
-}
-
-impl Empty<Pool> for Pool {
-    fn empty() -> Pool {
-        Pool {
-            address: "".to_string(),
-            id: "".to_string(),
-            pool_assets: vec![],
-        }
-    }
 }
 
 impl Pool {
@@ -82,34 +68,17 @@ impl Pool {
 
     pub fn parse_pool_assets_by_denoms(
         &self,
-        token_adenom: &str,
-        token_bdenom: &str,
+        token_base_denom: &str,
+        token_quote_denom: &str,
     ) -> Result<PoolAssetPair, FeedProviderError> {
-        let (a_asset, found) = self.get_pool_asset_by_denom(self.pool_assets.clone(), token_adenom);
-        if !found {
-            return Err(FeedProviderError::DenomNotFound {
-                denom: token_adenom.to_string(),
-            });
-        }
-        let (b_asset, found) = self.get_pool_asset_by_denom(self.pool_assets.clone(), token_bdenom);
-        if !found {
-            return Err(FeedProviderError::DenomNotFound {
-                denom: token_bdenom.to_string(),
-            });
-        }
-        Ok(PoolAssetPair {
-            base: a_asset,
-            quote: b_asset,
-        })
-    }
+        let base = self.get_pool_asset_by_denom(&self.pool_assets, token_base_denom).cloned()?;
 
-    fn get_pool_asset_by_denom(&self, assets: Vec<PoolAsset>, denom: &str) -> (PoolAsset, bool) {
-        for asset in assets {
-            if asset.token.denom == denom {
-                return (asset, true);
-            }
-        }
-        (PoolAsset::empty(), false)
+        let quote = self.get_pool_asset_by_denom(&self.pool_assets, token_quote_denom).cloned()?;
+
+        Ok(PoolAssetPair {
+            base,
+            quote,
+        })
     }
 
     pub fn spot_price(
@@ -132,6 +101,7 @@ impl Pool {
         // TODO check again if weight is needed
 
         let asset_pair = self.parse_pool_assets_by_denoms(base_asset, quote_asset)?;
+
         if asset_pair.base.weight.is_empty() || asset_pair.quote.weight.is_empty() {
             return Err(FeedProviderError::InvalidPoolEmptyWeight);
         }
@@ -143,6 +113,12 @@ impl Pool {
             quote_asset,
             asset_pair.get_quote_amount() * asset_pair.get_base_weight(),
         ))
+    }
+
+    fn get_pool_asset_by_denom<'r>(&self, assets: &'r [PoolAsset], denom: &str) -> Result<&'r PoolAsset, FeedProviderError> {
+        assets.iter().find(|pool| pool.token.denom == denom).ok_or_else(|| FeedProviderError::DenomNotFound {
+            denom: String::from(denom),
+        })
     }
 }
 
@@ -162,8 +138,8 @@ mod tests {
                 PoolAsset {
                     token: Token {
                         denom:
-                            "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
-                                .to_string(),
+                        "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
+                            .to_string(),
                         amount: "6897".to_string(),
                     },
                     weight: "536870912000000".to_string(),
@@ -179,10 +155,9 @@ mod tests {
         };
 
         // Assert
-        let asset = &pool.get_pool_asset_by_denom(pool.pool_assets.clone(), "uosmo");
+        let asset = &pool.get_pool_asset_by_denom(&pool.pool_assets, "uosmo").cloned().unwrap();
 
-        assert!(asset.1);
-        assert_eq!(asset.0.weight, "536870912000000".to_string());
+        assert_eq!(asset.weight, "536870912000000".to_string());
 
         let price = pool
             .spot_price(
@@ -192,13 +167,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(
+            price,
             Price::new(
                 "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2",
                 3702798680064000000,
                 "uosmo",
                 15275051188224000000,
-            ),
-            price
+            )
         )
     }
 }
