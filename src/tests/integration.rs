@@ -4,10 +4,10 @@
 
 use cosmrs::{
     bank::MsgSend,
-    crypto::secp256k1,
-    dev, rpc,
-    tx::{self, AccountNumber, Fee, Msg, SignDoc, SignerInfo},
     Coin,
+    crypto::secp256k1, dev,
+    rpc,
+    tx::{self, AccountNumber, Fee, Msg, SignDoc, SignerInfo},
 };
 use std::{panic, str};
 

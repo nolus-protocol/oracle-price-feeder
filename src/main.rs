@@ -1,12 +1,14 @@
+use std::{io, process::exit, str::FromStr, time::Duration};
+
 use cosmrs::rpc::endpoint::broadcast::tx_commit::Response;
+use tokio::time;
+
 use market_data_feeder::{
     configuration::Config,
     cosmos::{broadcast_tx, CosmosClient, ExecuteMsg, Wallet},
     errors::FeederError,
     provider::{get_supported_denom_pairs, Provider, ProviderType, ProvidersFactory},
 };
-use std::{io, process::exit, str::FromStr, time::Duration};
-use tokio::time;
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 

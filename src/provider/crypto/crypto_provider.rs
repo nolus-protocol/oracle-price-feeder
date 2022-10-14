@@ -1,6 +1,8 @@
-use super::OsmosisClient;
-use crate::provider::{FeedProviderError, Provider};
 use std::str::FromStr;
+
+use crate::provider::{FeedProviderError, Provider};
+
+use super::OsmosisClient;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CryptoProviderType {
@@ -31,8 +33,10 @@ impl CryptoProvidersFactory {
 
 #[cfg(test)]
 mod tests {
-    use super::{CryptoProviderType, CryptoProvidersFactory};
     use std::str::FromStr;
+
+    use super::{CryptoProviderType, CryptoProvidersFactory};
+
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
 
     #[test]

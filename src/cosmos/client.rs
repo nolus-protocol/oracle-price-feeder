@@ -1,20 +1,19 @@
-use cosmos_sdk_proto::cosmos::auth::v1beta1::{
-    query_client::QueryClient, BaseAccount, QueryAccountRequest,
+use cosmos_sdk_proto::{
+    cosmos::auth::v1beta1::{query_client::QueryClient, BaseAccount, QueryAccountRequest},
+    cosmwasm::wasm::v1::{
+        query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+        QuerySmartContractStateResponse,
+    },
 };
-
-use cosmos_sdk_proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient;
-use cosmos_sdk_proto::cosmwasm::wasm::v1::{
-    QuerySmartContractStateRequest, QuerySmartContractStateResponse,
+use tonic::{
+    codegen::http::uri::InvalidUri,
+    transport::{Channel, Endpoint, Uri},
+    Request,
 };
-
-use tonic::codegen::http::uri::InvalidUri;
-use tonic::transport::{Channel, Endpoint, Uri};
-use tonic::Request;
 
 use crate::configuration::Oracle;
 
-use super::error::CosmosError;
-use super::QueryMsg;
+use super::{error::CosmosError, QueryMsg};
 
 /// Client to communicate with a full node.
 #[derive(Clone)]

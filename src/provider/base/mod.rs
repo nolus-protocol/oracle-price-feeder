@@ -1,9 +1,10 @@
-mod errors;
-mod provider;
+use serde::{Deserialize, Serialize};
 
 pub use errors::FeedProviderError;
 pub use provider::*;
-use serde::{Deserialize, Serialize};
+
+mod errors;
+mod provider;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Coin {

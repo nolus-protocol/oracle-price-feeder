@@ -7,6 +7,7 @@ use cosmrs::{
 };
 
 use super::error::WalletError;
+
 /// Represents a Secp256k1 key pair.
 pub struct Keychain {
     pub public_key: cosmrs::crypto::PublicKey,

@@ -1,26 +1,26 @@
-pub mod client;
-pub mod error;
-pub mod json;
-mod tx;
-mod wallet;
-
 use std::str::FromStr;
 
-pub use client::CosmosClient;
 use cosmrs::{
     cosmwasm::MsgExecuteContract,
     rpc::{self, endpoint::broadcast::tx_commit::Response},
     tx::Msg,
     AccountId,
 };
+use serde::{Deserialize, Serialize};
+
+pub use client::CosmosClient;
 pub use tx::TxBuilder;
 pub use wallet::Wallet;
-
-use serde::{Deserialize, Serialize};
 
 use crate::{configuration::Oracle, provider::Price};
 
 use self::error::CosmosError;
+
+pub mod client;
+pub mod error;
+pub mod json;
+mod tx;
+mod wallet;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

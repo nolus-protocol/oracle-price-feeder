@@ -1,6 +1,6 @@
-use crate::provider::{FeedProviderError, Price};
-
 use serde::Deserialize;
+
+use crate::provider::{FeedProviderError, Price};
 
 trait Empty<T> {
     fn empty() -> T;
@@ -148,7 +148,6 @@ impl Pool {
 
 #[cfg(test)]
 mod tests {
-
     use crate::provider::{
         crypto::osmosis_pool::{Pool, PoolAsset, Token},
         Price,

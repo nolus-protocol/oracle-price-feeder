@@ -1,11 +1,12 @@
 use std::vec;
 
-use super::osmosis_pool::Pool;
-use crate::provider::{FeedProviderError, Price, Provider};
 use async_trait::async_trait;
-
 use reqwest::{Client, RequestBuilder, Url};
 use serde::Deserialize;
+
+use crate::provider::{FeedProviderError, Price, Provider};
+
+use super::osmosis_pool::Pool;
 
 #[derive(Deserialize, Debug)]
 pub struct OsmosisResponse {

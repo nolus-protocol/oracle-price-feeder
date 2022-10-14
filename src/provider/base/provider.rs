@@ -66,12 +66,13 @@ pub async fn get_supported_denom_pairs(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::{
         configuration::Providers,
         provider::{ProviderType, ProvidersFactory},
     };
 
-    use std::str::FromStr;
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
 
     #[test]

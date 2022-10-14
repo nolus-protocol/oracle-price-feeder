@@ -2,10 +2,9 @@
 mod tests {
     use std::fs;
 
-    use crate::provider::crypto::osmosis::OsmosisClient;
-    use crate::provider::{Price, Provider};
-    use wiremock::matchers::path_regex;
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::{matchers::path_regex, Mock, MockServer, ResponseTemplate};
+
+    use crate::provider::{crypto::osmosis::OsmosisClient, Price, Provider};
 
     #[tokio::test]
     async fn get_all_pools_count() {
