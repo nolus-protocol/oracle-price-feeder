@@ -1,5 +1,5 @@
 pub use self::{
-    crypto_provider::{CryptoProvidersFactory, CryptoProviderType},
+    crypto_provider::{CryptoProviderType, CryptoProvidersFactory},
     osmosis::OsmosisClient,
 };
 

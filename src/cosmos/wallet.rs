@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
 use cosmrs::{
-    AccountId,
     bip32::{DerivationPath, Language, Mnemonic},
     crypto::secp256k1::{Signature, SigningKey},
+    AccountId,
 };
 
 use super::error::WalletError;
@@ -56,7 +56,8 @@ impl Wallet {
         // Sign the data provided data
         self.keychain
             .private_key
-            .sign(data).as_ref()
+            .sign(data)
+            .as_ref()
             .map(Signature::to_vec)
             .map_err(|err| WalletError::Sign(err.to_string()))
     }

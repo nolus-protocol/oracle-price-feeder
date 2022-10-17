@@ -1,8 +1,8 @@
 use cosmos_sdk_proto::cosmos::tx::v1beta1::TxRaw;
 use cosmrs::{
-    Coin,
     tendermint::chain::Id,
     tx::{Body, Fee, Raw, SignDoc, SignerInfo},
+    Coin,
 };
 
 use super::{error::TxBuildError, wallet::Wallet};
@@ -95,7 +95,7 @@ impl TxBuilder {
                 &self.chain_id,
                 account_info.number,
             )?
-                .into_bytes()?;
+            .into_bytes()?;
 
             signature = wallet.sign(&sign_doc_bytes)?;
         }
@@ -105,6 +105,6 @@ impl TxBuilder {
             auth_info_bytes: auth_info.into_bytes()?,
             signatures: vec![signature],
         }
-            .into())
+        .into())
     }
 }

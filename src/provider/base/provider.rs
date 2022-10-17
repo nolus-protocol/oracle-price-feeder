@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use crate::{
     configuration::{self},
     cosmos::{CosmosClient, QueryMsg},
-    provider::{CryptoProvidersFactory, CryptoProviderType},
+    provider::{CryptoProviderType, CryptoProvidersFactory},
 };
 
 use super::{FeedProviderError, Price};
@@ -68,7 +68,7 @@ mod tests {
 
     use crate::{
         configuration::Providers,
-        provider::{ProvidersFactory, ProviderType},
+        provider::{ProviderType, ProvidersFactory},
     };
 
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
@@ -89,6 +89,6 @@ mod tests {
                 base_address: TEST_OSMOSIS_URL.to_string(),
             },
         )
-            .unwrap();
+        .unwrap();
     }
 }

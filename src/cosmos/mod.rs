@@ -52,11 +52,7 @@ pub async fn broadcast_tx(
         .memo(String::from("Test memo"))
         .account_info(account_data.sequence, account_data.account_number)
         .timeout_height(0)
-        .fee(
-            &config.fee_denom,
-            config.funds_amount,
-            config.gas_limit,
-        )?
+        .fee(&config.fee_denom, config.funds_amount, config.gas_limit)?
         .add_message(exec_msg)
         .sign(wallet)?;
 

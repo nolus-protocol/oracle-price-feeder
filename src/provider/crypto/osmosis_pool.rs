@@ -71,14 +71,15 @@ impl Pool {
         token_base_denom: &str,
         token_quote_denom: &str,
     ) -> Result<PoolAssetPair, FeedProviderError> {
-        let base = self.get_pool_asset_by_denom(&self.pool_assets, token_base_denom).cloned()?;
+        let base = self
+            .get_pool_asset_by_denom(&self.pool_assets, token_base_denom)
+            .cloned()?;
 
-        let quote = self.get_pool_asset_by_denom(&self.pool_assets, token_quote_denom).cloned()?;
+        let quote = self
+            .get_pool_asset_by_denom(&self.pool_assets, token_quote_denom)
+            .cloned()?;
 
-        Ok(PoolAssetPair {
-            base,
-            quote,
-        })
+        Ok(PoolAssetPair { base, quote })
     }
 
     pub fn spot_price(
@@ -115,10 +116,17 @@ impl Pool {
         ))
     }
 
-    fn get_pool_asset_by_denom<'r>(&self, assets: &'r [PoolAsset], denom: &str) -> Result<&'r PoolAsset, FeedProviderError> {
-        assets.iter().find(|pool| pool.token.denom == denom).ok_or_else(|| FeedProviderError::DenomNotFound {
-            denom: String::from(denom),
-        })
+    fn get_pool_asset_by_denom<'r>(
+        &self,
+        assets: &'r [PoolAsset],
+        denom: &str,
+    ) -> Result<&'r PoolAsset, FeedProviderError> {
+        assets
+            .iter()
+            .find(|pool| pool.token.denom == denom)
+            .ok_or_else(|| FeedProviderError::DenomNotFound {
+                denom: String::from(denom),
+            })
     }
 }
 
@@ -138,8 +146,8 @@ mod tests {
                 PoolAsset {
                     token: Token {
                         denom:
-                        "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
-                            .to_string(),
+                            "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
+                                .to_string(),
                         amount: "6897".to_string(),
                     },
                     weight: "536870912000000".to_string(),
@@ -155,7 +163,10 @@ mod tests {
         };
 
         // Assert
-        let asset = &pool.get_pool_asset_by_denom(&pool.pool_assets, "uosmo").cloned().unwrap();
+        let asset = &pool
+            .get_pool_asset_by_denom(&pool.pool_assets, "uosmo")
+            .cloned()
+            .unwrap();
 
         assert_eq!(asset.weight, "536870912000000".to_string());
 

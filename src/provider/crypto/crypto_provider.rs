@@ -28,7 +28,9 @@ impl CryptoProvidersFactory {
         base_url: &str,
     ) -> Result<Box<dyn Provider>, FeedProviderError> {
         match s {
-            CryptoProviderType::Osmosis => OsmosisClient::new(base_url).map(|client| Box::new(client) as Box<dyn Provider>),
+            CryptoProviderType::Osmosis => {
+                OsmosisClient::new(base_url).map(|client| Box::new(client) as Box<dyn Provider>)
+            }
         }
     }
 }
@@ -37,7 +39,7 @@ impl CryptoProvidersFactory {
 mod tests {
     use std::str::FromStr;
 
-    use super::{CryptoProvidersFactory, CryptoProviderType};
+    use super::{CryptoProviderType, CryptoProvidersFactory};
 
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
 

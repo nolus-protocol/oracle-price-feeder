@@ -38,7 +38,10 @@ impl OsmosisClient {
     fn get_request_builder(&self, url_str: &str) -> Result<RequestBuilder, FeedProviderError> {
         let http_client = Client::new();
 
-        self.base_url.join(url_str).map(|url| http_client.get(url)).map_err(|_| FeedProviderError::URLParsingError)
+        self.base_url
+            .join(url_str)
+            .map(|url| http_client.get(url))
+            .map_err(|_| FeedProviderError::URLParsingError)
     }
 
     pub async fn get_pools(&self, limit: usize) -> Result<Vec<Pool>, FeedProviderError> {
