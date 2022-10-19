@@ -29,6 +29,7 @@ pub struct Oracle {
 }
 
 impl Oracle {
+    #[must_use]
     pub fn create(contract_addrs: String) -> OracleBuilder {
         OracleBuilder {
             contract_addrs,
@@ -70,6 +71,7 @@ impl OracleBuilder {
         self
     }
 
+    #[must_use]
     pub fn build(&self) -> Oracle {
         Oracle {
             contract_addrs: self.contract_addrs.clone(),
@@ -90,7 +92,7 @@ impl Default for Config {
         Self {
             continuous: true,
             tick_time: 60,
-            providers: Default::default(),
+            providers: Vec::default(),
             oracle: Oracle::create(String::default()).build(),
         }
     }

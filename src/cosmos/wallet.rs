@@ -6,7 +6,7 @@ use cosmrs::{
     AccountId,
 };
 
-use super::error::WalletError;
+use super::error::Wallet as WalletError;
 
 /// Represents a Secp256k1 key pair.
 pub struct Keychain {
@@ -48,6 +48,7 @@ impl Wallet {
             .map_err(Into::into)
     }
 
+    #[must_use]
     pub fn get_public_key(&self) -> cosmrs::crypto::PublicKey {
         self.keychain.public_key
     }

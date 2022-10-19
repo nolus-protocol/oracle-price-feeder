@@ -3,58 +3,55 @@ use std::str::FromStr;
 use async_trait::async_trait;
 
 use crate::{
-    configuration::{self},
-    cosmos::{CosmosClient, QueryMsg},
-    provider::{CryptoProviderType, CryptoProvidersFactory},
+    configuration,
+    cosmos::{Client, QueryMsg, SupportedDenomPairsResponse},
+    provider::{CryptoFactory, CryptoType},
 };
 
 use super::{FeedProviderError, Price};
 
 #[async_trait]
 pub trait Provider {
-    async fn get_spot_prices(
-        &self,
-        denoms: &[Vec<String>],
-    ) -> Result<Vec<Price>, FeedProviderError>;
+    async fn get_spot_prices(&self, cosm_client: &Client) -> Result<Vec<Price>, FeedProviderError>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ProviderType {
+pub enum Type {
     Crypto,
 }
 
-impl FromStr for ProviderType {
+impl FromStr for Type {
     type Err = ();
 
-    fn from_str(input: &str) -> Result<ProviderType, Self::Err> {
+    fn from_str(input: &str) -> Result<Type, Self::Err> {
         match input {
-            "crypto" => Ok(ProviderType::Crypto),
+            "crypto" => Ok(Type::Crypto),
             _ => Err(()),
         }
     }
 }
 
-pub struct ProvidersFactory;
+pub struct Factory;
 
-impl ProvidersFactory {
+impl Factory {
     pub fn new_provider(
-        s: &ProviderType,
+        s: &Type,
         cfg: &configuration::Providers,
     ) -> Result<Box<dyn Provider>, FeedProviderError> {
         match s {
-            ProviderType::Crypto => {
-                let provider_type = CryptoProviderType::from_str(&cfg.name)
+            Type::Crypto => {
+                let provider_type = CryptoType::from_str(&cfg.name)
                     .map_err(|_| FeedProviderError::UnsupportedProviderType(cfg.name.clone()))?;
 
-                CryptoProvidersFactory::new_provider(&provider_type, &cfg.base_address)
+                CryptoFactory::new_provider(&provider_type, &cfg.base_address)
             }
         }
     }
 }
 
 pub async fn get_supported_denom_pairs(
-    cosm_client: &CosmosClient,
-) -> Result<Vec<Vec<String>>, FeedProviderError> {
+    cosm_client: &Client,
+) -> Result<SupportedDenomPairsResponse, FeedProviderError> {
     cosm_client
         .cosmwasm_query(&QueryMsg::SupportedDenomPairs {})
         .await
@@ -68,21 +65,21 @@ mod tests {
 
     use crate::{
         configuration::Providers,
-        provider::{ProviderType, ProvidersFactory},
+        provider::{Factory, Type},
     };
 
     const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
 
     #[test]
     fn get_provider() {
-        let t = ProviderType::from_str("crypto").unwrap();
+        let t = Type::from_str("crypto").unwrap();
 
-        assert_eq!(ProviderType::Crypto, t);
+        assert_eq!(t, Type::Crypto);
 
-        ProviderType::from_str("invalid").unwrap_err();
+        Type::from_str("invalid").unwrap_err();
 
-        ProvidersFactory::new_provider(
-            &ProviderType::Crypto,
+        Factory::new_provider(
+            &Type::Crypto,
             &Providers {
                 main_type: "crypto".to_string(),
                 name: "osmosis".to_string(),

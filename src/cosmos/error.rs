@@ -2,14 +2,14 @@ use cosmrs::ErrorReport;
 use prost::{DecodeError, EncodeError};
 use thiserror::Error;
 
-/// The various error that can be raised from [`super::client::CosmosClient`].
+/// The various error that can be raised from [`CosmosClient`](super::client::CosmosClient).
 #[derive(Error, Debug)]
-pub enum CosmosError {
+pub enum Cosmos {
     #[error("Encoding error: {0}")]
     Encode(String),
 
     #[error("{0}")]
-    WalletError(#[from] WalletError),
+    WalletError(#[from] Wallet),
 
     #[error("{0}")]
     Json(#[from] serde_json::Error),
@@ -33,7 +33,7 @@ pub enum CosmosError {
     AccountNotFound(String),
 
     #[error("{0}")]
-    TxBuildError(#[from] TxBuildError),
+    TxBuildError(#[from] TxBuild),
 
     #[error("{0}")]
     ErrorReport(#[from] ErrorReport),
@@ -42,32 +42,32 @@ pub enum CosmosError {
     TendermintRpc(#[from] cosmrs::rpc::Error),
 }
 
-impl From<EncodeError> for CosmosError {
+impl From<EncodeError> for Cosmos {
     fn from(e: EncodeError) -> Self {
-        CosmosError::Encode(e.to_string())
+        Cosmos::Encode(e.to_string())
     }
 }
 
-impl From<DecodeError> for CosmosError {
+impl From<DecodeError> for Cosmos {
     fn from(e: DecodeError) -> Self {
-        CosmosError::Decode(e.to_string())
+        Cosmos::Decode(e.to_string())
     }
 }
 
-impl From<tonic::transport::Error> for CosmosError {
+impl From<tonic::transport::Error> for Cosmos {
     fn from(e: tonic::transport::Error) -> Self {
-        CosmosError::Grpc(e.to_string())
+        Cosmos::Grpc(e.to_string())
     }
 }
 
-impl From<std::io::Error> for CosmosError {
+impl From<std::io::Error> for Cosmos {
     fn from(e: std::io::Error) -> Self {
-        CosmosError::Io(e.to_string())
+        Cosmos::Io(e.to_string())
     }
 }
 
 #[derive(Error, Debug)]
-pub enum WalletError {
+pub enum Wallet {
     #[error("sign error: {0}")]
     Sign(String),
 
@@ -89,7 +89,7 @@ pub enum WalletError {
 
 /// The various error that can be raised from [`super::tx::TxBuilder`].
 #[derive(Error, Debug)]
-pub enum TxBuildError {
+pub enum TxBuild {
     #[error("Encoding error: {0}")]
     Encode(String),
 
@@ -106,7 +106,7 @@ pub enum TxBuildError {
     ErrorReport(#[from] ErrorReport),
 
     #[error("{0}")]
-    WalletError(#[from] WalletError),
+    WalletError(#[from] Wallet),
 
     #[error("{0}")]
     Tendermint(#[from] cosmrs::tendermint::Error),

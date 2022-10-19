@@ -5,25 +5,25 @@ use cosmrs::{
     Coin,
 };
 
-use super::{error::TxBuildError, wallet::Wallet};
+use super::{error::TxBuild as TxBuildError, wallet::Wallet};
 
-/// AccountInfo is a private structure which represents the information of the account
+/// [`AccountInfo`] is a private structure which represents the information of the account
 /// that is performing the transaction.
 struct AccountInfo {
     pub sequence: u64,
     pub number: u64,
 }
 
-/// TxBuilder represents the single signer transaction builder.
-pub struct TxBuilder {
+/// [`TxBuilder`](Self) represents the single signer transaction builder.
+pub struct Builder {
     chain_id: Id,
     account_info: Option<AccountInfo>,
     tx_body: Body,
     fee: Option<Fee>,
 }
 
-impl TxBuilder {
-    pub fn new(chain_id: String) -> Result<TxBuilder, TxBuildError> {
+impl Builder {
+    pub fn new(chain_id: &str) -> Result<Builder, TxBuildError> {
         Ok(Self {
             chain_id: chain_id.parse()?,
             account_info: None,
@@ -33,6 +33,7 @@ impl TxBuilder {
     }
 
     /// Sets the transaction timout height.
+    #[must_use]
     pub fn timeout_height(mut self, timeout_height: u32) -> Self {
         self.tx_body.timeout_height = timeout_height.into();
 
@@ -40,6 +41,7 @@ impl TxBuilder {
     }
 
     /// Sets the transaction memo.
+    #[must_use]
     pub fn memo(mut self, memo: String) -> Self {
         self.tx_body.memo = memo;
 
@@ -64,6 +66,7 @@ impl TxBuilder {
     }
 
     /// Sets the account information.
+    #[must_use]
     pub fn account_info(mut self, sequence: u64, number: u64) -> Self {
         self.account_info = Some(AccountInfo { sequence, number });
 
@@ -71,6 +74,7 @@ impl TxBuilder {
     }
 
     /// Append a message to the transaction messages.
+    #[must_use]
     pub fn add_message(mut self, msg: cosmrs::Any) -> Self {
         self.tx_body.messages.push(msg);
 

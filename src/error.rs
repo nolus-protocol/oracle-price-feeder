@@ -2,12 +2,12 @@ use thiserror::Error;
 use tonic::codegen::http;
 
 use crate::{
-    cosmos::error::{CosmosError, WalletError},
+    cosmos::error::{Cosmos, Wallet},
     provider::FeedProviderError,
 };
 
 #[derive(Error, Debug)]
-pub enum FeederError {
+pub enum Feeder {
     #[error("Configuration error: {message}")]
     ConfigurationError { message: String },
 
@@ -27,7 +27,7 @@ pub enum FeederError {
     StdError(#[from] std::io::Error),
 
     #[error("{0}")]
-    WalletError(#[from] WalletError),
+    WalletError(#[from] Wallet),
 
     #[error("{0}")]
     Provider(#[from] FeedProviderError),
@@ -36,5 +36,5 @@ pub enum FeederError {
     Json(#[from] serde_json::Error),
 
     #[error("{0}")]
-    Cosmos(#[from] CosmosError),
+    Cosmos(#[from] Cosmos),
 }

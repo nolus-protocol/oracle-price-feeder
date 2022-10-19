@@ -18,6 +18,7 @@ pub struct Price {
 }
 
 impl Price {
+    #[must_use]
     pub fn new<S1, S2>(symbol1: S1, base: u128, symbol2: S2, quote: u128) -> Self
     where
         S1: Into<String>,
@@ -35,6 +36,7 @@ impl Price {
         )
     }
 
+    #[must_use]
     pub fn new_from_coins(amount: Coin, amount_quote: Coin) -> Self {
         Price {
             amount,
@@ -42,6 +44,7 @@ impl Price {
         }
     }
 
+    #[must_use]
     pub fn is_zero(&self) -> bool {
         self.amount.amount == 0 || self.amount_quote.amount == 0
     }
