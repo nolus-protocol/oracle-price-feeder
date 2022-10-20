@@ -6,19 +6,20 @@ mod errors;
 mod provider;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[must_use]
 pub struct Coin {
     pub amount: u128,
     pub symbol: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[must_use]
 pub struct Price {
     amount: Coin,
     amount_quote: Coin,
 }
 
 impl Price {
-    #[must_use]
     pub fn new<S1, S2>(symbol1: S1, base: u128, symbol2: S2, quote: u128) -> Self
     where
         S1: Into<String>,
@@ -36,7 +37,6 @@ impl Price {
         )
     }
 
-    #[must_use]
     pub fn new_from_coins(amount: Coin, amount_quote: Coin) -> Self {
         Price {
             amount,

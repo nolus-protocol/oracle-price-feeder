@@ -15,6 +15,7 @@ struct AccountInfo {
 }
 
 /// [`TxBuilder`](Self) represents the single signer transaction builder.
+#[must_use]
 pub struct Builder {
     chain_id: Id,
     account_info: Option<AccountInfo>,
@@ -33,7 +34,6 @@ impl Builder {
     }
 
     /// Sets the transaction timout height.
-    #[must_use]
     pub fn timeout_height(mut self, timeout_height: u32) -> Self {
         self.tx_body.timeout_height = timeout_height.into();
 
@@ -41,7 +41,6 @@ impl Builder {
     }
 
     /// Sets the transaction memo.
-    #[must_use]
     pub fn memo(mut self, memo: String) -> Self {
         self.tx_body.memo = memo;
 
@@ -66,7 +65,6 @@ impl Builder {
     }
 
     /// Sets the account information.
-    #[must_use]
     pub fn account_info(mut self, sequence: u64, number: u64) -> Self {
         self.account_info = Some(AccountInfo { sequence, number });
 
@@ -74,7 +72,6 @@ impl Builder {
     }
 
     /// Append a message to the transaction messages.
-    #[must_use]
     pub fn add_message(mut self, msg: cosmrs::Any) -> Self {
         self.tx_body.messages.push(msg);
 
