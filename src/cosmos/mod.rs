@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{configuration::Oracle, provider::Price};
 
-use self::error::CosmosError;
-pub use self::{client::CosmosClient, tx::TxBuilder, wallet::Wallet};
+use self::error::Cosmos;
+pub use self::{client::Client, tx::Builder as TxBuilder, wallet::Wallet};
 
 pub mod client;
 pub mod error;
@@ -25,6 +25,22 @@ pub enum QueryMsg {
     SupportedDenomPairs {},
 }
 
+pub type PoolId = u64;
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct SwapLeg {
+    pub from: String,
+    pub to: SwapTarget,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct SwapTarget {
+    pub pool_id: PoolId,
+    pub target: String,
+}
+
+pub type SupportedDenomPairsResponse = Vec<SwapLeg>;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
@@ -32,11 +48,11 @@ pub enum ExecuteMsg {
 }
 
 pub async fn broadcast_tx(
-    client: &CosmosClient,
+    client: &Client,
     wallet: &Wallet,
     config: &Oracle,
     data: String,
-) -> Result<Response, CosmosError> {
+) -> Result<Response, Cosmos> {
     let sender_account_id = wallet.get_sender_account_id(&config.prefix)?;
     let account_data = client.get_account_data(sender_account_id.as_ref()).await?;
 
@@ -48,7 +64,7 @@ pub async fn broadcast_tx(
     }
     .to_any()?;
 
-    let tx_raw = TxBuilder::new(config.chain_id.clone())?
+    let tx_raw = TxBuilder::new(&config.chain_id)?
         .memo(String::from("Test memo"))
         .account_info(account_data.sequence, account_data.account_number)
         .timeout_height(0)

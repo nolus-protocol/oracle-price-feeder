@@ -1,6 +1,6 @@
 use crate::{
     configuration::Oracle,
-    cosmos::{client::CosmosClient, QueryMsg},
+    cosmos::{client::Client, QueryMsg},
 };
 
 use super::ORACLE_ADDRESS;
@@ -11,7 +11,7 @@ async fn get_account_data_example() {
         .host_url("https://net-dev.nolus.io")
         .grpc_port(26625)
         .build();
-    let client = CosmosClient::new(config.clone()).unwrap();
+    let client = Client::new(config.clone()).unwrap();
 
     let account = client
         .get_account_data(&config.contract_addrs)
@@ -27,7 +27,7 @@ async fn get_supported_denom_pairs() {
         .host_url("https://net-dev.nolus.io")
         .grpc_port(26625)
         .build();
-    let client = CosmosClient::new(config).unwrap();
+    let client = Client::new(config).unwrap();
 
     let response = client
         .cosmwasm_query(&QueryMsg::SupportedDenomPairs {})
@@ -47,7 +47,7 @@ async fn get_account_data_example_dev() {
         .grpc_port(26625)
         .build();
 
-    let cosmos_client = CosmosClient::new(config).unwrap();
+    let cosmos_client = Client::new(config).unwrap();
 
     let account = cosmos_client
         .get_account_data(ORACLE_ADDRESS)

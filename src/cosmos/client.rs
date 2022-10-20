@@ -14,23 +14,23 @@ use tonic::{
 
 use crate::configuration::Oracle;
 
-use super::{error::CosmosError, QueryMsg};
+use super::{error::Cosmos as CosmosError, QueryMsg};
 
 /// Client to communicate with a full node.
 #[derive(Clone)]
-pub struct CosmosClient {
+pub struct Client {
     config: Oracle,
     grpc_channel: Endpoint,
 }
 
-impl CosmosClient {
-    pub fn new(config: Oracle) -> Result<CosmosClient, InvalidUri> {
+impl Client {
+    pub fn new(config: Oracle) -> Result<Client, InvalidUri> {
         let grpc_uri = format!("{}:{}", config.host_url, config.grpc_port).parse::<Uri>()?;
         let grpc_channel = Channel::builder(grpc_uri);
 
-        Ok(CosmosClient {
-            grpc_channel,
+        Ok(Client {
             config,
+            grpc_channel,
         })
     }
 

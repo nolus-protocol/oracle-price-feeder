@@ -6,15 +6,17 @@ use cosmrs::{
     AccountId,
 };
 
-use super::error::WalletError;
+use super::error::Wallet as WalletError;
 
 /// Represents a Secp256k1 key pair.
+#[must_use]
 pub struct Keychain {
     pub public_key: cosmrs::crypto::PublicKey,
     private_key: SigningKey,
 }
 
 /// Facility used to manage a Secp256k1 key pair and generate signatures.
+#[must_use]
 pub struct Wallet {
     keychain: Keychain,
 }
@@ -48,6 +50,7 @@ impl Wallet {
             .map_err(Into::into)
     }
 
+    #[must_use]
     pub fn get_public_key(&self) -> cosmrs::crypto::PublicKey {
         self.keychain.public_key
     }

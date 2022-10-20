@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::cosmos::error::CosmosError;
+use crate::cosmos::error::Cosmos;
 
 #[derive(Error, Debug)]
 pub enum FeedProviderError {
@@ -38,7 +38,7 @@ pub enum FeedProviderError {
     ReqwestError(#[from] reqwest::Error),
 
     #[error("{0}")]
-    CosmosError(#[from] CosmosError),
+    CosmosError(#[from] Cosmos),
 
     #[error("{0}")]
     Json(#[from] serde_json::Error),

@@ -5,25 +5,26 @@ use cosmrs::{
     Coin,
 };
 
-use super::{error::TxBuildError, wallet::Wallet};
+use super::{error::TxBuild as TxBuildError, wallet::Wallet};
 
-/// AccountInfo is a private structure which represents the information of the account
+/// [`AccountInfo`] is a private structure which represents the information of the account
 /// that is performing the transaction.
 struct AccountInfo {
     pub sequence: u64,
     pub number: u64,
 }
 
-/// TxBuilder represents the single signer transaction builder.
-pub struct TxBuilder {
+/// [`TxBuilder`](Self) represents the single signer transaction builder.
+#[must_use]
+pub struct Builder {
     chain_id: Id,
     account_info: Option<AccountInfo>,
     tx_body: Body,
     fee: Option<Fee>,
 }
 
-impl TxBuilder {
-    pub fn new(chain_id: String) -> Result<TxBuilder, TxBuildError> {
+impl Builder {
+    pub fn new(chain_id: &str) -> Result<Builder, TxBuildError> {
         Ok(Self {
             chain_id: chain_id.parse()?,
             account_info: None,

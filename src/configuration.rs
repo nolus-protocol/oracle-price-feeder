@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
+#[must_use]
 pub struct Config {
     pub continuous: bool,
     pub tick_time: u64,
@@ -9,6 +10,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[must_use]
 pub struct Providers {
     pub main_type: String,
     pub name: String,
@@ -16,6 +18,7 @@ pub struct Providers {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[must_use]
 pub struct Oracle {
     pub(crate) contract_addrs: String,
     pub(crate) host_url: String,
@@ -44,6 +47,7 @@ impl Oracle {
     }
 }
 
+#[must_use]
 pub struct OracleBuilder {
     contract_addrs: String,
     host_url: String,
@@ -90,7 +94,7 @@ impl Default for Config {
         Self {
             continuous: true,
             tick_time: 60,
-            providers: Default::default(),
+            providers: Vec::default(),
             oracle: Oracle::create(String::default()).build(),
         }
     }

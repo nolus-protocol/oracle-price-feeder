@@ -1,29 +1,63 @@
-use std::vec;
-
 use async_trait::async_trait;
-use reqwest::{Client, RequestBuilder, Url};
-use serde::Deserialize;
+use reqwest::{Client as ReqwestClient, RequestBuilder, StatusCode, Url};
+use serde::{de::Unexpected, Deserialize, Deserializer};
 
-use crate::provider::{FeedProviderError, Price, Provider};
+use crate::{
+    cosmos::Client as CosmosClient,
+    provider::{get_supported_denom_pairs, FeedProviderError, Price, Provider},
+};
 
-use super::osmosis_pool::Pool;
-
-#[derive(Deserialize, Debug)]
-pub struct OsmosisResponse {
-    pools: Vec<Pool>,
+#[derive(Debug, Deserialize)]
+struct AssetPrice {
+    #[serde(deserialize_with = "deserialize_spot_price")]
+    spot_price: Ratio,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct PoolsCountResponse {
-    #[serde(rename = "numPools")]
-    num_pools: String,
+#[derive(Debug)]
+struct Ratio {
+    numerator: u128,
+    denominator: u128,
 }
 
-pub struct OsmosisClient {
+fn deserialize_spot_price<'de, D>(deserializer: D) -> Result<Ratio, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let point;
+
+    let spot_price = {
+        let mut spot_price = String::deserialize(deserializer)?;
+
+        point = spot_price.find('.').ok_or_else(|| {
+            serde::de::Error::invalid_value(
+                Unexpected::Str(&spot_price),
+                &"Expected decimal value with point separator!",
+            )
+        })?;
+
+        spot_price.remove(point);
+
+        spot_price
+    };
+
+    Ok(Ratio {
+        numerator: 10_u128.pow(
+            (spot_price.len() - point)
+                .try_into()
+                .map_err(serde::de::Error::custom)?,
+        ),
+        denominator: spot_price
+            .trim_start_matches('0')
+            .parse()
+            .map_err(serde::de::Error::custom)?,
+    })
+}
+
+pub struct Client {
     base_url: Url,
 }
 
-impl OsmosisClient {
+impl Client {
     pub fn new(url_str: &str) -> Result<Self, FeedProviderError> {
         match Url::parse(url_str) {
             Ok(base_url) => Ok(Self { base_url }),
@@ -36,92 +70,46 @@ impl OsmosisClient {
     }
 
     fn get_request_builder(&self, url_str: &str) -> Result<RequestBuilder, FeedProviderError> {
-        let http_client = Client::new();
+        let http_client = ReqwestClient::new();
 
         self.base_url
             .join(url_str)
             .map(|url| http_client.get(url))
             .map_err(|_| FeedProviderError::URLParsingError)
     }
-
-    pub async fn get_pools(&self, limit: usize) -> Result<Vec<Pool>, FeedProviderError> {
-        let resp = self
-            .get_request_builder("pools")?
-            .query(&[("pagination.limit", limit)])
-            .send()
-            .await?;
-
-        Ok(resp.json::<OsmosisResponse>().await?.pools)
-    }
-
-    pub async fn get_pools_count(&self) -> Result<usize, FeedProviderError> {
-        let resp = self.get_request_builder("num_pools")?.send().await?;
-
-        let parsed = resp.json::<PoolsCountResponse>().await?;
-
-        Ok(parsed.num_pools.parse::<usize>().unwrap_or_default())
-    }
-
-    fn walk_pools(
-        pools: &[Pool],
-        base_denom: &str,
-        quote_denom: &str,
-    ) -> Result<Price, FeedProviderError> {
-        for pool in pools {
-            let res = pool.spot_price(base_denom, quote_denom);
-
-            if let Ok(price) = res {
-                println!(
-                    "Assets pair found in pool with id {} price {:?}",
-                    pool.id, price
-                );
-
-                return Ok(price);
-            }
-        }
-
-        Err(FeedProviderError::NoPriceFound {
-            base: String::from(base_denom),
-            quote: String::from(quote_denom),
-        })
-    }
 }
 
 #[async_trait]
-impl Provider for OsmosisClient {
+impl Provider for Client {
     async fn get_spot_prices(
         &self,
-        denoms: &[Vec<String>],
-        // cosm_client: &CosmosClient,
+        cosm_client: &CosmosClient,
     ) -> Result<Vec<Price>, FeedProviderError> {
-        let pools = self.get_pools(self.get_pools_count().await?).await?;
+        let mut prices = vec![];
 
-        let mut prices: Vec<Price> = vec![];
+        for pair in get_supported_denom_pairs(cosm_client).await? {
+            let resp = self
+                .get_request_builder(&format!("pools/{id}/prices", id = pair.to.pool_id))
+                .unwrap()
+                .query(&[
+                    ("base_asset_denom", pair.from.as_str()),
+                    ("quote_asset_denom", pair.to.target.as_str()),
+                ])
+                .send()
+                .await?;
 
-        for denom_pair in denoms {
-            let base_denom = denom_pair
-                .first()
-                .ok_or(FeedProviderError::AssetPairNotFound)?;
+            assert_eq!(resp.status(), StatusCode::OK);
 
-            let quote_denom = denom_pair
-                .get(1)
-                .ok_or(FeedProviderError::AssetPairNotFound)?;
+            let AssetPrice {
+                spot_price:
+                    Ratio {
+                        numerator: base,
+                        denominator: quote,
+                    },
+            } = resp.json().await?;
 
-            println!("Checking denom pair {} / {}", base_denom, quote_denom);
-
-            if let Ok(price) = OsmosisClient::walk_pools(&pools, base_denom, quote_denom) {
-                prices.push(price)
-            } else {
-                println!(
-                    "No price found for denom pair {} / {}",
-                    base_denom, quote_denom
-                );
-            }
+            prices.push(Price::new(pair.from, base, pair.to.target, quote));
         }
-
-        println!("Prices: {:#?}", prices);
-
-        // push_prices(&prices, cosm_client).await;
 
         Ok(prices)
     }

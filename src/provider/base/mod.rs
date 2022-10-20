@@ -6,12 +6,14 @@ mod errors;
 mod provider;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[must_use]
 pub struct Coin {
     pub amount: u128,
     pub symbol: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[must_use]
 pub struct Price {
     amount: Coin,
     amount_quote: Coin,
@@ -42,6 +44,7 @@ impl Price {
         }
     }
 
+    #[must_use]
     pub fn is_zero(&self) -> bool {
         self.amount.amount == 0 || self.amount_quote.amount == 0
     }
