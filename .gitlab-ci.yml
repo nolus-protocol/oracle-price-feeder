@@ -21,6 +21,7 @@ prepare_node:
   stage: prepare
   script:
     - mkdir -p $CARGO_HOME
+    - rustup update
     - rustc --version && cargo --version    
 
 test-code:
