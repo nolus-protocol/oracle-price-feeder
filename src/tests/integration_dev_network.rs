@@ -30,7 +30,7 @@ async fn get_supported_denom_pairs() {
     let client = Client::new(config).unwrap();
 
     let response = client
-        .cosmwasm_query(&QueryMsg::SupportedDenomPairs {})
+        .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
         .await
         .unwrap();
     let pairs: Vec<Vec<String>> = serde_json::from_slice(&response.data).unwrap();

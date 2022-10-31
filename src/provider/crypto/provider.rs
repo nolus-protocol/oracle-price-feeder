@@ -1,6 +1,9 @@
-use std::str::FromStr;
+use std::{collections::BTreeMap, str::FromStr};
 
-use crate::provider::{FeedProviderError, Provider};
+use crate::{
+    configuration::{Symbol, Ticker},
+    provider::{FeedProviderError, Provider},
+};
 
 use super::Client;
 
@@ -23,17 +26,21 @@ impl FromStr for Type {
 pub struct Factory;
 
 impl Factory {
-    pub fn new_provider(s: &Type, base_url: &str) -> Result<Box<dyn Provider>, FeedProviderError> {
+    pub fn new_provider(
+        s: &Type,
+        base_url: &str,
+        currencies: &BTreeMap<Ticker, Symbol>,
+    ) -> Result<Box<dyn Provider>, FeedProviderError> {
         match s {
-            Type::Osmosis => {
-                Client::new(base_url).map(|client| Box::new(client) as Box<dyn Provider>)
-            }
+            Type::Osmosis => Client::new(base_url, currencies)
+                .map(|client| Box::new(client) as Box<dyn Provider>),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use super::{Factory, Type};
@@ -45,6 +52,17 @@ mod tests {
         let t = Type::from_str("osmosis").unwrap();
         assert_eq!(t, Type::Osmosis);
         Type::from_str("invalid").unwrap_err();
-        Factory::new_provider(&Type::Osmosis, TEST_OSMOSIS_URL).unwrap();
+        Factory::new_provider(
+            &Type::Osmosis,
+            TEST_OSMOSIS_URL,
+            &BTreeMap::from([
+                ("OSMO".into(), "OSMO".into()),
+                (
+                    "ATOM".into(),
+                    "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2".into(),
+                ),
+            ]),
+        )
+        .unwrap();
     }
 }

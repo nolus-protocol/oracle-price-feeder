@@ -43,7 +43,7 @@ impl Factory {
                 let provider_type = CryptoType::from_str(&cfg.name)
                     .map_err(|_| FeedProviderError::UnsupportedProviderType(cfg.name.clone()))?;
 
-                CryptoFactory::new_provider(&provider_type, &cfg.base_address)
+                CryptoFactory::new_provider(&provider_type, &cfg.base_address, &cfg.currencies)
             }
         }
     }
@@ -53,7 +53,7 @@ pub async fn get_supported_denom_pairs(
     cosm_client: &Client,
 ) -> Result<SupportedDenomPairsResponse, FeedProviderError> {
     cosm_client
-        .cosmwasm_query(&QueryMsg::SupportedDenomPairs {})
+        .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
         .await
         .map_err(Into::into)
         .and_then(|resp| serde_json::from_slice(&resp.data).map_err(Into::into))
@@ -61,14 +61,14 @@ pub async fn get_supported_denom_pairs(
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{collections::BTreeMap, str::FromStr};
 
     use crate::{
         configuration::Providers,
         provider::{Factory, Type},
     };
 
-    const TEST_OSMOSIS_URL: &str = "https://lcd-osmosis.keplr.app/osmosis/gamm/v1beta1/";
+    const TEST_OSMOSIS_URL: &str = "https://lcd.osmosis.zone/gamm/v1beta1/";
 
     #[test]
     fn get_provider() {
@@ -84,6 +84,14 @@ mod tests {
                 main_type: "crypto".to_string(),
                 name: "osmosis".to_string(),
                 base_address: TEST_OSMOSIS_URL.to_string(),
+                currencies: BTreeMap::from([
+                    ("OSMO".into(), "OSMO".into()),
+                    (
+                        "ATOM".into(),
+                        "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"
+                            .into(),
+                    ),
+                ]),
             },
         )
         .unwrap();

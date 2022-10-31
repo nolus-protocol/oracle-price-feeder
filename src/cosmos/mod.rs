@@ -22,7 +22,7 @@ mod wallet;
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    SupportedDenomPairs {},
+    SupportedCurrencyPairs {},
 }
 
 pub type PoolId = u64;

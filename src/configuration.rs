@@ -1,4 +1,10 @@
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+pub type Ticker = String;
+
+pub type Symbol = String;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[must_use]
@@ -15,6 +21,11 @@ pub struct Providers {
     pub main_type: String,
     pub name: String,
     pub base_address: String,
+    #[serde(
+        serialize_with = "serialize_currency",
+        deserialize_with = "deserialize_currency"
+    )]
+    pub currencies: BTreeMap<Ticker, Symbol>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -45,6 +56,34 @@ impl Oracle {
             gas_limit: 500_000,
         }
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[must_use]
+pub struct Currency {
+    pub ticker: String,
+    pub symbol: String,
+}
+
+fn serialize_currency<S>(
+    currencies: &BTreeMap<Ticker, Symbol>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    currencies
+        .iter()
+        .collect::<Vec<(&Ticker, &Symbol)>>()
+        .serialize(serializer)
+}
+
+fn deserialize_currency<'de, D>(deserializer: D) -> Result<BTreeMap<Ticker, Symbol>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    <Vec<(Ticker, Symbol)> as Deserialize>::deserialize(deserializer)
+        .map(|currencies| currencies.into_iter().collect())
 }
 
 #[must_use]
