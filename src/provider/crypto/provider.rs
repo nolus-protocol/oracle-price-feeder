@@ -30,10 +30,10 @@ impl Factory {
         s: &Type,
         base_url: &str,
         currencies: &BTreeMap<Ticker, Symbol>,
-    ) -> Result<Box<dyn Provider>, FeedProviderError> {
+    ) -> Result<Box<dyn Provider + Send + 'static>, FeedProviderError> {
         match s {
             Type::Osmosis => Client::new(base_url, currencies)
-                .map(|client| Box::new(client) as Box<dyn Provider>),
+                .map(|client| Box::new(client) as Box<dyn Provider + Send + 'static>),
         }
     }
 }

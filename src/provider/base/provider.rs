@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{borrow::Cow, str::FromStr};
 
 use async_trait::async_trait;
 
@@ -11,8 +11,16 @@ use crate::{
 use super::{FeedProviderError, Price};
 
 #[async_trait]
-pub trait Provider {
-    async fn get_spot_prices(&self, cosm_client: &Client) -> Result<Vec<Price>, FeedProviderError>;
+pub trait Provider
+where
+    Self: Send + 'static,
+{
+    fn name(&self) -> Cow<'static, str>;
+
+    async fn get_spot_prices(
+        &self,
+        cosm_client: &Client,
+    ) -> Result<Box<[Price]>, FeedProviderError>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -37,7 +45,7 @@ impl Factory {
     pub fn new_provider(
         s: &Type,
         cfg: &configuration::Providers,
-    ) -> Result<Box<dyn Provider>, FeedProviderError> {
+    ) -> Result<Box<dyn Provider + Send + 'static>, FeedProviderError> {
         match s {
             Type::Crypto => {
                 let provider_type = CryptoType::from_str(&cfg.name)

@@ -1,14 +1,14 @@
-use std::collections::BTreeMap;
+use std::{borrow::Cow, collections::BTreeMap};
 
 use async_trait::async_trait;
 use reqwest::{Client as ReqwestClient, RequestBuilder, StatusCode, Url};
 use serde::{de::Unexpected, Deserialize, Deserializer};
 
 use crate::{
+    configuration::{Symbol, Ticker},
     cosmos::Client as CosmosClient,
-    provider::{FeedProviderError, get_supported_denom_pairs, Price, Provider},
+    provider::{get_supported_denom_pairs, FeedProviderError, Price, Provider},
 };
-use crate::configuration::{Symbol, Ticker};
 
 #[derive(Debug, Deserialize)]
 struct AssetPrice {
@@ -23,8 +23,8 @@ struct Ratio {
 }
 
 fn deserialize_spot_price<'de, D>(deserializer: D) -> Result<Ratio, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     let point;
 
@@ -91,10 +91,14 @@ impl Client {
 
 #[async_trait]
 impl Provider for Client {
+    fn name(&self) -> Cow<'static, str> {
+        "Osmosis".into()
+    }
+
     async fn get_spot_prices(
         &self,
         cosm_client: &CosmosClient,
-    ) -> Result<Vec<Price>, FeedProviderError> {
+    ) -> Result<Box<[Price]>, FeedProviderError> {
         let mut prices = vec![];
 
         for pair in get_supported_denom_pairs(cosm_client).await? {
@@ -104,15 +108,23 @@ impl Provider for Client {
                 .query(&[
                     (
                         "base_asset_denom",
-                        self.currencies.get(pair.from.as_str()).unwrap_or_else(|| panic!("Currency with ticker \"{ticker}\" not defined!",
-                            ticker = pair.from.as_str())),
+                        self.currencies.get(pair.from.as_str()).unwrap_or_else(|| {
+                            panic!(
+                                "Currency with ticker \"{ticker}\" not defined!",
+                                ticker = pair.from.as_str()
+                            )
+                        }),
                     ),
                     (
                         "quote_asset_denom",
                         self.currencies
                             .get(pair.to.target.as_str())
-                            .unwrap_or_else(|| panic!("Currency with ticker \"{ticker}\" not defined!",
-                                ticker = pair.to.target.as_str())),
+                            .unwrap_or_else(|| {
+                                panic!(
+                                    "Currency with ticker \"{ticker}\" not defined!",
+                                    ticker = pair.to.target.as_str()
+                                )
+                            }),
                     ),
                 ])
                 .send()
@@ -122,15 +134,15 @@ impl Provider for Client {
 
             let AssetPrice {
                 spot_price:
-                Ratio {
-                    numerator: base,
-                    denominator: quote,
-                },
+                    Ratio {
+                        numerator: base,
+                        denominator: quote,
+                    },
             } = resp.json().await?;
 
             prices.push(Price::new(pair.from, base, pair.to.target, quote));
         }
 
-        Ok(prices)
+        Ok(prices.into_boxed_slice())
     }
 }
