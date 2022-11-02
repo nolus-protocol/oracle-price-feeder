@@ -3,6 +3,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 use async_trait::async_trait;
 use reqwest::{Client as ReqwestClient, RequestBuilder, StatusCode, Url};
 use serde::{de::Unexpected, Deserialize, Deserializer};
+use tracing::error;
 
 use crate::{
     configuration::{Symbol, Ticker},
@@ -101,46 +102,49 @@ impl Provider for Client {
     ) -> Result<Box<[Price]>, FeedProviderError> {
         let mut prices = vec![];
 
-        for pair in get_supported_denom_pairs(cosm_client).await? {
+        for (pool_id, (from_ticker, from_symbol), (to_ticker, to_symbol)) in
+            get_supported_denom_pairs(cosm_client)
+                .await?
+                .into_iter()
+                .flat_map(|swap| {
+                    let from_symbol = self.currencies.get(&swap.from).cloned()?;
+                    let to_symbol = self.currencies.get(&swap.to.target).cloned()?;
+
+                    Some((
+                        swap.to.pool_id,
+                        (swap.from, from_symbol),
+                        (swap.to.target, to_symbol),
+                    ))
+                })
+        {
             let resp = self
-                .get_request_builder(&format!("pools/{id}/prices", id = pair.to.pool_id))
+                .get_request_builder(&format!("pools/{pool_id}/prices"))
                 .unwrap()
                 .query(&[
-                    (
-                        "base_asset_denom",
-                        self.currencies.get(pair.from.as_str()).unwrap_or_else(|| {
-                            panic!(
-                                "Currency with ticker \"{ticker}\" not defined!",
-                                ticker = pair.from.as_str()
-                            )
-                        }),
-                    ),
-                    (
-                        "quote_asset_denom",
-                        self.currencies
-                            .get(pair.to.target.as_str())
-                            .unwrap_or_else(|| {
-                                panic!(
-                                    "Currency with ticker \"{ticker}\" not defined!",
-                                    ticker = pair.to.target.as_str()
-                                )
-                            }),
-                    ),
+                    ("base_asset_denom", from_symbol),
+                    ("quote_asset_denom", to_symbol),
                 ])
                 .send()
                 .await?;
 
-            assert_eq!(resp.status(), StatusCode::OK);
+            if resp.status() == StatusCode::OK {
+                let AssetPrice {
+                    spot_price:
+                        Ratio {
+                            numerator: base,
+                            denominator: quote,
+                        },
+                } = resp.json().await?;
 
-            let AssetPrice {
-                spot_price:
-                    Ratio {
-                        numerator: base,
-                        denominator: quote,
-                    },
-            } = resp.json().await?;
-
-            prices.push(Price::new(pair.from, base, pair.to.target, quote));
+                prices.push(Price::new(from_ticker, base, to_ticker, quote));
+            } else {
+                error!(
+                    from = %from_ticker,
+                    to = %to_ticker,
+                    "Couldn't resolve spot price! Server returned status code {}!",
+                    resp.status().as_u16()
+                );
+            }
         }
 
         Ok(prices.into_boxed_slice())
