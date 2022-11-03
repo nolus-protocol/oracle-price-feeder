@@ -23,6 +23,7 @@ prepare_node:
     - apk add musl-dev
     - mkdir -p $CARGO_HOME
     - rustc --version && cargo --version && rustup --version
+    - rustup toolchain add x86_64-unknown-linux-musl
 
 test-code:
   stage: test
