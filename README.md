@@ -64,24 +64,24 @@ cargo build --release
 * Configuration
   Edit `market-data-feeder.toml` file
 
-| Key            | Value                    | Default | Description                                                                                                            |
-|----------------|--------------------------|---------|------------------------------------------------------------------------------------------------------------------------|
-| [`continuous`] | true or false            | true    | if false the service will push a price only once and exit                                                              |
-| [`tick_time`]  | < time in seconds >      | 60      | push price on every X seconds                                                                                          |
-| [`providers`]  |                          |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets |
-| main_type      | crypto                   |         | currently only crypto provider is implemented - Osmosis                                                                |
-| name           | osmosis                  |         | crypto provider type                                                                                                   |
-| base_address   | < URL >                  |         | Provider API address                                                                                                   |
-| [`oracle`]     |                          |         | Oracle contract configuration                                                                                          |
-| contract_addrs | < oracle address >       |         | Oracle contract address                                                                                                |
-| host_url       | < network node address > |         | "http://localhost" for local node; https://net-dev.nolus.io for dev network                                            |
-| grpc_port      |                          |         | Grpc port; 26615 for local; 26625 for dev                                                                              |
-| rpc_port       |                          |         | Rpc port; 26612 for local; 26612 for dev                                                                               |
-| prefix         | nolus                    |         | Nolus prefix                                                                                                           |
-| chain_id       |                          |         | nolus-local for local; nolus-dev-1 for dev                                                                             |
-| fee_denom      | unls                     |         | Network denom                                                                                                          |
-| funds_amount   |                          |         | Amount to be used for transactions                                                                                     |
-| gas_limit      |                          |         | Gas limit (Example: 500_000)                                                                                           |
+| Key            | Value                    | Default | Description                                                                                                                     |
+|----------------|--------------------------|---------|---------------------------------------------------------------------------------------------------------------------------------|
+| [`continuous`] | true or false            | true    | if false the service will push a price only once and exit                                                                       |
+| [`tick_time`]  | < time in seconds >      | 60      | push price on every X seconds                                                                                                   |
+| [`providers`]  |                          |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets          |
+| main_type      | crypto                   |         | currently only crypto provider is implemented - Osmosis                                                                         |
+| name           | osmosis                  |         | crypto provider type                                                                                                            |
+| base_address   | < URL >                  |         | Provider API address                                                                                                            |
+| [`oracle`]     |                          |         | Oracle contract configuration                                                                                                   |
+| contract_addrs | < oracle address >       |         | Oracle contract address                                                                                                         |
+| host_url       | < network node address > |         | "http://localhost" for local node; "http://host.docker.internal" when ran from Docker; https://net-dev.nolus.io for dev network |
+| grpc_port      |                          |         | Grpc port; 26615 for local; 26625 for dev                                                                                       |
+| rpc_port       |                          |         | Rpc port; 26612 for local; 26612 for dev                                                                                        |
+| prefix         | nolus                    |         | Nolus prefix                                                                                                                    |
+| chain_id       |                          |         | nolus-local for local; nolus-dev-1 for dev                                                                                      |
+| fee_denom      | unls                     |         | Network denom                                                                                                                   |
+| funds_amount   |                          |         | Amount to be used for transactions                                                                                              |
+| gas_limit      |                          |         | Gas limit (Example: 500_000)                                                                                                    |
 
 ## Start feeder service
 
