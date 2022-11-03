@@ -20,7 +20,7 @@ stages:
 prepare_node:
   stage: prepare
   script:
-    - apk add musl-dev
+    - apk add musl-dev libc-dev
     - mkdir -p $CARGO_HOME
     - rustc --version && cargo --version
 
