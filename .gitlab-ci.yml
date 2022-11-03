@@ -33,6 +33,7 @@ test-code:
         path: cobertura.xml
   coverage: '/^\d+.\d+% coverage/'
   script:
+    - apk add openssl-dev
     - cargo test
     - cargo install cargo-tarpaulin
     - cargo tarpaulin --ignore-tests --out Xml
