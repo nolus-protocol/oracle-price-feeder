@@ -1,10 +1,6 @@
 use crate::{
     configuration::Oracle,
-    cosmos::{
-        client::Client,
-        QueryMsg,
-        SupportedCurrencyPairsResponse,
-    },
+    cosmos::{client::Client, QueryMsg, SupportedCurrencyPairsResponse},
 };
 
 use super::ORACLE_ADDRESS;
