@@ -76,7 +76,7 @@ mod tests {
         provider::{Factory, Type},
     };
 
-    const TEST_OSMOSIS_URL: &str = "https://lcd.osmosis.zone/gamm/v1beta1/";
+    const TEST_OSMOSIS_URL: &str = "https://lcd.osmosis.zone/osmosis/gamm/v1beta1/";
 
     #[test]
     fn get_provider() {
