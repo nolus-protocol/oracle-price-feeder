@@ -9,6 +9,7 @@ cache:
 default:
   image: "rust:1.64-alpine"
   before_script:
+    - apk add musl-dev
     - rustc --version
     - cargo --version
 
