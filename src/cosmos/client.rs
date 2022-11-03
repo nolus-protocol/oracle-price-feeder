@@ -11,6 +11,7 @@ use tonic::{
     transport::{Channel, Endpoint, Uri},
     Request,
 };
+use tracing::{error, trace};
 
 use crate::configuration::Oracle;
 
@@ -36,12 +37,17 @@ impl Client {
 
     /// Returns the account data associated to the given address.
     pub async fn get_account_data(&self, address: &str) -> Result<BaseAccount, CosmosError> {
+        trace!("Creating gRPC channel.");
+
         // Create channel connection to the gRPC server
-        let channel = self
-            .grpc_channel
-            .connect()
-            .await
-            .map_err(|err| CosmosError::Grpc(err.to_string()))?;
+        let channel = self.grpc_channel.connect().await.map_err(|error| {
+            error!(
+                error = ?error,
+                "Error occurred when connecting to gRPC channel."
+            );
+
+            CosmosError::GrpcTransport(error)
+        })?;
 
         // Create gRPC query auth client from channel
         let mut client = QueryClient::new(channel);
@@ -51,11 +57,20 @@ impl Client {
             address: ToOwned::to_owned(address),
         });
 
+        trace!("Sending account query request through gRPC channel.");
+
         // Send request and wait for response
         let response = client
             .account(request)
             .await
-            .map_err(|err| CosmosError::Grpc(err.to_string()))?
+            .map_err(|error| {
+                error!(
+                    error = ?error,
+                    "Error occurred while querying account data!"
+                );
+
+                CosmosError::GrpcResponse(error)
+            })?
             .into_inner();
 
         match response.account {
@@ -75,11 +90,14 @@ impl Client {
         msg: &QueryMsg,
     ) -> Result<QuerySmartContractStateResponse, CosmosError> {
         // Create channel connection to the gRPC server
-        let channel = self
-            .grpc_channel
-            .connect()
-            .await
-            .map_err(|err| CosmosError::Grpc(err.to_string()))?;
+        let channel = self.grpc_channel.connect().await.map_err(|error| {
+            error!(
+                error = ?error,
+                "Error occurred while connecting to gRPC channel!"
+            );
+
+            CosmosError::GrpcTransport(error)
+        })?;
 
         // Create gRPC query auth client from channel
         let mut client = WasmQueryClient::new(channel);
@@ -91,7 +109,14 @@ impl Client {
                 query_data: serde_json::to_vec(msg)?,
             })
             .await
-            .map_err(|err| CosmosError::Grpc(err.to_string()))?
+            .map_err(|error| {
+                error!(
+                    error = ?error,
+                    "Error occurred while connecting to gRPC channel!"
+                );
+
+                CosmosError::GrpcResponse(error)
+            })?
             .into_inner();
 
         Ok(response)

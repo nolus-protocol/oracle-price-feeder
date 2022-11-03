@@ -20,8 +20,11 @@ pub enum Cosmos {
     #[error("Sign error: {0}")]
     Sign(String),
 
-    #[error("gRPC error: {0}")]
-    Grpc(String),
+    #[error("gRPC transport error: {0}")]
+    GrpcTransport(#[from] tonic::transport::Error),
+
+    #[error("gRPC response error: {0}")]
+    GrpcResponse(#[from] tonic::Status),
 
     #[error("LCD error: {0}")]
     Lcd(String),
@@ -51,12 +54,6 @@ impl From<EncodeError> for Cosmos {
 impl From<DecodeError> for Cosmos {
     fn from(e: DecodeError) -> Self {
         Cosmos::Decode(e.to_string())
-    }
-}
-
-impl From<tonic::transport::Error> for Cosmos {
-    fn from(e: tonic::transport::Error) -> Self {
-        Cosmos::Grpc(e.to_string())
     }
 }
 

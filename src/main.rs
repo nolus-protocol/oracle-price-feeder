@@ -2,7 +2,7 @@ use std::{io, process::exit, str::FromStr, sync::Arc, time::Duration};
 
 use cosmrs::rpc::endpoint::broadcast::tx_commit::Response;
 use tokio::{spawn, sync::mpsc, task::JoinSet, time};
-use tracing::{error, info, info_span, Dispatch};
+use tracing::{error, info, info_span, trace, Dispatch};
 
 use market_data_feeder::{
     configuration::Config,
@@ -22,8 +22,16 @@ pub const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 
 #[tokio::main]
 async fn main() -> Result<(), FeederError> {
-    tracing::dispatcher::set_global_default(Dispatch::default())
-        .expect("Couldn't register global default tracing dispatcher!");
+    tracing::dispatcher::set_global_default(Dispatch::new(
+        tracing_subscriber::fmt()
+            .with_level(true)
+            .with_ansi(true)
+            .with_file(true)
+            .with_line_number(true)
+            .with_max_level(tracing::level_filters::LevelFilter::INFO)
+            .finish(),
+    ))
+    .expect("Couldn't register global default tracing dispatcher!");
 
     let mut set: JoinSet<Result<(), FeederError>> = JoinSet::new();
 
@@ -34,8 +42,12 @@ async fn main() -> Result<(), FeederError> {
         let mut secret = String::new();
         io::stdin().read_line(&mut secret)?;
 
+        trace!("Read mnemonic from STDIN.");
+
         Wallet::new(secret.trim(), DEFAULT_COSMOS_HD_PATH)?
     };
+
+    info!("Successfully derived private key.");
 
     let cfg = read_config().unwrap_or_else(|err| {
         error!("Can not read config file: {}", err);
@@ -43,13 +55,29 @@ async fn main() -> Result<(), FeederError> {
         exit(1);
     });
 
+    info!("Successfully read configuration file.");
+
+    trace!("Creating client object.");
+
     let client = Arc::new(Client::new(cfg.oracle.clone())?);
+
+    trace!("Client object created.");
+
     let oracle = Arc::new(cfg.oracle);
 
+    info!("Fetching account data from network...");
+
+    trace!("Getting sender account ID.");
+
     let sender_account_id = get_sender_account_id(&wallet, &oracle)?;
+
+    trace!("Getting account data.");
+
     let account_data = get_account_data(&client, &sender_account_id).await?;
 
     let rpc_client = Arc::new(construct_rpc_client(&oracle)?);
+
+    info!("Starting workers...");
 
     {
         let mut providers: Vec<Box<dyn Provider + Send + 'static>> = vec![];
@@ -134,6 +162,8 @@ async fn main() -> Result<(), FeederError> {
                 });
             });
     }
+
+    info!("Workers started. Entering broadcasting loop...");
 
     while let Some((instant, data)) = receiver.recv().await {
         if time::Instant::now().duration_since(instant) < Duration::from_secs(10) {
