@@ -9,7 +9,6 @@ cache:
 default:
   image: "rust:1.64-alpine"
   before_script:
-    - apk add musl-dev
     - rustc --version
     - cargo --version
 
@@ -21,6 +20,7 @@ stages:
 prepare_node:
   stage: prepare
   script:
+    - apk add musl-dev
     - mkdir -p $CARGO_HOME
     - rustc --version && cargo --version
 
