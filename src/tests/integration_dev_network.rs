@@ -1,6 +1,10 @@
 use crate::{
     configuration::Oracle,
-    cosmos::{client::Client, QueryMsg},
+    cosmos::{
+        client::Client,
+        QueryMsg,
+        SupportedDenomPairsResponse,
+    },
 };
 
 use super::ORACLE_ADDRESS;
@@ -33,7 +37,7 @@ async fn get_supported_denom_pairs() {
         .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
         .await
         .unwrap();
-    let pairs: Vec<Vec<String>> = serde_json::from_slice(&response.data).unwrap();
+    let pairs: SupportedDenomPairsResponse = serde_json::from_slice(&response.data).unwrap();
     println!("{:?}", pairs);
 }
 
