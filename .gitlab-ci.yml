@@ -20,9 +20,9 @@ stages:
 prepare_node:
   stage: prepare
   script:
-    - apk add musl-dev libc-dev
+    - apk add musl-dev
     - mkdir -p $CARGO_HOME
-    - rustc --version && cargo --version
+    - rustc --version && cargo --version && rustup --version
 
 test-code:
   stage: test
@@ -34,9 +34,9 @@ test-code:
   coverage: '/^\d+.\d+% coverage/'
   script:
     - apk add openssl-dev
-    - cargo test
-    - cargo install cargo-tarpaulin
-    - cargo tarpaulin --ignore-tests --out Xml
+    - cargo test --target x86_64-unknown-linux-musl
+    - cargo install cargo-tarpaulin --target x86_64-unknown-linux-musl
+    - cargo tarpaulin --target x86_64-unknown-linux-musl --ignore-tests --out Xml
 
 lint-code:
   stage: test
@@ -53,13 +53,13 @@ format-code:
 audit-code:
   stage: test
   script:
-    - cargo install cargo-audit
+    - cargo install cargo-audit --target x86_64-unknown-linux-musl
     - cargo audit
 
 build-binary:
   stage: build
   script:
-    - cargo build --release
+    - cargo build --release --target x86_64-unknown-linux-musl
   artifacts:
     paths:
       - ./target/release/feeder
