@@ -3,7 +3,7 @@ use crate::{
     cosmos::{
         client::Client,
         QueryMsg,
-        SupportedDenomPairsResponse,
+        SupportedCurrencyPairsResponse,
     },
 };
 
@@ -37,7 +37,7 @@ async fn get_supported_denom_pairs() {
         .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
         .await
         .unwrap();
-    let pairs: SupportedDenomPairsResponse = serde_json::from_slice(&response.data).unwrap();
+    let pairs: SupportedCurrencyPairsResponse = serde_json::from_slice(&response.data).unwrap();
     println!("{:?}", pairs);
 }
 

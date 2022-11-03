@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     configuration,
-    cosmos::{Client, QueryMsg, SupportedDenomPairsResponse},
+    cosmos::{Client, QueryMsg, SupportedCurrencyPairsResponse},
     provider::{CryptoFactory, CryptoType},
 };
 
@@ -59,7 +59,7 @@ impl Factory {
 
 pub async fn get_supported_denom_pairs(
     cosm_client: &Client,
-) -> Result<SupportedDenomPairsResponse, FeedProviderError> {
+) -> Result<SupportedCurrencyPairsResponse, FeedProviderError> {
     cosm_client
         .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
         .await

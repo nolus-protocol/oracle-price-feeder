@@ -40,7 +40,7 @@ pub struct SwapTarget {
     pub target: String,
 }
 
-pub type SupportedDenomPairsResponse = Vec<SwapLeg>;
+pub type SupportedCurrencyPairsResponse = Vec<SwapLeg>;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
