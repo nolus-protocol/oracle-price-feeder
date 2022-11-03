@@ -23,7 +23,7 @@ currencies = [
 
 [oracle]
 contract_addrs = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
-host_url = "http://localhost"
+host_url = "http://host.docker.internal"
 grpc_port = 26615
 rpc_port = 26612
 prefix = "nolus"

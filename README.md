@@ -126,11 +126,13 @@ Running the service is done through the command below, which requires you to
 pass it a registered key's mnemonic used.
 
 ```shell
-echo $MNEMONIC | docker run -i -a stdin market-data-feeder
+echo $MNEMONIC | docker run -i -a stdin --add-host \
+  host.docker.internal:host-gateway market-data-feeder
 ```
 
 **OR**
 
 ```shell
-cat $MNEMONIC_FILE | docker run -i -a stdin market-data-feeder
+cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+  host.docker.internal:host-gateway market-data-feeder
 ```
