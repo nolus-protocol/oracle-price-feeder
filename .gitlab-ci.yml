@@ -54,6 +54,7 @@ format-code:
 audit-code:
   stage: test
   script:
+    - apk add openssl-dev
     - cargo install cargo-audit --target x86_64-unknown-linux-musl
     - cargo audit
 
