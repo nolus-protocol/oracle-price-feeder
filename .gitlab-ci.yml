@@ -7,7 +7,7 @@ cache:
     - cargo_home/
 
 default:
-  image: "rust:1.64-alpine"
+  image: "rust:1.65-alpine"
   before_script:
     - rustc --version
     - cargo --version
