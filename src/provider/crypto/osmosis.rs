@@ -106,7 +106,7 @@ impl Provider for Client {
             get_supported_denom_pairs(cosm_client)
                 .await?
                 .into_iter()
-                .flat_map(|swap| {
+                .filter_map(|swap| {
                     let from_symbol = self.currencies.get(&swap.from).cloned()?;
                     let to_symbol = self.currencies.get(&swap.to.target).cloned()?;
 

@@ -38,3 +38,5 @@ pub enum Feeder {
     #[error("{0}")]
     Cosmos(#[from] Cosmos),
 }
+
+pub type Result<T> = std::result::Result<T, Feeder>;
