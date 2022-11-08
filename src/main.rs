@@ -2,7 +2,6 @@ use std::{io, process::exit, str::FromStr, sync::Arc, time::Duration};
 
 use cosmrs::rpc::endpoint::broadcast::tx_commit::Response;
 use tokio::{
-    spawn,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinSet,
     time::{interval, sleep, Instant},
