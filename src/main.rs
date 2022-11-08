@@ -71,32 +71,38 @@ async fn main() -> Result<()> {
     info!("Fetching account data from network...");
 
     let sender_account_id = get_sender_account_id(&wallet, &oracle)?;
-    let account_data = get_account_data(&client, &sender_account_id).await?;
+    let mut account_data = get_account_data(&client, &sender_account_id).await?;
 
     let rpc_client = Arc::new(construct_rpc_client(&oracle)?);
 
     info!("Starting workers...");
 
-    let (mut set, mut receiver) =
-        spawn_workers(&client, cfg.providers, Duration::from_secs(cfg.tick_time));
+    let tick_time = Duration::from_secs(cfg.tick_time);
+
+    let (mut set, mut receiver) = spawn_workers(&client, cfg.providers, tick_time);
 
     info!("Workers started. Entering broadcasting loop...");
 
     while let Some((instant, data)) = receiver.recv().await {
-        if Instant::now().duration_since(instant) < Duration::from_secs(10) {
+        if Instant::now().duration_since(instant) < tick_time {
             let tx_raw = construct_tx(&sender_account_id, &account_data, &wallet, &oracle, data)?;
 
-            let rpc_client = rpc_client.clone();
+            match tx_raw.broadcast_commit(rpc_client.as_ref()).await {
+                Ok(response) => {
+                    if response.check_tx.code.is_ok() {
+                        account_data.sequence += 1;
+                    } else {
+                        account_data =
+                            get_account_data(client.as_ref(), &sender_account_id).await?;
+                    }
 
-            spawn(async move {
-                match tx_raw.broadcast_commit(rpc_client.as_ref()).await {
-                    Ok(response) => print_tx_response(&response),
-                    Err(error) => error!(
-                        context = %error,
-                        "Error occurred while trying to broadcast transaction!"
-                    ),
+                    print_tx_response(&response);
                 }
-            });
+                Err(error) => error!(
+                    context = %error,
+                    "Error occurred while trying to broadcast transaction!"
+                ),
+            }
         }
     }
 
@@ -171,7 +177,8 @@ async fn provider_main_loop(
             Ok(prices) => {
                 seq_error_counter = 0;
 
-                let price_feed_json = serde_json::to_string(&ExecuteMsg::FeedPrices { prices })?;
+                let price_feed_json =
+                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?;
 
                 if sender.send((Instant::now(), price_feed_json)).is_err() {
                     info!(

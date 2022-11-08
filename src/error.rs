@@ -36,6 +36,9 @@ pub enum Feeder {
     Json(#[from] serde_json::Error),
 
     #[error("{0}")]
+    WasmJson(#[from] serde_json_wasm::ser::Error),
+
+    #[error("{0}")]
     Cosmos(#[from] Cosmos),
 }
 

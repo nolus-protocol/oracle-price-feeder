@@ -9,7 +9,7 @@ mod provider;
 #[must_use]
 pub struct Coin {
     pub amount: u128,
-    pub symbol: String,
+    pub ticker: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -28,11 +28,11 @@ impl Price {
         Self::new_from_coins(
             Coin {
                 amount: base,
-                symbol: symbol1.into(),
+                ticker: symbol1.into(),
             },
             Coin {
                 amount: quote,
-                symbol: symbol2.into(),
+                ticker: symbol2.into(),
             },
         )
     }

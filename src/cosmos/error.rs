@@ -84,7 +84,7 @@ pub enum Wallet {
     Bip32(#[from] cosmrs::bip32::Error),
 }
 
-/// The various error that can be raised from [`super::tx::TxBuilder`].
+/// The various error that can be raised from [`super::tx::Builder`].
 #[derive(Error, Debug)]
 pub enum TxBuild {
     #[error("Encoding error: {0}")]
