@@ -24,6 +24,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "adler"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -228,6 +234,9 @@ name = "bytes"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec8a7b6a70fde80372154c65702f00a0f56f3e1c36abbc6c440484be248856db"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "cache-padded"
@@ -237,9 +246,9 @@ checksum = "c1db59621ec70f09c5e9b597b220c7a2b43611f4710dc03ceb8748637775692c"
 
 [[package]]
 name = "cc"
-version = "1.0.75"
+version = "1.0.76"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41ca34107f97baef6cfb231b32f36115781856b8f8208e8c580e0bcaea374842"
+checksum = "76a284da2e6fe2092f2353e51713435363112dfd60030e22add80be333fb928f"
 
 [[package]]
 name = "cfg-if"
@@ -280,9 +289,9 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "cosmos-sdk-proto"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20b42021d8488665b1a0d9748f1f81df7235362d194f44481e2e61bf376b77b4"
+checksum = "673d31bd830c0772d78545de20d975129b6ab2f7db4e4e9313c3b8777d319194"
 dependencies = [
  "prost",
  "prost-types",
@@ -292,9 +301,9 @@ dependencies = [
 
 [[package]]
 name = "cosmrs"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3903590099dcf1ea580d9353034c9ba1dbf55d1389a5bd2ade98535c3445d1f9"
+checksum = "6fa07096219b1817432b8f1e47c22e928c64bbfd231fc08f0a98f0e7ddd602b7"
 dependencies = [
  "bip32",
  "cosmos-sdk-proto",
@@ -319,6 +328,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d997bd5e24a5928dd43e46dc529867e207907fe0b239c3477d924f7f2ca320"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "crc32fast"
+version = "1.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -515,6 +533,16 @@ checksum = "d013fc25338cc558c5c2cfbad646908fb23591e2404481826742b651c9af7160"
 dependencies = [
  "rand_core 0.6.4",
  "subtle",
+]
+
+[[package]]
+name = "flate2"
+version = "1.0.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f82b0f4c27ad9f8bfd1f3208d882da2b09c301bc1c828fd3a00d0216d2fbbff6"
+dependencies = [
+ "crc32fast",
+ "miniz_oxide",
 ]
 
 [[package]]
@@ -1076,6 +1104,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a60c7ce501c71e03a9c9c0d35b861413ae925bd979cc7a4e30d060069aaac8d"
 
 [[package]]
+name = "miniz_oxide"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96590ba8f175222643a85693f33d26e9c8a015f599c216509b1a6894af675d34"
+dependencies = [
+ "adler",
+]
+
+[[package]]
 name = "mio"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1124,15 +1161,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6058e64324c71e02bc2b150e4f3bc8286db6c83092132ffa3f6b1eab0f9def5"
 dependencies = [
  "hermit-abi",
- "libc",
-]
-
-[[package]]
-name = "num_threads"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2819ce041d2ee131036f4fc9d6ae7ae125a3a40e97ba64d04fe799ad9dabbb44"
-dependencies = [
  "libc",
 ]
 
@@ -1913,9 +1941,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint"
-version = "0.23.9"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "467f82178deeebcd357e1273a0c0b77b9a8a0313ef7c07074baebe99d87851f4"
+checksum = "baa1d2d0ec1b531ba7d196f0dbee5e78ed2a82bfba928e88dff64aeec0b26073"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1944,9 +1972,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-config"
-version = "0.23.9"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d42ee0abc27ef5fc34080cce8d43c189950d331631546e7dfb983b6274fa327"
+checksum = "202a2f19502c03b353d8157694ed24fbc58c3dd64a92a5b0cb80b79c82af5be4"
 dependencies = [
  "flex-error",
  "serde",
@@ -1958,9 +1986,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-version = "0.23.9"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68ce80bf536476db81ecc9ebab834dc329c9c1509a694f211a73858814bfe023"
+checksum = "974d6330a19dfa6720e9f663fc59101d207a817db3f9c730d3f31caaa565b574"
 dependencies = [
  "bytes",
  "flex-error",
@@ -1976,9 +2004,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-rpc"
-version = "0.23.9"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f14aafe3528a0f75e9f3f410b525617b2de16c4b7830a21f717eee62882ec60"
+checksum = "b5d87fa5429bd2ee39c4809dd546096daf432de9b71157bc12c182ab5bae7ea7"
 dependencies = [
  "async-trait",
  "bytes",
@@ -1994,6 +2022,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "subtle",
  "subtle-encoding",
  "tendermint",
  "tendermint-config",
@@ -2038,20 +2067,29 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.11"
+version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72c91f41dcb2f096c05f0873d667dceec1087ce5bcf984ec8ffb19acddbb3217"
+checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
 dependencies = [
- "libc",
- "num_threads",
+ "serde",
+ "time-core",
  "time-macros",
 ]
 
 [[package]]
-name = "time-macros"
-version = "0.2.4"
+name = "time-core"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42657b1a6f4d817cda8e7a0ace261fe0cc946cf3a80314390b22cc61ae080792"
+checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
+
+[[package]]
+name = "time-macros"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d967f99f534ca7e495c575c62638eebc2898a8c84c119b89e250477bc4ba16b2"
+dependencies = [
+ "time-core",
+]
 
 [[package]]
 name = "tinyvec"
@@ -2176,6 +2214,7 @@ dependencies = [
  "axum",
  "base64",
  "bytes",
+ "flate2",
  "futures-core",
  "futures-util",
  "h2",
