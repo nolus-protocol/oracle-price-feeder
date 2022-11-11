@@ -36,7 +36,9 @@ test-code:
   script:
     - apk add openssl-dev
     - cargo test --target x86_64-unknown-linux-musl
+    - RUSTFLAGS="-Ctarget-feature=-crt-static"
     - cargo install cargo-tarpaulin --target x86_64-unknown-linux-musl
+    - RUSTFLAGS=
     - cargo tarpaulin --target x86_64-unknown-linux-musl --out Xml
 
 lint-code:
@@ -55,7 +57,9 @@ audit-code:
   stage: test
   script:
     - apk add openssl-dev
+    - RUSTFLAGS="-Ctarget-feature=-crt-static"
     - cargo install cargo-audit --target x86_64-unknown-linux-musl
+    - RUSTFLAGS=
     - cargo audit
 
 build-binary:
