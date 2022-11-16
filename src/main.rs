@@ -6,7 +6,7 @@ use tokio::{
     task::JoinSet,
     time::{interval, sleep, Instant},
 };
-use tracing::{error, info, info_span, Dispatch};
+use tracing::{debug, error, info, info_span, Dispatch};
 
 use market_data_feeder::{
     configuration::{Config, Providers},
@@ -223,14 +223,17 @@ fn print_tx_response(tx_commit_response: &Response) {
     let tx_span = info_span!("Tx");
 
     tx_span.in_scope(|| {
-        info!("{}", tx_commit_response.hash);
+        info!("Hash: {}", tx_commit_response.hash);
         info!(
-            "deliver_tx.gas_used {}",
+            "[Check] - Gas used: {}",
+            tx_commit_response.check_tx.gas_used
+        );
+        info!(
+            "[Deliver] - Gas used: {}",
             tx_commit_response.deliver_tx.gas_used
         );
-        info!("check_tx.gas_used {}", tx_commit_response.check_tx.gas_used);
-        info!("deliver_tx.log {}", tx_commit_response.deliver_tx.log);
-        info!("check_tx.log {}", tx_commit_response.check_tx.log);
+        debug!("Check - Log: {}", tx_commit_response.check_tx.log);
+        debug!("Deliver - Log: {}", tx_commit_response.deliver_tx.log);
     });
 }
 
