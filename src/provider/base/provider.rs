@@ -68,15 +68,69 @@ pub async fn get_supported_denom_pairs(
     //     .and_then(|resp| serde_json::from_slice(&resp.data).map_err(Into::into))
     use crate::cosmos::{SwapLeg, SwapTarget};
     Ok(Vec::from([
-        SwapLeg { from: "USDC".into(), to: SwapTarget { pool_id: 678, target: "OSMO".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 1, target: "ATOM".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 722, target: "EVMOS".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 9, target: "CRO".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 604, target: "STARS".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 584, target: "SCRT".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 704, target: "WETH".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 712, target: "WBTC".into() } },
-        SwapLeg { from: "OSMO".into(), to: SwapTarget { pool_id: 497, target: "JUNO".into() } },
+        SwapLeg {
+            from: "USDC".into(),
+            to: SwapTarget {
+                pool_id: 678,
+                target: "OSMO".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 1,
+                target: "ATOM".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 722,
+                target: "EVMOS".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 9,
+                target: "CRO".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 604,
+                target: "STARS".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 584,
+                target: "SCRT".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 704,
+                target: "WETH".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 712,
+                target: "WBTC".into(),
+            },
+        },
+        SwapLeg {
+            from: "OSMO".into(),
+            to: SwapTarget {
+                pool_id: 497,
+                target: "JUNO".into(),
+            },
+        },
     ]))
 }
 
