@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     configuration,
-    cosmos::{Client, QueryMsg, SupportedCurrencyPairsResponse},
+    cosmos::{Client, SupportedCurrencyPairsResponse},
     provider::{CryptoFactory, CryptoType},
 };
 
