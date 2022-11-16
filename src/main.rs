@@ -1,4 +1,4 @@
-use std::{io, process::exit, str::FromStr, sync::Arc, time::Duration};
+use std::{env::var_os, ffi::OsStr, io, process::exit, str::FromStr, sync::Arc, time::Duration};
 
 use cosmrs::rpc::endpoint::broadcast::tx_commit::Response;
 use tokio::{
@@ -39,7 +39,17 @@ async fn main() -> Result<()> {
                 }
                 #[cfg(not(debug_assertions))]
                 {
-                    tracing::level_filters::LevelFilter::INFO
+                    if var_os("MARKET_DATA_FEEDER_DEBUG")
+                        .map(|value| {
+                            [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
+                                .contains(&value.as_os_str())
+                        })
+                        .unwrap_or_default()
+                    {
+                        tracing::level_filters::LevelFilter::DEBUG
+                    } else {
+                        tracing::level_filters::LevelFilter::INFO
+                    }
                 }
             })
             .finish(),
