@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 use crate::{
     configuration,
-    cosmos::{Client, SupportedCurrencyPairsResponse},
+    cosmos::{Client, QueryMsg, SupportedCurrencyPairsResponse},
     provider::{CryptoFactory, CryptoType},
 };
 
@@ -58,80 +58,13 @@ impl Factory {
 }
 
 pub async fn get_supported_denom_pairs(
-    _cosm_client: &Client,
+    cosm_client: &Client,
 ) -> Result<SupportedCurrencyPairsResponse, FeedProviderError> {
-    // // TODO Uncomment when Oracle is fixed and returns proper pool IDs
-    // cosm_client
-    //     .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
-    //     .await
-    //     .map_err(Into::into)
-    //     .and_then(|resp| serde_json::from_slice(&resp.data).map_err(Into::into))
-    use crate::cosmos::{SwapLeg, SwapTarget};
-    Ok(Vec::from([
-        SwapLeg {
-            from: "USDC".into(),
-            to: SwapTarget {
-                pool_id: 678,
-                target: "OSMO".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 1,
-                target: "ATOM".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 722,
-                target: "EVMOS".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 9,
-                target: "CRO".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 604,
-                target: "STARS".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 584,
-                target: "SCRT".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 704,
-                target: "WETH".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 712,
-                target: "WBTC".into(),
-            },
-        },
-        SwapLeg {
-            from: "OSMO".into(),
-            to: SwapTarget {
-                pool_id: 497,
-                target: "JUNO".into(),
-            },
-        },
-    ]))
+    cosm_client
+        .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
+        .await
+        .map_err(Into::into)
+        .and_then(|resp| serde_json::from_slice(&resp.data).map_err(Into::into))
 }
 
 #[cfg(test)]
