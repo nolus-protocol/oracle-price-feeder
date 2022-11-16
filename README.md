@@ -91,6 +91,14 @@ From the same directory where `market-data-feeder.toml` is located
 ./target/release/feeder
 ```
 
+# Diagnostics on release builds
+
+To enable diagnostics by logging debug information, the service needs to be run
+with the environment variable `MARKET_DATA_FEEDER_DEBUG` to one of the following:
+* `1` (one)
+* `y` (lowercase 'y')
+* `Y` (uppercase 'y')
+
 # Running in Docker
 
 ## Building binary
