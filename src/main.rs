@@ -227,7 +227,7 @@ fn print_tx_response(tx_commit_response: &Response) {
 
         for (tx_name, tx_result) in [
             ("Check", &tx_commit_response.check_tx),
-            &("Deliver", &tx_commit_response.deliver_tx),
+            ("Deliver", &tx_commit_response.deliver_tx),
         ] {
             if tx_result.code.is_ok() {
                 debug!("[{}] Log: {}", tx_name, tx_result.log);
