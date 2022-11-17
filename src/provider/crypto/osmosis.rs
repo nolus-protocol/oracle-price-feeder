@@ -156,3 +156,47 @@ impl Provider for Client {
         Ok(prices.into_boxed_slice())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Ratio;
+
+    #[test]
+    fn deserialize_ratio_gt1() {
+        use serde_json_wasm::from_str;
+
+        assert_eq!(
+            from_str::<Ratio>("\"1.234\"").unwrap(),
+            Ratio {
+                numerator: 1234,
+                denominator: 1000,
+            }
+        );
+    }
+
+    #[test]
+    fn deserialize_ratio_lt1() {
+        use serde_json_wasm::from_str;
+
+        assert_eq!(
+            from_str::<Ratio>("\"0.1234\"").unwrap(),
+            Ratio {
+                numerator: 1234,
+                denominator: 10000,
+            }
+        );
+    }
+
+    #[test]
+    fn deserialize_ratio_eq2() {
+        use serde_json_wasm::from_str;
+
+        assert_eq!(
+            from_str::<Ratio>("\"2\"").unwrap(),
+            Ratio {
+                numerator: 2,
+                denominator: 1,
+            }
+        );
+    }
+}
