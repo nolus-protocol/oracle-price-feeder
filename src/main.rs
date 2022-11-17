@@ -224,16 +224,33 @@ fn print_tx_response(tx_commit_response: &Response) {
 
     tx_span.in_scope(|| {
         info!("Hash: {}", tx_commit_response.hash);
-        info!(
-            "[Check] - Gas used: {}",
-            tx_commit_response.check_tx.gas_used
-        );
-        info!(
-            "[Deliver] - Gas used: {}",
-            tx_commit_response.deliver_tx.gas_used
-        );
-        debug!("Check - Log: {}", tx_commit_response.check_tx.log);
-        debug!("Deliver - Log: {}", tx_commit_response.deliver_tx.log);
+
+        for (tx_name, tx_result) in [
+            ("Check", &tx_commit_response.check_tx),
+            &("Deliver", &tx_commit_response.deliver_tx),
+        ] {
+            if tx_result.code.is_ok() {
+                debug!("[{}] Log: {}", tx_name, tx_result.log);
+            } else {
+                error!(
+                    log = %tx_result.log,
+                    "[{}] Error with code {} has occurred!",
+                    tx_name,
+                    tx_result.code.value(),
+                );
+            }
+
+            if tx_result.gas_wanted < tx_result.gas_used {
+                error!(
+                    wanted = %tx_result.gas_wanted,
+                    used = %tx_result.gas_used,
+                    "[{}] Out of gas!",
+                    tx_name,
+                );
+            } else {
+                info!("[{}] Gas used: {}", tx_name, tx_result.gas_used);
+            }
+        }
     });
 }
 
