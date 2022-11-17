@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 
 use async_trait::async_trait;
 use reqwest::{Client as ReqwestClient, RequestBuilder, StatusCode, Url};
-use serde::{de::Unexpected, Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer};
 use tracing::error;
 
 use crate::{
@@ -13,48 +13,54 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 struct AssetPrice {
-    #[serde(deserialize_with = "deserialize_spot_price")]
     spot_price: Ratio,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 struct Ratio {
     numerator: u128,
     denominator: u128,
 }
 
-fn deserialize_spot_price<'de, D>(deserializer: D) -> Result<Ratio, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let point;
+impl<'de> Deserialize<'de> for Ratio {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let point;
 
-    let spot_price = {
-        let mut spot_price = String::deserialize(deserializer)?;
+        let spot_price = {
+            let mut spot_price = String::deserialize(deserializer)?;
 
-        point = spot_price.find('.').ok_or_else(|| {
-            serde::de::Error::invalid_value(
-                Unexpected::Str(&spot_price),
-                &"Expected decimal value with point separator!",
-            )
-        })?;
+            point = if let Some(point) = spot_price.find('.') {
+                spot_price = spot_price.trim_end_matches('0').into();
 
-        spot_price.remove(point);
+                spot_price.remove(point);
 
-        spot_price
-    };
+                point
+            } else {
+                spot_price.len()
+            };
 
-    Ok(Ratio {
-        numerator: 10_u128.pow(
-            (spot_price.len() - point)
-                .try_into()
+            spot_price
+        };
+
+        Ok(Ratio {
+            numerator: spot_price
+                .trim_start_matches('0')
+                .parse()
                 .map_err(serde::de::Error::custom)?,
-        ),
-        denominator: spot_price
-            .trim_start_matches('0')
-            .parse()
-            .map_err(serde::de::Error::custom)?,
-    })
+            denominator: 10_u128
+                .checked_pow(
+                    (spot_price.len() - point)
+                        .try_into()
+                        .map_err(serde::de::Error::custom)?,
+                )
+                .ok_or_else(|| {
+                    serde::de::Error::custom("Couldn't calculate ratio! Exponent too big!")
+                })?,
+        })
+    }
 }
 
 pub struct Client {
