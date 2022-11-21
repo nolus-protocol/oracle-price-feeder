@@ -199,4 +199,17 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn deserialize_ratio_eq16k() {
+        use serde_json_wasm::from_str;
+
+        assert_eq!(
+            from_str::<Ratio>("\"16000.000000000000001\"").unwrap(),
+            Ratio {
+                numerator: 16000000000000000001,
+                denominator: 1000000000000000,
+            }
+        );
+    }
 }
