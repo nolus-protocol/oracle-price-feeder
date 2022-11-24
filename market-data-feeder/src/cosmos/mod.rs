@@ -46,6 +46,13 @@ pub type SupportedCurrencyPairsResponse = Vec<SwapLeg>;
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
     FeedPrices { prices: Box<[Price]> },
+    DispatchAlarms { max_count: u32 },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum AlarmsResponse {
+    RemainingForDispatch { count: u128 },
+    NextAlarm { unix_time: u64 },
 }
 
 #[inline]
