@@ -1,0 +1,12 @@
+max_alarms_in_transaction = 16
+
+[oracle]
+contract_addrs = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
+host_url = "http://host.docker.internal"
+grpc_port = 26615
+rpc_port = 26612
+prefix = "nolus"
+chain_id = "nolus-local"
+fee_denom = "unls"
+funds_amount = 1500
+gas_limit = 500_000
