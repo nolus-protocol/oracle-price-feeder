@@ -109,7 +109,7 @@ This has to be done whenever the codebase is changed.
 The command to do so is:
 
 ```shell
-docker build --rm -f compiling_docker -t compile-market-data-feeder . && \
+docker build --rm -f Compile.Dockerfile -t compile-market-data-feeder . && \
   docker run -v $(pwd):/code/ -v $(pwd)/artifacts/:/artifacts/ \
     -v market_data_feeder_cache:/code/target/ -v cargo_cache:/usr/local/cargo/ \
     --rm compile-market-data-feeder
@@ -125,7 +125,7 @@ has to be rebuilt as it's part of the image.*
 The command to do so is the following:
 
 ```shell
-docker build --rm -f runnable_docker -t market-data-feeder .
+docker build --rm -f Runnable.Dockerfile -t market-data-feeder .
 ```
 
 ## Running service
