@@ -1131,6 +1131,7 @@ dependencies = [
 name = "nolus-dispatch-bot"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "market-data-feeder",
  "serde",
  "serde-json-wasm",

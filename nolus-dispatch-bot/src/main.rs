@@ -1,10 +1,10 @@
-use std::{
-    io::stdin,
-    process::exit,
-    thread::sleep,
-    time::{Duration, SystemTime},
-};
+use std::time::{Duration, SystemTime};
 
+use anyhow::{anyhow, bail, Context, Result as AnyResult};
+use tokio::{
+    io::{stdin, AsyncBufReadExt, BufReader},
+    time::sleep,
+};
 use tracing::{error, info, Dispatch};
 
 use market_data_feeder::{
@@ -23,114 +23,43 @@ mod configuration;
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
-#[tokio::main]
-async fn main() {
-    setup_logging();
+pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
-    let wallet = get_wallet();
+#[macro_export]
+macro_rules! log_error {
+    ($expr: expr, $error: literal $(, $args: expr)* $(,)?) => {{
+        let result: Result<_, _> = $expr;
 
-    info!("Successfully derived private key.");
-
-    let cfg = read_config();
-
-    info!("Successfully read configuration file.");
-
-    let client = Client::new(cfg.oracle.clone()).unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Error occurred while connecting to node! Invalid URL provided!"
-        );
-
-        exit(1);
-    });
-    let oracle = cfg.oracle;
-
-    info!("Fetching account data from network...");
-
-    let sender_account_id = get_sender_account_id(&wallet, &oracle).unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Error occurred while fetching sender account's ID!"
-        );
-
-        exit(1);
-    });
-    let account_data = get_account_data(&client, &sender_account_id)
-        .await
-        .unwrap_or_else(|error| {
-            error!(
-                error = %error,
-                "Error occurred while fetching account data!"
+        if let Err(error) = &result {
+            ::tracing::error!(
+                error = ?error,
+                $error
+                $(, $args)*,
             );
-
-            exit(1);
-        });
-
-    let rpc_client = construct_rpc_client(&oracle).unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Error occurred while constructing RPC client!"
-        );
-
-        exit(1);
-    });
-
-    let json_data: String = serde_json_wasm::to_string(&ExecuteMsg::DispatchAlarms {
-        max_count: cfg.max_alarms_in_transaction,
-    })
-    .unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Couldn't serialize alarm dispatch message as JSON!"
-        );
-
-        exit(1);
-    });
-
-    let mut consequent_error_count: usize = 0;
-
-    loop {
-        if consequent_error_count == 1 {
-            error!(
-                "{} consequent errors encountered! Shutting down...",
-                consequent_error_count
-            );
-
-            exit(1);
         }
 
-        let Some(response) = commit_tx(&sender_account_id, &account_data, &wallet, &oracle, &json_data, &rpc_client).await else {
-            consequent_error_count += 1;
-
-            continue;
-        };
-
-        consequent_error_count = 0;
-
-        match response {
-            AlarmsResponse::RemainingForDispatch {} => {}
-            AlarmsResponse::NextAlarm { unix_time } => {
-                let Some(until) = SystemTime::UNIX_EPOCH
-                    .checked_add(Duration::from_nanos(unix_time)) else {
-                    error!(unix_timestamp = %unix_time, "Couldn't calculate time of next alarm...");
-
-                    continue;
-                };
-
-                if let Err(error) = until.duration_since(SystemTime::now()).map(sleep) {
-                    error!(
-                        error = %error,
-                        "Error occurred while calculating duration between current time and time of next alarm..."
-                    );
-
-                    continue;
-                };
-            }
-        }
-    }
+        result
+    }};
 }
 
-fn setup_logging() {
+#[tokio::main]
+async fn main() -> AnyResult<()> {
+    setup_logging()?;
+
+    let rpc_data = log_error!(prepare_rpc_data().await, "Failed to prepare RPC data!")?;
+
+    let rpc_client = log_error!(
+        construct_rpc_client(&rpc_data.oracle),
+        "Error occurred while constructing RPC client!"
+    )?;
+
+    log_error!(
+        dispatch_alarms(rpc_data, rpc_client).await,
+        "Dispatcher loop exited with an error! Shutting down..."
+    )
+}
+
+fn setup_logging() -> AnyResult<()> {
     tracing::dispatcher::set_global_default(Dispatch::new(
         tracing_subscriber::fmt()
             .with_level(true)
@@ -161,36 +90,120 @@ fn setup_logging() {
             })
             .finish(),
     ))
-    .unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Couldn't register global default tracing dispatcher!"
-        );
+    .with_context(|| format!("Couldn't register global default tracing dispatcher!"))
+}
 
-        exit(1);
+async fn get_wallet() -> AnyResult<Wallet> {
+    println!("Enter dispatcher's account secret: ");
+
+    let mut secret = String::new();
+
+    // Returns number of read bytes, which is meaningless for current case.
+    let _ = log_error!(
+        BufReader::new(stdin()).read_line(&mut secret).await,
+        "Couldn't read secret mnemonic from the standard input!"
+    )?;
+
+    Wallet::new(secret.trim(), DEFAULT_COSMOS_HD_PATH).map_err(Into::into)
+}
+
+pub struct RpcData {
+    wallet: Wallet,
+    oracle: Oracle,
+    account_id: AccountId,
+    account_data: BaseAccount,
+    tx_message: String,
+}
+
+async fn prepare_rpc_data() -> AnyResult<RpcData> {
+    let wallet = get_wallet().await?;
+
+    info!("Successfully derived private key.");
+
+    let cfg = read_config().await?;
+
+    info!("Successfully read configuration file.");
+
+    let client = log_error!(
+        Client::new(cfg.oracle.clone()),
+        "Error occurred while connecting to node! Invalid URL provided!"
+    )?;
+    let oracle = cfg.oracle;
+
+    info!("Fetching account data from network...");
+
+    let account_id = log_error!(
+        get_sender_account_id(&wallet, &oracle),
+        "Error occurred while fetching sender account's ID!"
+    )?;
+
+    let account_data = log_error!(
+        get_account_data(&client, &account_id).await,
+        "Error occurred while fetching account data!"
+    )?;
+
+    let tx_message: String = log_error!(
+        serde_json_wasm::to_string(&ExecuteMsg::DispatchAlarms {
+            max_count: cfg.max_alarms_in_transaction,
+        }),
+        "Couldn't serialize alarm dispatch message as JSON!"
+    )?;
+
+    Ok(RpcData {
+        wallet,
+        oracle,
+        account_id,
+        account_data,
+        tx_message,
     })
 }
 
-fn get_wallet() -> Wallet {
-    println!("Enter feeder's account secret: ");
-    let mut secret = String::new();
-    stdin().read_line(&mut secret).unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Couldn't read secret mnemonic from the standard input!"
-        );
+async fn dispatch_alarms(
+    RpcData {
+        wallet,
+        oracle,
+        account_id,
+        account_data,
+        tx_message,
+    }: RpcData,
+    rpc_client: HttpClient,
+) -> AnyResult<()> {
+    let mut consequent_errors_count: usize = 0;
 
-        exit(1);
-    });
+    loop {
+        if consequent_errors_count == MAX_CONSEQUENT_ERRORS_COUNT {
+            error!(
+                "{} consequent errors encountered! Exiting dispatcher loop...",
+                consequent_errors_count
+            );
 
-    Wallet::new(secret.trim(), DEFAULT_COSMOS_HD_PATH).unwrap_or_else(|error| {
-        error!(
-            error = %error,
-            "Couldn't derive secret key from mnemonic!"
-        );
+            bail!("Encountered {} consequent errors!", consequent_errors_count);
+        }
 
-        exit(1);
-    })
+        let Ok(response) = log_error!(
+            commit_tx(
+                &account_id,
+                &account_data,
+                &wallet,
+                &oracle,
+                &tx_message,
+                &rpc_client,
+            ).await,
+            "Failed to commit transaction!"
+        ) else {
+            consequent_errors_count += 1;
+
+            continue;
+        };
+
+        if log_error!(handle_response(response).await, "Failed handling response!").is_err() {
+            consequent_errors_count += 1;
+
+            continue;
+        }
+
+        consequent_errors_count = 0;
+    }
 }
 
 async fn commit_tx(
@@ -200,58 +213,58 @@ async fn commit_tx(
     config: &Oracle,
     data: &str,
     rpc_client: &HttpClient,
-) -> Option<AlarmsResponse> {
-    let tx = match construct_tx(
-        sender_account_id,
-        account_data,
-        wallet,
-        config,
-        String::from(data),
-    ) {
-        Ok(tx) => tx,
-        Err(error) => {
-            error!(
-                error = %error,
-                "Error occurred while constructing transaction!"
-            );
+) -> AnyResult<AlarmsResponse> {
+    let tx = log_error!(
+        construct_tx(
+            sender_account_id,
+            account_data,
+            wallet,
+            config,
+            String::from(data),
+        ),
+        "Error occurred while constructing transaction!"
+    )?;
 
-            return None;
-        }
+    let Ok(tx_commit_response) = log_error!(
+        tx.broadcast_commit(rpc_client).await,
+        "Error occurred while broadcasting commit!"
+    ) else {
+        bail!("Error occurred while broadcasting commit!");
     };
 
-    let tx_commit_response = match tx.broadcast_commit(rpc_client).await {
-        Ok(tx_commit_response) => tx_commit_response,
-        Err(error) => {
-            error!(
-                error = %error,
-                "Error occurred while broadcasting commit!"
-            );
+    log_error!(
+        log_error!(
+            tx_commit_response
+                .deliver_tx
+                .data
+                .map(Into::<Vec<u8>>::into)
+                .as_deref()
+                .map(serde_json_wasm::from_slice::<AlarmsResponse>)
+                .ok_or_else(|| anyhow!("No data returned!")),
+            "Contract did not return any data!"
+        )?,
+        "Error occurred while parsing returned data!"
+    )
+    .map_err(Into::into)
+}
 
-            return None;
+async fn handle_response(response: AlarmsResponse) -> AnyResult<()> {
+    match response {
+        AlarmsResponse::RemainingForDispatch {} => {}
+        AlarmsResponse::NextAlarm { unix_time } => {
+            let Some(until) = SystemTime::UNIX_EPOCH
+                .checked_add(Duration::from_nanos(unix_time)) else {
+                error!(unix_timestamp = %unix_time, "Couldn't calculate time of next alarm...");
+
+                bail!("Returned timestamp is outside valid range!");
+            };
+
+            log_error!(
+                until.duration_since(SystemTime::now()).map(sleep),
+                "Error occurred while calculating duration between current time and time of next alarm..."
+            )?.await;
         }
-    };
+    }
 
-    let Some(response) = (match tx_commit_response
-        .deliver_tx
-        .data
-        .map(Into::<Vec<u8>>::into)
-        .as_deref()
-        .map(serde_json_wasm::from_slice::<AlarmsResponse>)
-        .transpose() {
-        Ok(response) => response,
-        Err(error) => {
-            error!(
-                    error = %error,
-                    "Error occurred while parsing returned data!"
-                );
-
-            return None;
-        }
-    }) else {
-        error!("Contract did not return any data!");
-
-        return None;
-    };
-
-    Some(response)
+    Ok(())
 }
