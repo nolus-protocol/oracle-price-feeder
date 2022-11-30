@@ -1,12 +1,22 @@
-max_alarms_in_transaction = 16
+poll_period_seconds = 60
 
-[oracle]
-contract_addrs = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
-host_url = "http://host.docker.internal"
+[node]
+json_rpc_protocol = "http"
+grpc_protocol = "http"
+host = "localhost"
+json_rpc_port = 26612
+# json_rpc_api_path = "/json-rpc/api"
 grpc_port = 26615
-rpc_port = 26612
-prefix = "nolus"
+# grpc_api_path = "/grpc/api"
+address_prefix = "nolus"
 chain_id = "nolus-local"
-fee_denom = "unls"
-funds_amount = 1500
-gas_limit = 500_000
+fee = { amount = "1500", denom = "unls" }
+gas_limit_per_alarm = 500_000
+
+[time_alarms]
+address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
+max_alarms_group = 16
+
+[market_price_oracle]
+address = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
+max_alarms_group = 16

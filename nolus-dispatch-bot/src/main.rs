@@ -1,60 +1,45 @@
-use std::time::{Duration, SystemTime};
+use std::{
+    num::NonZeroU32,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::{anyhow, bail, Context, Result as AnyResult};
+use cosmrs::{
+    bip32::{Language, Mnemonic},
+    crypto::secp256k1::SigningKey,
+    proto::cosmwasm::wasm::v1::{query_client::QueryClient, QuerySmartContractStateRequest},
+    tx::Fee,
+};
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     time::sleep,
 };
 use tracing::{error, info, Dispatch};
 
-use market_data_feeder::{
-    configuration::Oracle,
-    cosmos::{
-        construct_rpc_client, construct_tx, get_account_data, get_sender_account_id,
-        AlarmsResponse, Client, ExecuteMsg, Wallet,
-    },
-    cosmos_sdk_proto::cosmos::auth::v1beta1::BaseAccount,
-    cosmrs::{rpc::HttpClient, AccountId},
+use nolus_dispatch_bot::{
+    account::{get_account_data, get_account_id},
+    client::Client,
+    configuration::{read_config, Config, Node},
+    log_error,
+    messages::{ExecuteMsg, OracleResponse, QueryMsg, Response, TimeAlarmsResponse},
+    signing::Signer,
+    tx::ContractMsgs,
 };
-
-use crate::configuration::read_config;
-
-mod configuration;
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
 pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
-#[macro_export]
-macro_rules! log_error {
-    ($expr: expr, $error: literal $(, $args: expr)* $(,)?) => {{
-        let result: Result<_, _> = $expr;
-
-        if let Err(error) = &result {
-            ::tracing::error!(
-                error = ?error,
-                $error
-                $(, $args)*,
-            );
-        }
-
-        result
-    }};
-}
-
 #[tokio::main]
 async fn main() -> AnyResult<()> {
     setup_logging()?;
 
-    let rpc_data = log_error!(prepare_rpc_data().await, "Failed to prepare RPC data!")?;
-
-    let rpc_client = log_error!(
-        construct_rpc_client(&rpc_data.oracle),
-        "Error occurred while constructing RPC client!"
-    )?;
-
     log_error!(
-        dispatch_alarms(rpc_data, rpc_client).await,
+        dispatch_alarms(log_error!(
+            prepare_rpc_data().await,
+            "Failed to prepare RPC data!"
+        )?)
+        .await,
         "Dispatcher loop exited with an error! Shutting down..."
     )
 }
@@ -93,7 +78,7 @@ fn setup_logging() -> AnyResult<()> {
     .with_context(|| format!("Couldn't register global default tracing dispatcher!"))
 }
 
-async fn get_wallet() -> AnyResult<Wallet> {
+pub async fn get_signing_key(derivation_path: &str, password: &str) -> AnyResult<SigningKey> {
     println!("Enter dispatcher's account secret: ");
 
     let mut secret = String::new();
@@ -104,74 +89,116 @@ async fn get_wallet() -> AnyResult<Wallet> {
         "Couldn't read secret mnemonic from the standard input!"
     )?;
 
-    Wallet::new(secret.trim(), DEFAULT_COSMOS_HD_PATH).map_err(Into::into)
+    SigningKey::derive_from_path(
+        Mnemonic::new(secret.trim(), Language::English)?.to_seed(password),
+        &derivation_path.parse()?,
+    )
+    .map_err(Into::into)
 }
 
 pub struct RpcData {
-    wallet: Wallet,
-    oracle: Oracle,
-    account_id: AccountId,
-    account_data: BaseAccount,
-    tx_message: String,
+    signer: Signer,
+    config: Config,
+    client: Client,
 }
 
 async fn prepare_rpc_data() -> AnyResult<RpcData> {
-    let wallet = get_wallet().await?;
+    let signing_key = get_signing_key(DEFAULT_COSMOS_HD_PATH, "").await?;
 
     info!("Successfully derived private key.");
 
-    let cfg = read_config().await?;
+    let config = read_config().await?;
 
     info!("Successfully read configuration file.");
 
     let client = log_error!(
-        Client::new(cfg.oracle.clone()),
+        Client::new(config.node()).await,
         "Error occurred while connecting to node! Invalid URL provided!"
     )?;
-    let oracle = cfg.oracle;
 
     info!("Fetching account data from network...");
 
     let account_id = log_error!(
-        get_sender_account_id(&wallet, &oracle),
-        "Error occurred while fetching sender account's ID!"
+        get_account_id(&signing_key, config.node()),
+        "Couldn't derive account ID!"
     )?;
 
     let account_data = log_error!(
-        get_account_data(&client, &account_id).await,
+        get_account_data(account_id.clone(), &client).await,
         "Error occurred while fetching account data!"
     )?;
 
-    let tx_message: String = log_error!(
-        serde_json_wasm::to_string(&ExecuteMsg::DispatchAlarms {
-            max_count: cfg.max_alarms_in_transaction,
-        }),
-        "Couldn't serialize alarm dispatch message as JSON!"
-    )?;
+    info!("Successfully fetched account data from network.");
 
     Ok(RpcData {
-        wallet,
-        oracle,
-        account_id,
-        account_data,
-        tx_message,
+        signer: Signer::new(
+            account_id.to_string(),
+            signing_key,
+            config.node().chain_id().clone(),
+            account_data,
+        ),
+        config,
+        client,
     })
 }
 
 async fn dispatch_alarms(
     RpcData {
-        wallet,
-        oracle,
-        account_id,
-        account_data,
-        tx_message,
+        mut signer,
+        config,
+        client,
     }: RpcData,
-    rpc_client: HttpClient,
 ) -> AnyResult<()> {
     let mut consequent_errors_count: usize = 0;
 
+    let poll_period = Duration::from_secs(config.poll_period_seconds());
+
     loop {
-        if consequent_errors_count == MAX_CONSEQUENT_ERRORS_COUNT {
+        let time_alarms_response = log_error!(
+            dispatch_alarm::<TimeAlarmsResponse>(
+                &mut signer,
+                &client,
+                config.node(),
+                config.time_alarms().address(),
+                config.time_alarms().max_alarms_group()
+            )
+            .await,
+            "Dispatching time alarms failed!"
+        );
+
+        let oracle_error = log_error!(
+            dispatch_alarm::<OracleResponse>(
+                &mut signer,
+                &client,
+                config.node(),
+                config.market_price_oracle().address(),
+                config.market_price_oracle().max_alarms_group()
+            )
+            .await,
+            "Dispatching market price oracle alarms failed!"
+        )
+        .is_err();
+
+        let sleep_duration = if let Ok(response) = &time_alarms_response {
+            if let Ok(Some(duration)) = log_error!(
+                handle_time_alarms_response(response).await,
+                "Failed handling time alarms' response!"
+            ) {
+                duration.min(poll_period)
+            } else {
+                poll_period
+            }
+        } else {
+            poll_period
+        };
+
+        consequent_errors_count = if time_alarms_response.is_err() || oracle_error {
+            consequent_errors_count + 1
+        } else {
+            0
+        };
+
+        if consequent_errors_count > MAX_CONSEQUENT_ERRORS_COUNT {
             error!(
                 "{} consequent errors encountered! Exiting dispatcher loop...",
                 consequent_errors_count
@@ -180,78 +207,110 @@ async fn dispatch_alarms(
             bail!("Encountered {} consequent errors!", consequent_errors_count);
         }
 
-        let Ok(response) = log_error!(
-            commit_tx(
-                &account_id,
-                &account_data,
-                &wallet,
-                &oracle,
-                &tx_message,
-                &rpc_client,
-            ).await,
-            "Failed to commit transaction!"
-        ) else {
-            consequent_errors_count += 1;
-
-            continue;
-        };
-
-        if log_error!(handle_response(response).await, "Failed handling response!").is_err() {
-            consequent_errors_count += 1;
-
-            continue;
-        }
-
-        consequent_errors_count = 0;
+        sleep(sleep_duration).await;
     }
 }
 
-async fn commit_tx(
-    sender_account_id: &AccountId,
-    account_data: &BaseAccount,
-    wallet: &Wallet,
-    config: &Oracle,
-    data: &str,
-    rpc_client: &HttpClient,
-) -> AnyResult<AlarmsResponse> {
+async fn dispatch_alarm<T>(
+    signer: &mut Signer,
+    client: &Client,
+    config: &Node,
+    address: &str,
+    max_alarms: u32,
+) -> AnyResult<T>
+where
+    T: Response,
+{
+    let response: T = serde_json_wasm::from_slice::<T>(
+        &client
+            .with_grpc({
+                let query_data = serde_json_wasm::to_vec(&QueryMsg::DispatchToAlarms {})?;
+
+                move |rpc| async move {
+                    QueryClient::new(rpc)
+                        .smart_contract_state(QuerySmartContractStateRequest {
+                            address: address.into(),
+                            query_data,
+                        })
+                        .await
+                }
+            })
+            .await?
+            .into_inner()
+            .data,
+    )?;
+
+    if let Some(alarms_to_dispatch) = NonZeroU32::new(
+        response
+            .remaining_for_dispatch()
+            .unwrap_or_default()
+            .min(max_alarms),
+    ) {
+        commit_tx(signer, client, config, address, alarms_to_dispatch).await
+    } else {
+        Ok(response)
+    }
+}
+
+async fn commit_tx<T>(
+    signer: &mut Signer,
+    client: &Client,
+    config: &Node,
+    address: &str,
+    alarms_to_dispatch: NonZeroU32,
+) -> AnyResult<T>
+where
+    T: Response,
+{
     let tx = log_error!(
-        construct_tx(
-            sender_account_id,
-            account_data,
-            wallet,
-            config,
-            String::from(data),
-        ),
+        ContractMsgs::new(address.into())
+            .add_message(
+                serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
+                    max_amount: alarms_to_dispatch.get()
+                })?,
+                Vec::new()
+            )
+            .commit(
+                signer,
+                Fee::from_amount_and_gas(config.fee().clone(), config.gas_limit_per_alarm()),
+                None,
+                None,
+            ),
         "Error occurred while constructing transaction!"
     )?;
 
     let Ok(tx_commit_response) = log_error!(
-        tx.broadcast_commit(rpc_client).await,
+        client.with_json_rpc(|rpc| async move {
+            tx.broadcast_commit(&rpc).await
+        }).await,
         "Error occurred while broadcasting commit!"
     ) else {
-        bail!("Error occurred while broadcasting commit!");
+        bail!("Error while broadcasting");
     };
 
-    log_error!(
+    let response = log_error!(
         log_error!(
             tx_commit_response
                 .deliver_tx
                 .data
                 .map(Into::<Vec<u8>>::into)
                 .as_deref()
-                .map(serde_json_wasm::from_slice::<AlarmsResponse>)
+                .map(serde_json_wasm::from_slice::<T>)
                 .ok_or_else(|| anyhow!("No data returned!")),
             "Contract did not return any data!"
         )?,
         "Error occurred while parsing returned data!"
-    )
-    .map_err(Into::into)
+    )?;
+
+    signer.tx_confirmed();
+
+    Ok(response)
 }
 
-async fn handle_response(response: AlarmsResponse) -> AnyResult<()> {
-    match response {
-        AlarmsResponse::RemainingForDispatch {} => {}
-        AlarmsResponse::NextAlarm { unix_time } => {
+async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> AnyResult<Option<Duration>> {
+    Ok(match response {
+        TimeAlarmsResponse::RemainingForDispatch { .. } => None,
+        &TimeAlarmsResponse::NextAlarm { unix_time } => {
             let Some(until) = SystemTime::UNIX_EPOCH
                 .checked_add(Duration::from_nanos(unix_time)) else {
                 error!(unix_timestamp = %unix_time, "Couldn't calculate time of next alarm...");
@@ -259,12 +318,10 @@ async fn handle_response(response: AlarmsResponse) -> AnyResult<()> {
                 bail!("Returned timestamp is outside valid range!");
             };
 
-            log_error!(
-                until.duration_since(SystemTime::now()).map(sleep),
+            Some(log_error!(
+                until.duration_since(SystemTime::now()),
                 "Error occurred while calculating duration between current time and time of next alarm..."
-            )?.await;
+            )?)
         }
-    }
-
-    Ok(())
+    })
 }
