@@ -16,7 +16,7 @@ use tokio::{
 };
 use tracing::{error, info, Dispatch};
 
-use nolus_dispatch_bot::{
+use alarms_dispatcher::{
     account::{get_account_data, get_account_id},
     client::Client,
     configuration::{read_config, Config, Node},

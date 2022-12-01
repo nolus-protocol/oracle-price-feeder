@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "market-data-feeder",
-    "nolus-dispatch-bot",
+    "alarms-dispatcher",
 ]
 
 [workspace.package]

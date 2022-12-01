@@ -39,6 +39,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "alarms-dispatcher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cosmrs",
+ "prost",
+ "serde",
+ "serde-json-wasm",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "anyhow"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1129,23 +1146,6 @@ dependencies = [
  "log",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.42.0",
-]
-
-[[package]]
-name = "nolus-dispatch-bot"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cosmrs",
- "prost",
- "serde",
- "serde-json-wasm",
- "thiserror",
- "tokio",
- "toml",
- "tonic",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
