@@ -7,7 +7,7 @@ use prost::Message;
 
 use crate::{client::Client, configuration::Node, error::Error, log_error};
 
-pub fn get_account_id(signing_key: &SigningKey, config: &Node) -> Result<AccountId, Error> {
+pub fn account_id(signing_key: &SigningKey, config: &Node) -> Result<AccountId, Error> {
     log_error!(
         signing_key.public_key().account_id(config.address_prefix()),
         "Couldn't derive account ID!"
@@ -15,7 +15,7 @@ pub fn get_account_id(signing_key: &SigningKey, config: &Node) -> Result<Account
     .map_err(|_| Error::AccountIdDerivationFailed)
 }
 
-pub async fn get_account_data(
+pub async fn account_data(
     account_id: AccountId,
     client: &Client,
 ) -> Result<BaseAccount, Error> {

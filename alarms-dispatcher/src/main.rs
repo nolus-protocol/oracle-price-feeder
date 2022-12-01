@@ -17,12 +17,12 @@ use tokio::{
 use tracing::{error, info, Dispatch};
 
 use alarms_dispatcher::{
-    account::{get_account_data, get_account_id},
+    account::{account_data, account_id},
     client::Client,
     configuration::{read_config, Config, Node},
     log_error,
     messages::{ExecuteMsg, OracleResponse, QueryMsg, Response, TimeAlarmsResponse},
-    signing::Signer,
+    signer::Signer,
     tx::ContractMsgs,
 };
 
@@ -78,7 +78,7 @@ fn setup_logging() -> AnyResult<()> {
     .with_context(|| format!("Couldn't register global default tracing dispatcher!"))
 }
 
-pub async fn get_signing_key(derivation_path: &str, password: &str) -> AnyResult<SigningKey> {
+pub async fn signing_key(derivation_path: &str, password: &str) -> AnyResult<SigningKey> {
     println!("Enter dispatcher's account secret: ");
 
     let mut secret = String::new();
@@ -103,7 +103,7 @@ pub struct RpcData {
 }
 
 async fn prepare_rpc_data() -> AnyResult<RpcData> {
-    let signing_key = get_signing_key(DEFAULT_COSMOS_HD_PATH, "").await?;
+    let signing_key = signing_key(DEFAULT_COSMOS_HD_PATH, "").await?;
 
     info!("Successfully derived private key.");
 
@@ -119,12 +119,12 @@ async fn prepare_rpc_data() -> AnyResult<RpcData> {
     info!("Fetching account data from network...");
 
     let account_id = log_error!(
-        get_account_id(&signing_key, config.node()),
+        account_id(&signing_key, config.node()),
         "Couldn't derive account ID!"
     )?;
 
     let account_data = log_error!(
-        get_account_data(account_id.clone(), &client).await,
+        account_data(account_id.clone(), &client).await,
         "Error occurred while fetching account data!"
     )?;
 
@@ -224,7 +224,7 @@ where
     let response: T = serde_json_wasm::from_slice::<T>(
         &client
             .with_grpc({
-                let query_data = serde_json_wasm::to_vec(&QueryMsg::DispatchToAlarms {})?;
+                let query_data = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
 
                 move |rpc| async move {
                     QueryClient::new(rpc)
@@ -266,7 +266,7 @@ where
         ContractMsgs::new(address.into())
             .add_message(
                 serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
-                    max_amount: alarms_to_dispatch.get()
+                    max_count: alarms_to_dispatch.get()
                 })?,
                 Vec::new()
             )
@@ -310,7 +310,7 @@ where
 async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> AnyResult<Option<Duration>> {
     Ok(match response {
         TimeAlarmsResponse::RemainingForDispatch { .. } => None,
-        &TimeAlarmsResponse::NextAlarm { unix_time } => {
+        &TimeAlarmsResponse::NextAlarm { timestamp: unix_time } => {
             let Some(until) = SystemTime::UNIX_EPOCH
                 .checked_add(Duration::from_nanos(unix_time)) else {
                 error!(unix_timestamp = %unix_time, "Couldn't calculate time of next alarm...");

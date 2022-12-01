@@ -5,13 +5,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    DispatchToAlarms {},
+    Status {},
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    DispatchAlarms { max_amount: u32 },
+    DispatchAlarms { max_count: u32 },
 }
 
 pub trait Response
@@ -23,10 +23,16 @@ where
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub struct Timestamp {
+
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TimeAlarmsResponse {
     NextAlarm {
         /// Timestamp in nanoseconds since the start of the Unix epoch
-        unix_time: u64,
+        timestamp: Timestamp,
     },
     RemainingForDispatch {
         /// `min(remaining_alarms, u32::MAX) as u32`

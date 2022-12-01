@@ -3,7 +3,7 @@ pub mod client;
 pub mod configuration;
 pub mod error;
 pub mod messages;
-pub mod signing;
+pub mod signer;
 pub mod tx;
 
 #[macro_export]

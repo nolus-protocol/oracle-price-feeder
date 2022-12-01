@@ -4,7 +4,7 @@ use cosmrs::{
     Any,
 };
 
-use crate::{error::Error, signing::Signer};
+use crate::{error::Error, signer::Signer};
 
 struct Msg {
     message: Vec<u8>,
