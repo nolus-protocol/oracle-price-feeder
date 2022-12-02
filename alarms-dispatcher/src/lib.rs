@@ -14,6 +14,7 @@ macro_rules! log_error {
         if let Err(error) = &result {
             ::tracing::error!(
                 error = ?error,
+                trace = %::std::backtrace::Backtrace::force_capture(),
                 $error
                 $(, $args)*,
             );

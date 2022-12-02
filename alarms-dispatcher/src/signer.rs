@@ -9,7 +9,7 @@ use cosmrs::{
 };
 use prost::Message;
 
-use crate::error::Error;
+use crate::{error::Error, log_error};
 
 pub struct Signer {
     address: String,
@@ -43,8 +43,8 @@ impl Signer {
                 .into_proto(),
         );
 
-        self.key
-            .sign(
+        log_error!(
+            self.key.sign(
                 Message::encode_to_vec(&SignDoc {
                     body_bytes: body.clone(),
                     auth_info_bytes: auth_info.clone(),
@@ -52,16 +52,18 @@ impl Signer {
                     account_number: self.account.account_number,
                 })
                 .as_slice(),
-            )
-            .map(move |signature| {
-                TxRaw {
-                    body_bytes: body,
-                    auth_info_bytes: auth_info,
-                    signatures: vec![signature.to_vec()],
-                }
-                .into()
-            })
-            .map_err(Error::Signing)
+            ),
+            "Signing transaction failed!"
+        )
+        .map(move |signature| {
+            TxRaw {
+                body_bytes: body,
+                auth_info_bytes: auth_info,
+                signatures: vec![signature.to_vec()],
+            }
+            .into()
+        })
+        .map_err(Error::Signing)
     }
 
     #[inline]

@@ -7,19 +7,24 @@ use anyhow::{anyhow, bail, Context, Result as AnyResult};
 use cosmrs::{
     bip32::{Language, Mnemonic},
     crypto::secp256k1::SigningKey,
-    proto::cosmwasm::wasm::v1::{query_client::QueryClient, QuerySmartContractStateRequest},
+    proto::cosmwasm::wasm::v1::{
+        query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+        QuerySmartContractStateResponse,
+    },
     tx::Fee,
 };
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     time::sleep,
 };
+use tonic::Status;
 use tracing::{error, info, Dispatch};
 
 use alarms_dispatcher::{
     account::{account_data, account_id},
     client::Client,
     configuration::{read_config, Config, Node},
+    error::Error,
     log_error,
     messages::{ExecuteMsg, OracleResponse, QueryMsg, Response, TimeAlarmsResponse},
     signer::Signer,
@@ -35,11 +40,7 @@ async fn main() -> AnyResult<()> {
     setup_logging()?;
 
     log_error!(
-        dispatch_alarms(log_error!(
-            prepare_rpc_data().await,
-            "Failed to prepare RPC data!"
-        )?)
-        .await,
+        dispatch_alarms(prepare_rpc_data().await?).await,
         "Dispatcher loop exited with an error! Shutting down..."
     )
 }
@@ -49,8 +50,8 @@ fn setup_logging() -> AnyResult<()> {
         tracing_subscriber::fmt()
             .with_level(true)
             .with_ansi(true)
-            .with_file(true)
-            .with_line_number(true)
+            .with_file(false)
+            .with_line_number(false)
             .with_max_level({
                 #[cfg(debug_assertions)]
                 {
@@ -111,22 +112,13 @@ async fn prepare_rpc_data() -> AnyResult<RpcData> {
 
     info!("Successfully read configuration file.");
 
-    let client = log_error!(
-        Client::new(config.node()).await,
-        "Error occurred while connecting to node! Invalid URL provided!"
-    )?;
+    let client = Client::new(config.node()).await?;
 
     info!("Fetching account data from network...");
 
-    let account_id = log_error!(
-        account_id(&signing_key, config.node()),
-        "Couldn't derive account ID!"
-    )?;
+    let account_id = account_id(&signing_key, config.node())?;
 
-    let account_data = log_error!(
-        account_data(account_id.clone(), &client).await,
-        "Error occurred while fetching account data!"
-    )?;
+    let account_data = account_data(account_id.clone(), &client).await?;
 
     info!("Successfully fetched account data from network.");
 
@@ -149,65 +141,34 @@ async fn dispatch_alarms(
         client,
     }: RpcData,
 ) -> AnyResult<()> {
-    let mut consequent_errors_count: usize = 0;
-
     let poll_period = Duration::from_secs(config.poll_period_seconds());
 
     loop {
-        let time_alarms_response = log_error!(
-            dispatch_alarm::<TimeAlarmsResponse>(
-                &mut signer,
-                &client,
-                config.node(),
-                config.time_alarms().address(),
-                config.time_alarms().max_alarms_group()
-            )
-            .await,
-            "Dispatching time alarms failed!"
-        );
-
-        let oracle_error = log_error!(
-            dispatch_alarm::<OracleResponse>(
-                &mut signer,
-                &client,
-                config.node(),
-                config.market_price_oracle().address(),
-                config.market_price_oracle().max_alarms_group()
-            )
-            .await,
-            "Dispatching market price oracle alarms failed!"
+        let time_alarms_response = dispatch_alarm::<TimeAlarmsResponse>(
+            &mut signer,
+            &client,
+            config.node(),
+            config.time_alarms().address(),
+            config.time_alarms().max_alarms_group(),
         )
-        .is_err();
+        .await?;
 
-        let sleep_duration = if let Ok(response) = &time_alarms_response {
-            if let Ok(Some(duration)) = log_error!(
-                handle_time_alarms_response(response).await,
-                "Failed handling time alarms' response!"
-            ) {
-                duration.min(poll_period)
-            } else {
-                poll_period
-            }
-        } else {
-            poll_period
-        };
+        dispatch_alarm::<OracleResponse>(
+            &mut signer,
+            &client,
+            config.node(),
+            config.market_price_oracle().address(),
+            config.market_price_oracle().max_alarms_group(),
+        )
+        .await?;
 
-        consequent_errors_count = if time_alarms_response.is_err() || oracle_error {
-            consequent_errors_count + 1
-        } else {
-            0
-        };
-
-        if consequent_errors_count > MAX_CONSEQUENT_ERRORS_COUNT {
-            error!(
-                "{} consequent errors encountered! Exiting dispatcher loop...",
-                consequent_errors_count
-            );
-
-            bail!("Encountered {} consequent errors!", consequent_errors_count);
-        }
-
-        sleep(sleep_duration).await;
+        sleep(
+            handle_time_alarms_response(&time_alarms_response)
+                .await
+                .unwrap_or(poll_period)
+                .min(poll_period),
+        )
+        .await;
     }
 }
 
@@ -221,13 +182,13 @@ async fn dispatch_alarm<T>(
 where
     T: Response,
 {
-    let response: T = serde_json_wasm::from_slice::<T>(
+    let response: T = serde_json_wasm::from_slice(
         &client
             .with_grpc({
                 let query_data = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
 
                 move |rpc| async move {
-                    QueryClient::new(rpc)
+                    WasmQueryClient::new(rpc)
                         .smart_contract_state(QuerySmartContractStateRequest {
                             address: address.into(),
                             query_data,
@@ -262,31 +223,27 @@ async fn commit_tx<T>(
 where
     T: Response,
 {
-    let tx = log_error!(
-        ContractMsgs::new(address.into())
-            .add_message(
-                serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
-                    max_count: alarms_to_dispatch.get()
-                })?,
-                Vec::new()
-            )
-            .commit(
-                signer,
-                Fee::from_amount_and_gas(config.fee().clone(), config.gas_limit_per_alarm()),
-                None,
-                None,
-            ),
-        "Error occurred while constructing transaction!"
-    )?;
+    let tx = ContractMsgs::new(address.into())
+        .add_message(
+            serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
+                max_count: alarms_to_dispatch.get(),
+            })?,
+            Vec::new(),
+        )
+        .commit(
+            signer,
+            Fee::from_amount_and_gas(config.fee().clone(), config.gas_limit_per_alarm()),
+            None,
+            None,
+        )?;
 
-    let Ok(tx_commit_response) = log_error!(
-        client.with_json_rpc(|rpc| async move {
-            tx.broadcast_commit(&rpc).await
-        }).await,
+    let tx_commit_response = log_error!(
+        client
+            .with_json_rpc(|rpc| async move { tx.broadcast_commit(&rpc).await })
+            .await,
         "Error occurred while broadcasting commit!"
-    ) else {
-        bail!("Error while broadcasting");
-    };
+    )
+    .map_err(Error::BroadcastTx)?;
 
     let response = log_error!(
         log_error!(
@@ -307,21 +264,21 @@ where
     Ok(response)
 }
 
-async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> AnyResult<Option<Duration>> {
-    Ok(match response {
-        TimeAlarmsResponse::RemainingForDispatch { .. } => None,
-        &TimeAlarmsResponse::NextAlarm { timestamp: unix_time } => {
-            let Some(until) = SystemTime::UNIX_EPOCH
-                .checked_add(Duration::from_nanos(unix_time)) else {
-                error!(unix_timestamp = %unix_time, "Couldn't calculate time of next alarm...");
+async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> Option<Duration> {
+    if let TimeAlarmsResponse::NextAlarm { timestamp } = response {
+        let Some(until) = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_nanos(timestamp.as_nanos())) else {
+            error!(unix_timestamp = %timestamp.as_nanos(), "Couldn't calculate time of next alarm!");
 
-                bail!("Returned timestamp is outside valid range!");
-            };
+            return None;
+        };
 
-            Some(log_error!(
-                until.duration_since(SystemTime::now()),
-                "Error occurred while calculating duration between current time and time of next alarm..."
-            )?)
-        }
-    })
+        return log_error!(
+            until.duration_since(SystemTime::now()),
+            "Error occurred while calculating duration between current time and time of next alarm!"
+        )
+        .ok();
+    }
+
+    None
 }

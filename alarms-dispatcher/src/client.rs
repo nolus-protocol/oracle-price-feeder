@@ -6,6 +6,7 @@ use tonic::transport::Channel;
 use crate::{
     configuration::{Node, Protocol},
     error::Error,
+    log_error,
 };
 
 #[derive(Debug, Clone)]
@@ -16,11 +17,20 @@ pub struct Client {
 
 impl Client {
     pub async fn new(config: &Node) -> Result<Self, Error> {
-        let json_rpc = TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str())?;
+        let json_rpc = log_error!(
+            TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str()),
+            "Failed connecting to JSON RPC endpoint!"
+        )?;
 
-        let grpc = Channel::builder(Self::construct_grpc_url(config).try_into()?)
+        let grpc = log_error!(
+            Channel::builder(log_error!(
+                Self::construct_grpc_url(config).try_into(),
+                "Failed to parse URL for gRPC endpoint!"
+            )?)
             .connect()
-            .await?;
+            .await,
+            "Failed connecting to gRPC endpoint!"
+        )?;
 
         Ok(Self { json_rpc, grpc })
     }

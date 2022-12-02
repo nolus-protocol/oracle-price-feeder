@@ -4,7 +4,7 @@ use cosmrs::{
     Any,
 };
 
-use crate::{error::Error, signer::Signer};
+use crate::{error::Error, log_error, signer::Signer};
 
 struct Msg {
     message: Vec<u8>,
@@ -42,22 +42,25 @@ impl ContractMsgs {
                 {
                     let buf = Vec::with_capacity(self.messages.len());
 
-                    self.messages
-                        .into_iter()
-                        .map(|msg| {
-                            MsgExecuteContract {
-                                sender: signer.signer_address().into(),
-                                contract: self.address.clone(),
-                                msg: msg.message,
-                                funds: msg.funds,
-                            }
-                            .to_any()
-                        })
-                        .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>, Error> {
-                            acc.push(msg?);
+                    log_error!(
+                        self.messages
+                            .into_iter()
+                            .map(|msg| {
+                                MsgExecuteContract {
+                                    sender: signer.signer_address().into(),
+                                    contract: self.address.clone(),
+                                    msg: msg.message,
+                                    funds: msg.funds,
+                                }
+                                .to_any()
+                            })
+                            .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>, Error> {
+                                acc.push(msg?);
 
-                            Ok(acc)
-                        })?
+                                Ok(acc)
+                            }),
+                        "Failed serializing transaction messages!"
+                    )?
                 },
                 memo.unwrap_or_default(),
                 timeout.unwrap_or_default(),

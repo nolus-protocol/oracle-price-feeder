@@ -15,10 +15,7 @@ pub fn account_id(signing_key: &SigningKey, config: &Node) -> Result<AccountId, 
     .map_err(|_| Error::AccountIdDerivationFailed)
 }
 
-pub async fn account_data(
-    account_id: AccountId,
-    client: &Client,
-) -> Result<BaseAccount, Error> {
+pub async fn account_data(account_id: AccountId, client: &Client) -> Result<BaseAccount, Error> {
     let account_data_message = log_error!(
         log_error!(
             client

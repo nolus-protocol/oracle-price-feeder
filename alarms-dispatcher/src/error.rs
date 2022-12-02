@@ -21,4 +21,6 @@ pub enum Error {
     AccountNotFound,
     #[error("Signing data failed! Context: {0}")]
     Signing(ErrorReport),
+    #[error("Broadcasting transaction failed! Context: {0}")]
+    BroadcastTx(ErrorReport),
 }

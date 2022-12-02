@@ -21,10 +21,14 @@ where
     fn remaining_for_dispatch(&self) -> Option<u32>;
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Timestamp {
+pub struct Timestamp(u64);
 
+impl Timestamp {
+    pub fn as_nanos(&self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
