@@ -143,6 +143,8 @@ async fn dispatch_alarms(
 ) -> AnyResult<()> {
     let poll_period = Duration::from_secs(config.poll_period_seconds());
 
+    let query_data = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
+
     loop {
         let time_alarms_response = dispatch_alarm::<TimeAlarmsResponse>(
             &mut signer,
@@ -150,6 +152,7 @@ async fn dispatch_alarms(
             config.node(),
             config.time_alarms().address(),
             config.time_alarms().max_alarms_group(),
+            query_data.clone(),
         )
         .await?;
 
@@ -159,16 +162,11 @@ async fn dispatch_alarms(
             config.node(),
             config.market_price_oracle().address(),
             config.market_price_oracle().max_alarms_group(),
+            query_data.clone(),
         )
         .await?;
 
-        sleep(
-            handle_time_alarms_response(&time_alarms_response)
-                .await
-                .unwrap_or(poll_period)
-                .min(poll_period),
-        )
-        .await;
+        sleep_with_response(&time_alarms_response, poll_period).await;
     }
 }
 
@@ -178,23 +176,20 @@ async fn dispatch_alarm<T>(
     config: &Node,
     address: &str,
     max_alarms: u32,
+    query_data: Vec<u8>,
 ) -> AnyResult<T>
 where
     T: Response,
 {
     let response: T = serde_json_wasm::from_slice(
         &client
-            .with_grpc({
-                let query_data = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
-
-                move |rpc| async move {
-                    WasmQueryClient::new(rpc)
-                        .smart_contract_state(QuerySmartContractStateRequest {
-                            address: address.into(),
-                            query_data,
-                        })
-                        .await
-                }
+            .with_grpc(move |rpc| async move {
+                WasmQueryClient::new(rpc)
+                    .smart_contract_state(QuerySmartContractStateRequest {
+                        address: address.into(),
+                        query_data,
+                    })
+                    .await
             })
             .await?
             .into_inner()
@@ -262,6 +257,16 @@ where
     signer.tx_confirmed();
 
     Ok(response)
+}
+
+async fn sleep_with_response(response: &TimeAlarmsResponse, poll_period: Duration) {
+    sleep(
+        handle_time_alarms_response(&response)
+            .await
+            .unwrap_or(poll_period)
+            .min(poll_period),
+    )
+    .await;
 }
 
 async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> Option<Duration> {
