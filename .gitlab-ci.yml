@@ -7,11 +7,10 @@ cache:
     - cargo_home/
 
 default:
-  image: "rust:1.65-alpine"
+  image: "rust:1.65"
   before_script:
     - rustc --version
     - cargo --version
-    - apk add musl-dev
 
 stages:
   - prepare
@@ -34,9 +33,8 @@ test-code:
         path: cobertura.xml
   coverage: '/^\d+.\d+% coverage/'
   script:
-    - apk add openssl-dev
-    - cargo install cargo-tarpaulin --target x86_64-unknown-linux-musl
-    - cargo tarpaulin --target x86_64-unknown-linux-musl --out Xml
+    - cargo install cargo-tarpaulin
+    - cargo tarpaulin --out Xml
 
 lint-code:
   stage: test
@@ -53,9 +51,7 @@ format-code:
 audit-code:
   stage: test
   script:
-    - apk add openssl-dev openssl-libs-static
-    - OPENSSL_STATIC=1
-    - cargo install --target x86_64-unknown-linux-musl cargo-audit
+    - cargo install cargo-audit
     - cargo audit
 
 build-binary:
