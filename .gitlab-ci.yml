@@ -62,4 +62,5 @@ build-binary:
     - cargo build --release --target x86_64-unknown-linux-musl
   artifacts:
     paths:
-      - ./target/release/feeder
+      - ./target/x86_64-unknown-linux-musl/release/feeder
+      - ./target/x86_64-unknown-linux-musl/release/alarms-dispatcher
