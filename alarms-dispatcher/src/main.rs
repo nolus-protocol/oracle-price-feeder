@@ -35,14 +35,14 @@ pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
 #[tokio::main]
 async fn main() -> AnyResult<()> {
-    let appender = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
+    let log_writer = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
 
-    let (writer, _guard) = tracing_appender::non_blocking(appender);
+    let (log_writer, _guard) = tracing_appender::non_blocking(log_writer);
 
-    setup_logging(writer)?;
+    setup_logging(log_writer)?;
 
     log_error!(
-        dispatch_alarms(prepare_rpc_data().await?).await,
+        dispatch_alarms(prepare_rpc().await?).await,
         "Dispatcher loop exited with an error! Shutting down..."
     )
 }
@@ -103,13 +103,13 @@ pub async fn signing_key(derivation_path: &str, password: &str) -> AnyResult<Sig
     .map_err(Into::into)
 }
 
-pub struct RpcData {
+pub struct RpcSetup {
     signer: Signer,
     config: Config,
     client: Client,
 }
 
-async fn prepare_rpc_data() -> AnyResult<RpcData> {
+async fn prepare_rpc() -> AnyResult<RpcSetup> {
     let signing_key = signing_key(DEFAULT_COSMOS_HD_PATH, "").await?;
 
     info!("Successfully derived private key.");
@@ -128,7 +128,7 @@ async fn prepare_rpc_data() -> AnyResult<RpcData> {
 
     info!("Successfully fetched account data from network.");
 
-    Ok(RpcData {
+    Ok(RpcSetup {
         signer: Signer::new(
             account_id.to_string(),
             signing_key,
@@ -141,15 +141,15 @@ async fn prepare_rpc_data() -> AnyResult<RpcData> {
 }
 
 async fn dispatch_alarms(
-    RpcData {
+    RpcSetup {
         mut signer,
         config,
         client,
-    }: RpcData,
+    }: RpcSetup,
 ) -> AnyResult<()> {
     let poll_period = Duration::from_secs(config.poll_period_seconds());
 
-    let query_data = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
+    let query = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
 
     loop {
         // TODO uncomment & refactor accordingly when after discussions
@@ -171,7 +171,7 @@ async fn dispatch_alarms(
             config.node(),
             config.market_price_oracle().address(),
             config.market_price_oracle().max_alarms_group(),
-            &query_data,
+            &query,
             "market price",
         )
         .await?;
@@ -189,7 +189,7 @@ async fn dispatch_alarm<'r, Q, E>(
     config: &'r Node,
     address: &'r str,
     max_alarms: u32,
-    query_data: &'r [u8],
+    query: &'r [u8],
     alarm_type: &'static str,
 ) -> AnyResult<()>
 where
@@ -200,7 +200,7 @@ where
         let response: Q = serde_json_wasm::from_slice(
             &client
                 .with_grpc({
-                    let query_data = query_data.to_vec();
+                    let query_data = query.to_vec();
 
                     move |rpc| async move {
                         WasmQueryClient::new(rpc)
