@@ -11,15 +11,15 @@ struct Msg {
     funds: Vec<Coin>,
 }
 
-pub struct ContractMsgs {
-    address: String,
+pub struct ContractTx {
+    contract: String,
     messages: Vec<Msg>,
 }
 
-impl ContractMsgs {
-    pub const fn new(contract_address: String) -> Self {
+impl ContractTx {
+    pub const fn new(contract: String) -> Self {
         Self {
-            address: contract_address,
+            contract,
             messages: Vec::new(),
         }
     }
@@ -48,7 +48,7 @@ impl ContractMsgs {
                             .map(|msg| {
                                 MsgExecuteContract {
                                     sender: signer.signer_address().into(),
-                                    contract: self.address.clone(),
+                                    contract: self.contract.clone(),
                                     msg: msg.message,
                                     funds: msg.funds,
                                 }

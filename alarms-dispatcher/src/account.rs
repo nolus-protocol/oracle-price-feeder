@@ -16,7 +16,7 @@ pub fn account_id(signing_key: &SigningKey, config: &Node) -> Result<AccountId, 
 }
 
 pub async fn account_data(account_id: AccountId, client: &Client) -> Result<BaseAccount, Error> {
-    let account_data_message = log_error!(
+    let account_data = log_error!(
         log_error!(
             client
                 .with_grpc(|grpc| async {
@@ -36,7 +36,7 @@ pub async fn account_data(account_id: AccountId, client: &Client) -> Result<Base
     )?;
 
     log_error!(
-        Message::decode(account_data_message.value.as_slice()),
+        Message::decode(account_data.value.as_slice()),
         "Account query response's message couldn't be deserialized!"
     )
     .map_err(Into::into)

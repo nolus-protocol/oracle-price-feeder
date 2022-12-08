@@ -26,7 +26,7 @@ use alarms_dispatcher::{
     log_error,
     messages::{ExecuteMsg, QueryMsg},
     signer::Signer,
-    tx::ContractMsgs,
+    tx::ContractTx,
 };
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
@@ -244,7 +244,7 @@ async fn commit_tx<E>(
 where
     E: ExecuteResponse,
 {
-    let tx = ContractMsgs::new(address.into())
+    let tx = ContractTx::new(address.into())
         .add_message(
             serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
             Vec::new(),
