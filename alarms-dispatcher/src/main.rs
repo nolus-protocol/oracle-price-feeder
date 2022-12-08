@@ -82,7 +82,7 @@ where
             })
             .finish(),
     ))
-    .with_context(|| format!("Couldn't register global default tracing dispatcher!"))
+    .with_context(|| "Couldn't register global default tracing dispatcher!".to_string())
 }
 
 pub async fn signing_key(derivation_path: &str, password: &str) -> AnyResult<SigningKey> {
@@ -258,7 +258,7 @@ where
 
 async fn sleep_with_response(response: &TimeAlarmsResponse, poll_period: Duration) {
     sleep(
-        handle_time_alarms_response(&response)
+        handle_time_alarms_response(response)
             .await
             .unwrap_or(poll_period)
             .min(poll_period),
