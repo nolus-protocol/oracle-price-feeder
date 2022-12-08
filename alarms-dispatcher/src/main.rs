@@ -1,7 +1,4 @@
-use std::{
-    num::NonZeroU32,
-    time::{Duration, SystemTime},
-};
+use std::time::Duration;
 
 use anyhow::{Context, Result as AnyResult};
 use cosmrs::{
@@ -16,15 +13,18 @@ use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     time::sleep,
 };
-use tracing::{error, info, Dispatch};
+use tracing::{info, Dispatch};
 
+use alarms_dispatcher::messages::{
+    ExecuteResponse, OracleDispatchResponse, OracleStatusResponse, QueryResponse,
+};
 use alarms_dispatcher::{
     account::{account_data, account_id},
     client::Client,
     configuration::{read_config, Config, Node},
     error::Error,
     log_error,
-    messages::{ExecuteMsg, OracleResponse, QueryMsg, Response, TimeAlarmsResponse},
+    messages::{ExecuteMsg, QueryMsg},
     signer::Signer,
     tx::ContractMsgs,
 };
@@ -152,83 +152,101 @@ async fn dispatch_alarms(
     let query_data = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
 
     loop {
-        let time_alarms_response = dispatch_alarm::<TimeAlarmsResponse>(
-            &mut signer,
-            &client,
-            config.node(),
-            config.time_alarms().address(),
-            config.time_alarms().max_alarms_group(),
-            query_data.clone(),
-        )
-        .await?;
+        // TODO uncomment & refactor accordingly when after discussions
+        //  about implementation
+        // let time_alarms_response = dispatch_alarm::<TimeAlarmsResponse>(
+        //     &mut signer,
+        //     &client,
+        //     config.node(),
+        //     config.time_alarms().address(),
+        //     config.time_alarms().max_alarms_group(),
+        //     query_data.clone(),
+        //     "time",
+        // )
+        // .await?;
 
-        dispatch_alarm::<OracleResponse>(
+        dispatch_alarm::<OracleStatusResponse, OracleDispatchResponse>(
             &mut signer,
             &client,
             config.node(),
             config.market_price_oracle().address(),
             config.market_price_oracle().max_alarms_group(),
-            query_data.clone(),
+            &query_data,
+            "market price",
         )
         .await?;
 
-        sleep_with_response(&time_alarms_response, poll_period).await;
+        // TODO uncomment when after discussions about implementation
+        // sleep_with_response(&time_alarms_response, poll_period).await;
+
+        sleep(poll_period).await;
     }
 }
 
-async fn dispatch_alarm<T>(
-    signer: &mut Signer,
-    client: &Client,
-    config: &Node,
-    address: &str,
+async fn dispatch_alarm<'r, Q, E>(
+    signer: &'r mut Signer,
+    client: &'r Client,
+    config: &'r Node,
+    address: &'r str,
     max_alarms: u32,
-    query_data: Vec<u8>,
-) -> AnyResult<T>
+    query_data: &'r [u8],
+    alarm_type: &'static str,
+) -> AnyResult<()>
 where
-    T: Response,
+    Q: QueryResponse,
+    E: ExecuteResponse,
 {
-    let response: T = serde_json_wasm::from_slice(
-        &client
-            .with_grpc(move |rpc| async move {
-                WasmQueryClient::new(rpc)
-                    .smart_contract_state(QuerySmartContractStateRequest {
-                        address: address.into(),
-                        query_data,
-                    })
-                    .await
-            })
-            .await?
-            .into_inner()
-            .data,
-    )?;
+    loop {
+        let response: Q = serde_json_wasm::from_slice(
+            &client
+                .with_grpc({
+                    let query_data = query_data.to_vec();
 
-    if let Some(alarms_to_dispatch) = NonZeroU32::new(
-        response
-            .remaining_for_dispatch()
-            .unwrap_or_default()
-            .min(max_alarms),
-    ) {
-        commit_tx(signer, client, config, address, alarms_to_dispatch).await
-    } else {
-        Ok(response)
+                    move |rpc| async move {
+                        WasmQueryClient::new(rpc)
+                            .smart_contract_state(QuerySmartContractStateRequest {
+                                address: address.into(),
+                                query_data,
+                            })
+                            .await
+                    }
+                })
+                .await?
+                .into_inner()
+                .data,
+        )?;
+
+        if response.remaining_for_dispatch() {
+            let result: E = commit_tx(signer, client, config, address, max_alarms).await?;
+
+            info!(
+                "Dispatched {} {} alarms.",
+                result.dispatched_alarms(),
+                alarm_type
+            );
+
+            if result.dispatched_alarms() == max_alarms {
+                continue;
+            }
+        }
+
+        return Ok(());
     }
 }
 
-async fn commit_tx<T>(
+async fn commit_tx<E>(
     signer: &mut Signer,
     client: &Client,
     config: &Node,
     address: &str,
-    alarms_to_dispatch: NonZeroU32,
-) -> AnyResult<T>
+    max_count: u32,
+) -> AnyResult<E>
 where
-    T: Response,
+    E: ExecuteResponse,
 {
     let tx = ContractMsgs::new(address.into())
         .add_message(
-            serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
-                max_count: alarms_to_dispatch.get(),
-            })?,
+            serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
             Vec::new(),
         )
         .commit(
@@ -256,31 +274,33 @@ where
     Ok(response)
 }
 
-async fn sleep_with_response(response: &TimeAlarmsResponse, poll_period: Duration) {
-    sleep(
-        handle_time_alarms_response(response)
-            .await
-            .unwrap_or(poll_period)
-            .min(poll_period),
-    )
-    .await;
-}
-
-async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> Option<Duration> {
-    if let TimeAlarmsResponse::NextAlarm { timestamp } = response {
-        let Some(until) = SystemTime::UNIX_EPOCH
-            .checked_add(Duration::from_nanos(timestamp.as_nanos())) else {
-            error!(unix_timestamp = %timestamp.as_nanos(), "Couldn't calculate time of next alarm!");
-
-            return None;
-        };
-
-        return log_error!(
-            until.duration_since(SystemTime::now()),
-            "Error occurred while calculating duration between current time and time of next alarm!"
-        )
-        .ok();
-    }
-
-    None
-}
+// TODO uncomment & refactor accordingly when after discussions
+//  about implementation
+// async fn sleep_with_response(response: &TimeAlarmsResponse, poll_period: Duration) {
+//     sleep(
+//         handle_time_alarms_response(response)
+//             .await
+//             .unwrap_or(poll_period)
+//             .min(poll_period),
+//     )
+//     .await;
+// }
+//
+// async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> Option<Duration> {
+//     if let TimeAlarmsResponse::NextAlarm { timestamp } = response {
+//         let Some(until) = SystemTime::UNIX_EPOCH
+//             .checked_add(Duration::from_nanos(timestamp.as_nanos())) else {
+//             error!(unix_timestamp = %timestamp.as_nanos(), "Couldn't calculate time of next alarm!");
+//
+//             return None;
+//         };
+//
+//         return log_error!(
+//             until.duration_since(SystemTime::now()),
+//             "Error occurred while calculating duration between current time and time of next alarm!"
+//         )
+//         .ok();
+//     }
+//
+//     None
+// }

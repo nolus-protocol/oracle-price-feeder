@@ -1,5 +1,6 @@
 use std::any::Any;
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -14,11 +15,18 @@ pub enum ExecuteMsg {
     DispatchAlarms { max_count: u32 },
 }
 
-pub trait Response
+pub trait QueryResponse
 where
-    Self: for<'de> Deserialize<'de> + Any,
+    Self: DeserializeOwned + Any,
 {
-    fn remaining_for_dispatch(&self) -> Option<u32>;
+    fn remaining_for_dispatch(&self) -> bool;
+}
+
+pub trait ExecuteResponse
+where
+    Self: DeserializeOwned + Any,
+{
+    fn dispatched_alarms(&self) -> u32;
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
@@ -35,6 +43,8 @@ impl Timestamp {
 #[serde(rename_all = "snake_case")]
 pub enum TimeAlarmsResponse {
     NextAlarm {
+        // TODO make sure this is up to date before merging;
+        //  additional discussions needed to sync with contracts' side of things
         /// Timestamp in nanoseconds since the start of the Unix epoch
         timestamp: Timestamp,
     },
@@ -44,32 +54,24 @@ pub enum TimeAlarmsResponse {
     },
 }
 
-impl Response for TimeAlarmsResponse {
-    fn remaining_for_dispatch(&self) -> Option<u32> {
-        if let &Self::RemainingForDispatch { remaining_alarms } = self {
-            Some(remaining_alarms)
-        } else {
-            None
-        }
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OracleStatusResponse {
+    pub remaining_alarms: bool,
+}
+
+impl QueryResponse for OracleStatusResponse {
+    fn remaining_for_dispatch(&self) -> bool {
+        self.remaining_alarms
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum OracleResponse {
-    NoAlarms {},
-    RemainingForDispatch {
-        /// `min(remaining_alarms, u32::MAX) as u32`
-        remaining_alarms: u32,
-    },
-}
+pub struct OracleDispatchResponse(pub u32);
 
-impl Response for OracleResponse {
-    fn remaining_for_dispatch(&self) -> Option<u32> {
-        if let &Self::RemainingForDispatch { remaining_alarms } = self {
-            Some(remaining_alarms)
-        } else {
-            None
-        }
+impl ExecuteResponse for OracleDispatchResponse {
+    fn dispatched_alarms(&self) -> u32 {
+        self.0
     }
 }
