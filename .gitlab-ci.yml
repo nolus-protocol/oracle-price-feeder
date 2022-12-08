@@ -7,7 +7,7 @@ cache:
     - cargo_home/
 
 default:
-  image: "rust:1.65"
+  image: "rust:1.65.0"
   before_script:
     - rustc --version
     - cargo --version
@@ -55,8 +55,10 @@ audit-code:
     - cargo audit
 
 build-binary:
+  image: "rust:1.65.0-alpine"
   stage: build
   script:
+    - apk add libc-dev
     - cargo build --release --target x86_64-unknown-linux-musl
   artifacts:
     paths:
