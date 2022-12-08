@@ -9,7 +9,10 @@ use cosmrs::{
 };
 use prost::Message;
 
-use crate::{error::Error, log_error};
+use crate::{
+    context_message,
+    error::{ContextError, Error, WithOriginContext},
+};
 
 pub struct Signer {
     address: String,
@@ -34,7 +37,7 @@ impl Signer {
         &self.address
     }
 
-    pub fn sign(&self, body: Body, fee: Fee) -> Result<Raw, Error> {
+    pub fn sign(&self, body: Body, fee: Fee) -> Result<Raw, ContextError<Error>> {
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(
@@ -43,8 +46,8 @@ impl Signer {
                 .into_proto(),
         );
 
-        log_error!(
-            self.key.sign(
+        self.key
+            .sign(
                 Message::encode_to_vec(&SignDoc {
                     body_bytes: body.clone(),
                     auth_info_bytes: auth_info.clone(),
@@ -52,18 +55,19 @@ impl Signer {
                     account_number: self.account.account_number,
                 })
                 .as_slice(),
-            ),
-            "Signing transaction failed!"
-        )
-        .map(move |signature| {
-            TxRaw {
-                body_bytes: body,
-                auth_info_bytes: auth_info,
-                signatures: vec![signature.to_vec()],
-            }
-            .into()
-        })
-        .map_err(Error::Signing)
+            )
+            .map_err(|error| {
+                Error::Signing(error)
+                    .with_origin_context(context_message!("Signing transaction failed!"))
+            })
+            .map(move |signature| {
+                TxRaw {
+                    body_bytes: body,
+                    auth_info_bytes: auth_info,
+                    signatures: vec![signature.to_vec()],
+                }
+                .into()
+            })
     }
 
     #[inline]

@@ -1,11 +1,14 @@
-use anyhow::Result as AnyResult;
+use crate::context_message;
+use anyhow::Error as AnyError;
 use cosmrs::{
     proto::cosmos::base::v1beta1::Coin as CoinProto, tendermint::chain::Id as ChainId, Coin,
 };
 use serde::{de::Error as DeserializeError, Deserialize, Deserializer, Serialize};
 use tokio::fs::read_to_string;
 
-use crate::log_error;
+use crate::error::{ContextError, WithOriginContext};
+
+type ContextResult<T> = Result<T, ContextError<AnyError>>;
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[must_use]
@@ -155,13 +158,18 @@ impl Config {
     }
 }
 
-pub async fn read_config() -> AnyResult<Config> {
-    log_error!(
-        toml::from_str(&log_error!(
-            read_to_string("alarms-dispatcher.toml").await,
-            "Failed to read contents of configuration file!"
-        )?),
-        "Failed to parse configuration!"
+pub async fn read_config() -> ContextResult<Config> {
+    toml::from_str(
+        &read_to_string("alarms-dispatcher.toml")
+            .await
+            .map_err(|error| {
+                AnyError::from(error).with_origin_context(context_message!(
+                    "Failed to read contents of configuration file!"
+                ))
+            })?,
     )
-    .map_err(Into::into)
+    .map_err(|error| {
+        AnyError::from(error)
+            .with_origin_context(context_message!("Failed to parse configuration!"))
+    })
 }

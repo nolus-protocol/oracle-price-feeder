@@ -4,7 +4,11 @@ use cosmrs::{
     Any,
 };
 
-use crate::{error::Error, log_error, signer::Signer};
+use crate::{
+    context_message,
+    error::{ContextError, Error, WithOriginContext},
+    signer::Signer,
+};
 
 struct Msg {
     message: Vec<u8>,
@@ -36,31 +40,33 @@ impl ContractTx {
         fee: Fee,
         memo: Option<&str>,
         timeout: Option<u32>,
-    ) -> Result<RawTx, Error> {
+    ) -> Result<RawTx, ContextError<Error>> {
         signer.sign(
             Body::new(
                 {
                     let buf = Vec::with_capacity(self.messages.len());
 
-                    log_error!(
-                        self.messages
-                            .into_iter()
-                            .map(|msg| {
-                                MsgExecuteContract {
-                                    sender: signer.signer_address().into(),
-                                    contract: self.contract.clone(),
-                                    msg: msg.message,
-                                    funds: msg.funds,
-                                }
-                                .to_any()
-                            })
-                            .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>, Error> {
-                                acc.push(msg?);
+                    self.messages
+                        .into_iter()
+                        .map(|msg| {
+                            MsgExecuteContract {
+                                sender: signer.signer_address().into(),
+                                contract: self.contract.clone(),
+                                msg: msg.message,
+                                funds: msg.funds,
+                            }
+                            .to_any()
+                        })
+                        .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>, Error> {
+                            acc.push(msg?);
 
-                                Ok(acc)
-                            }),
-                        "Failed serializing transaction messages!"
-                    )?
+                            Ok(acc)
+                        })
+                        .map_err(|error| {
+                            error.with_origin_context(context_message!(
+                                "Failed serializing transaction messages!"
+                            ))
+                        })?
                 },
                 memo.unwrap_or_default(),
                 timeout.unwrap_or_default(),

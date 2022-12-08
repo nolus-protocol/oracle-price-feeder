@@ -5,8 +5,8 @@ use tonic::transport::Channel;
 
 use crate::{
     configuration::{Node, Protocol},
-    error::Error,
-    log_error,
+    context_message,
+    error::{ContextError, Error, WithOriginContext},
 };
 
 #[derive(Debug, Clone)]
@@ -16,21 +16,26 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn new(config: &Node) -> Result<Self, Error> {
-        let json_rpc = log_error!(
-            TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str()),
-            "Failed connecting to JSON RPC endpoint!"
-        )?;
+    pub async fn new(config: &Node) -> Result<Self, ContextError<Error>> {
+        let json_rpc = TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str())
+            .map_err(|error| {
+                Error::from(error).with_origin_context(context_message!(
+                    "Failed connecting to JSON RPC endpoint!"
+                ))
+            })?;
 
-        let grpc = log_error!(
-            Channel::builder(log_error!(
-                Self::construct_grpc_url(config).try_into(),
-                "Failed to parse URL for gRPC endpoint!"
-            )?)
-            .connect()
-            .await,
-            "Failed connecting to gRPC endpoint!"
-        )?;
+        let grpc = Channel::builder(Self::construct_grpc_url(config).try_into().map_err(
+            |error| {
+                Error::from(error)
+                    .with_origin_context(context_message!("Failed to parse URL for gRPC endpoint!"))
+            },
+        )?)
+        .connect()
+        .await
+        .map_err(|error| {
+            Error::from(error)
+                .with_origin_context(context_message!("Failed connecting to gRPC endpoint!"))
+        })?;
 
         Ok(Self { json_rpc, grpc })
     }

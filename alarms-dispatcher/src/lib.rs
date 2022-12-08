@@ -7,19 +7,8 @@ pub mod signer;
 pub mod tx;
 
 #[macro_export]
-macro_rules! log_error {
-    ($expr: expr, $error: literal $(, $args: expr)* $(,)?) => {{
-        let result: ::std::result::Result<_, _> = $expr;
-
-        if let Err(error) = &result {
-            ::tracing::error!(
-                error = ?error,
-                trace = %::std::backtrace::Backtrace::force_capture(),
-                $error
-                $(, $args)*,
-            );
-        }
-
-        result
-    }};
+macro_rules! context_message {
+    ($message: literal) => {
+        ::core::concat!(::core::module_path!(), ": ", $message)
+    };
 }
