@@ -95,3 +95,6 @@ Cargo.lock
 
 ### Build artifacts
 artifacts/
+
+### Application Logs
+dispatcher-logs/

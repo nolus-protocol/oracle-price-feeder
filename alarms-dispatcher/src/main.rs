@@ -3,13 +3,12 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use anyhow::{anyhow, bail, Context, Result as AnyResult};
+use anyhow::{Context, Result as AnyResult};
 use cosmrs::{
     bip32::{Language, Mnemonic},
     crypto::secp256k1::SigningKey,
     proto::cosmwasm::wasm::v1::{
         query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
-        QuerySmartContractStateResponse,
     },
     tx::Fee,
 };
@@ -17,7 +16,6 @@ use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     time::sleep,
 };
-use tonic::Status;
 use tracing::{error, info, Dispatch};
 
 use alarms_dispatcher::{
@@ -37,7 +35,11 @@ pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
 #[tokio::main]
 async fn main() -> AnyResult<()> {
-    setup_logging()?;
+    let appender = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
+
+    let (writer, _guard) = tracing_appender::non_blocking(appender);
+
+    setup_logging(writer)?;
 
     log_error!(
         dispatch_alarms(prepare_rpc_data().await?).await,
@@ -45,13 +47,17 @@ async fn main() -> AnyResult<()> {
     )
 }
 
-fn setup_logging() -> AnyResult<()> {
+fn setup_logging<W>(writer: W) -> AnyResult<()>
+where
+    W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
+{
     tracing::dispatcher::set_global_default(Dispatch::new(
         tracing_subscriber::fmt()
             .with_level(true)
             .with_ansi(true)
             .with_file(false)
             .with_line_number(false)
+            .with_writer(writer)
             .with_max_level({
                 #[cfg(debug_assertions)]
                 {
@@ -241,16 +247,7 @@ where
     .map_err(Error::BroadcastTx)?;
 
     let response = log_error!(
-        log_error!(
-            tx_commit_response
-                .deliver_tx
-                .data
-                .map(Into::<Vec<u8>>::into)
-                .as_deref()
-                .map(serde_json_wasm::from_slice::<T>)
-                .ok_or_else(|| anyhow!("No data returned!")),
-            "Contract did not return any data!"
-        )?,
+        serde_json_wasm::from_slice(&tx_commit_response.deliver_tx.data),
         "Error occurred while parsing returned data!"
     )?;
 
