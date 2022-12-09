@@ -45,9 +45,11 @@ pub async fn account_data(
         })?
         .into_inner()
         .account
-        .ok_or(Error::AccountNotFound.with_origin_context(context_message!(
-            "Account not found! Make sure it's balance is non-zero!"
-        )))?;
+        .ok_or_else(|| {
+            Error::AccountNotFound.with_origin_context(context_message!(
+                "Account not found! Make sure it's balance is non-zero!"
+            ))
+        })?;
 
     Message::decode(account_data.value.as_slice()).map_err(|error| {
         Error::from(error).with_origin_context(context_message!(
