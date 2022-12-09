@@ -1,6 +1,6 @@
 FROM alpine:3.16.2
 
-COPY "./artifacts/" "/service/"
+COPY "./artifacts/feeder" "/service/"
 
 COPY "./market-data-feeder.toml" "/service/"
 
