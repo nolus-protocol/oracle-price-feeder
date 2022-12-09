@@ -256,7 +256,8 @@ fn print_tx_response(tx_commit_response: &Response) {
 
 fn read_config() -> io::Result<Config> {
     std::fs::read_to_string(
-        std::env::var_os("CONFIG_PATH").unwrap_or_else(|| OsString::from("./market-data-feeder.toml")),
+        std::env::var_os("CONFIG_PATH")
+            .unwrap_or_else(|| OsString::from("./market-data-feeder.toml")),
     )
     .and_then(|content| toml::from_str(&content).map_err(Into::into))
 }
