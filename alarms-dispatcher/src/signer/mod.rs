@@ -9,10 +9,9 @@ use cosmrs::{
 };
 use prost::Message;
 
-use crate::{
-    context_message,
-    error::{ContextError, Error, WithOriginContext},
-};
+use self::error::Result;
+
+pub mod error;
 
 pub struct Signer {
     address: String,
@@ -37,7 +36,7 @@ impl Signer {
         &self.address
     }
 
-    pub fn sign(&self, body: Body, fee: Fee) -> Result<Raw, ContextError<Error>> {
+    pub fn sign(&self, body: Body, fee: Fee) -> Result<Raw> {
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(
@@ -56,10 +55,6 @@ impl Signer {
                 })
                 .as_slice(),
             )
-            .map_err(|error| {
-                Error::Signing(error)
-                    .with_origin_context(context_message!("Signing transaction failed!"))
-            })
             .map(move |signature| {
                 TxRaw {
                     body_bytes: body,
@@ -68,6 +63,7 @@ impl Signer {
                 }
                 .into()
             })
+            .map_err(Into::into)
     }
 
     #[inline]

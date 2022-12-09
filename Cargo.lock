@@ -42,7 +42,6 @@ dependencies = [
 name = "alarms-dispatcher"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "cosmrs 0.11.0",
  "prost",
  "serde",

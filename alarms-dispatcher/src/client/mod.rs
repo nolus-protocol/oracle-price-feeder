@@ -3,11 +3,11 @@ use std::future::Future;
 use cosmrs::rpc::HttpClient as TendermintRpcClient;
 use tonic::transport::Channel;
 
-use crate::{
-    configuration::{Node, Protocol},
-    context_message,
-    error::{ContextError, Error, WithOriginContext},
-};
+use crate::configuration::{Node, Protocol};
+
+use self::error::Result;
+
+pub mod error;
 
 #[derive(Debug, Clone)]
 pub struct Client {
@@ -16,26 +16,12 @@ pub struct Client {
 }
 
 impl Client {
-    pub async fn new(config: &Node) -> Result<Self, ContextError<Error>> {
-        let json_rpc = TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str())
-            .map_err(|error| {
-                Error::from(error).with_origin_context(context_message!(
-                    "Failed connecting to JSON RPC endpoint!"
-                ))
-            })?;
+    pub async fn new(config: &Node) -> Result<Self> {
+        let json_rpc = TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str())?;
 
-        let grpc = Channel::builder(Self::construct_grpc_url(config).try_into().map_err(
-            |error| {
-                Error::from(error)
-                    .with_origin_context(context_message!("Failed to parse URL for gRPC endpoint!"))
-            },
-        )?)
-        .connect()
-        .await
-        .map_err(|error| {
-            Error::from(error)
-                .with_origin_context(context_message!("Failed connecting to gRPC endpoint!"))
-        })?;
+        let grpc = Channel::builder(Self::construct_grpc_url(config).try_into()?)
+            .connect()
+            .await?;
 
         Ok(Self { json_rpc, grpc })
     }

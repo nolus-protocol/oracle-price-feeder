@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use anyhow::Error as AnyError;
 use cosmrs::{
     bip32::{Language, Mnemonic},
     crypto::secp256k1::SigningKey,
@@ -19,30 +18,26 @@ use alarms_dispatcher::{
     account::{account_data, account_id},
     client::Client,
     configuration::{read_config, Config, Node},
-    context_message,
-    error::{ContextError, Error, WithCallerContext, WithOriginContext},
     messages::{DispatchResponse, ExecuteMsg, QueryMsg, StatusResponse},
     signer::Signer,
     tx::ContractTx,
 };
 
+pub mod error;
+
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
 pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
-type Result<T> = std::result::Result<T, ContextError<AnyError>>;
-
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> Result<(), error::Application> {
     let log_writer = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
 
     let (log_writer, _guard) = tracing_appender::non_blocking(log_writer);
 
     setup_logging(log_writer)?;
 
-    let result = dispatch_alarms(prepare_rpc().await?)
-        .await
-        .with_caller_context(context_message!("Dispatcher loop exited with an error!"));
+    let result = dispatch_alarms(prepare_rpc().await?).await;
 
     if let Err(error) = &result {
         error!("{error}");
@@ -50,10 +45,10 @@ async fn main() -> Result<()> {
 
     info!("Shutting down...");
 
-    result
+    result.map_err(Into::into)
 }
 
-fn setup_logging<W>(writer: W) -> Result<()>
+fn setup_logging<W>(writer: W) -> Result<(), tracing::dispatcher::SetGlobalDefaultError>
 where
     W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
 {
@@ -88,44 +83,30 @@ where
             })
             .finish(),
     ))
-    .map_err(|error| {
-        AnyError::from(error).with_origin_context(context_message!(
-            "Couldn't register global default tracing dispatcher!"
-        ))
-    })
 }
 
-pub async fn signing_key(derivation_path: &str, password: &str) -> Result<SigningKey> {
+pub async fn signing_key(
+    derivation_path: &str,
+    password: &str,
+) -> Result<SigningKey, error::SigningKey> {
+    use error::SigningKey as Error;
+
     println!("Enter dispatcher's account secret: ");
 
     let mut secret = String::new();
 
     // Returns number of read bytes, which is meaningless for current case.
-    let _ = BufReader::new(stdin())
-        .read_line(&mut secret)
-        .await
-        .map_err(|error| {
-            AnyError::from(error).with_origin_context(context_message!(
-                "Couldn't read secret mnemonic from the standard input!"
-            ))
-        })?;
+    let _ = BufReader::new(stdin()).read_line(&mut secret).await?;
 
     SigningKey::derive_from_path(
         Mnemonic::new(secret.trim(), Language::English)
-            .map_err(|error| {
-                AnyError::from(error).with_origin_context(context_message!(
-                    "Invalid mnemonic passed or is not in English!"
-                ))
-            })?
+            .map_err(Error::ParsingMnemonic)?
             .to_seed(password),
-        &derivation_path.parse().map_err(|error| {
-            AnyError::from(error)
-                .with_origin_context(context_message!("Couldn't parse derivation path!"))
-        })?,
+        &derivation_path
+            .parse()
+            .map_err(Error::ParsingDerivationPath)?,
     )
-    .map_err(|error| {
-        AnyError::from(error).with_origin_context(context_message!("Couldn't derive signing key!"))
-    })
+    .map_err(Error::DerivingKey)
 }
 
 pub struct RpcSetup {
@@ -134,42 +115,22 @@ pub struct RpcSetup {
     client: Client,
 }
 
-async fn prepare_rpc() -> Result<RpcSetup> {
-    let signing_key = signing_key(DEFAULT_COSMOS_HD_PATH, "")
-        .await
-        .with_caller_context(context_message!(
-            "Something went wrong while preparing signing key!"
-        ))?;
+async fn prepare_rpc() -> Result<RpcSetup, error::RpcSetup> {
+    let signing_key = signing_key(DEFAULT_COSMOS_HD_PATH, "").await?;
 
     info!("Successfully derived private key.");
 
-    let config = read_config().await.with_caller_context(context_message!(
-        "Something went wrong while load configuration!"
-    ))?;
+    let config = read_config().await?;
 
     info!("Successfully read configuration file.");
 
-    let client = Client::new(config.node())
-        .await
-        .map_err(ContextError::map)
-        .with_caller_context(context_message!(
-            "Something went wrong while constructing client services!"
-        ))?;
+    let client = Client::new(config.node()).await?;
 
     info!("Fetching account data from network...");
 
-    let account_id = account_id(&signing_key, config.node())
-        .map_err(ContextError::map)
-        .with_caller_context(context_message!(
-            "Something went wrong while deriving account ID!"
-        ))?;
+    let account_id = account_id(&signing_key, config.node())?;
 
-    let account_data = account_data(account_id.clone(), &client)
-        .await
-        .map_err(ContextError::map)
-        .with_caller_context(context_message!(
-            "Something went wrong while fetching account data!"
-        ))?;
+    let account_data = account_data(account_id.clone(), &client).await?;
 
     info!("Successfully fetched account data from network.");
 
@@ -191,13 +152,10 @@ async fn dispatch_alarms(
         config,
         client,
     }: RpcSetup,
-) -> Result<()> {
+) -> Result<(), error::DispatchAlarms> {
     let poll_period = Duration::from_secs(config.poll_period_seconds());
 
-    let query = serde_json_wasm::to_vec(&QueryMsg::Status {}).map_err(|error| {
-        AnyError::from(error)
-            .with_origin_context(context_message!("Serializing of query message failed!"))
-    })?;
+    let query = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
 
     loop {
         for (contract, type_name) in [
@@ -213,10 +171,7 @@ async fn dispatch_alarms(
                 &query,
                 type_name,
             )
-            .await
-            .with_caller_context(&format!(
-                "Something went wrong while dispatching {type_name} alarms!"
-            ))?;
+            .await?;
         }
 
         sleep(poll_period).await;
@@ -231,20 +186,12 @@ async fn dispatch_alarm<'r>(
     max_alarms: u32,
     query: &'r [u8],
     alarm_type: &'static str,
-) -> Result<()> {
+) -> Result<(), error::DispatchAlarm> {
     loop {
-        let response: StatusResponse = query_status(client, address, query)
-            .await
-            .with_caller_context(context_message!(
-                "Something went wrong while preparing query!"
-            ))?;
+        let response: StatusResponse = query_status(client, address, query).await?;
 
         if response.remaining_for_dispatch() {
-            let result = commit_tx(signer, client, config, address, max_alarms)
-                .await
-                .with_caller_context(context_message!(
-                    "Something went wrong while committing transaction!"
-                ))?;
+            let result = commit_tx(signer, client, config, address, max_alarms).await?;
 
             info!(
                 "Dispatched {} {} alarms.",
@@ -261,7 +208,11 @@ async fn dispatch_alarm<'r>(
     }
 }
 
-async fn query_status(client: &Client, address: &str, query: &[u8]) -> Result<StatusResponse> {
+async fn query_status(
+    client: &Client,
+    address: &str,
+    query: &[u8],
+) -> Result<StatusResponse, error::StatusQuery> {
     serde_json_wasm::from_slice(
         &client
             .with_grpc({
@@ -274,22 +225,13 @@ async fn query_status(client: &Client, address: &str, query: &[u8]) -> Result<St
                             query_data,
                         })
                         .await
-                        .map_err(|error| {
-                            AnyError::from(error).with_origin_context(context_message!(
-                                "Status fetching query failed due to a connection error!"
-                            ))
-                        })
                 }
             })
             .await?
             .into_inner()
             .data,
     )
-    .map_err(|error| {
-        AnyError::from(error).with_origin_context(context_message!(
-            "Deserialization of query response from JSON failed!"
-        ))
-    })
+    .map_err(Into::into)
 }
 
 async fn commit_tx(
@@ -298,16 +240,10 @@ async fn commit_tx(
     config: &Node,
     address: &str,
     max_count: u32,
-) -> Result<DispatchResponse> {
+) -> Result<DispatchResponse, error::TxCommit> {
     let tx = ContractTx::new(address.into())
         .add_message(
-            serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count }).map_err(
-                |error| {
-                    AnyError::from(error).with_origin_context(context_message!(
-                        "Serializing dispatch message to JSON failed!"
-                    ))
-                },
-            )?,
+            serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
             Vec::new(),
         )
         .commit(
@@ -315,27 +251,13 @@ async fn commit_tx(
             Fee::from_amount_and_gas(config.fee().clone(), config.gas_limit_per_alarm()),
             None,
             None,
-        )
-        .map_err(ContextError::map)
-        .with_caller_context(context_message!(
-            "Something went wrong while committing message!"
-        ))?;
+        )?;
 
     let tx_commit_response = client
         .with_json_rpc(|rpc| async move { tx.broadcast_commit(&rpc).await })
-        .await
-        .map_err(|error| {
-            AnyError::from(Error::BroadcastTx(error)).with_origin_context(context_message!(
-                "Error occurred while broadcasting commit!"
-            ))
-        })?;
+        .await?;
 
-    let response =
-        serde_json_wasm::from_slice(&tx_commit_response.deliver_tx.data).map_err(|error| {
-            AnyError::from(error).with_origin_context(context_message!(
-                "Deserialization of dispatch message response from JSON failed!"
-            ))
-        })?;
+    let response = serde_json_wasm::from_slice(&tx_commit_response.deliver_tx.data)?;
 
     signer.tx_confirmed();
 

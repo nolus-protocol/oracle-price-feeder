@@ -1,117 +1,75 @@
-use std::fmt::{Debug, Display, Formatter};
-
-use cosmrs::ErrorReport;
 use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError)]
-pub enum Error {
-    #[error("Couldn't construct a valid URI with given configuration! Context: {0}")]
-    InvalidUri(#[from] tonic::codegen::http::uri::InvalidUri),
-    #[error("gRPC transport error has occurred! Context: {0}")]
-    GrpcTransport(#[from] tonic::transport::Error),
-    #[error("gRPC request returned this status: {0}")]
-    GrpcRequest(#[from] tonic::Status),
-    #[error("Tendermint error has occurred! Context: {0}")]
-    Tendermint(#[from] cosmrs::rpc::Error),
-    #[error("Couldn't encode Protobuf message! Context: {0}")]
-    EncodeProtobuf(#[from] prost::EncodeError),
-    #[error("Couldn't decode Protobuf message! Context: {0}")]
-    DecodeProtobuf(#[from] prost::DecodeError),
-    #[error("Deriving account ID failed!")]
-    AccountIdDerivationFailed,
-    #[error("Account not found!")]
-    AccountNotFound,
-    #[error("Signing data failed! Context: {0}")]
-    Signing(ErrorReport),
-    #[error("Broadcasting transaction failed! Context: {0}")]
-    BroadcastTx(ErrorReport),
+pub enum Application {
+    #[error("Couldn't register global default tracing dispatcher! Cause: {0}")]
+    SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
+    #[error("Setting up RPC environment failed! Cause: {0}")]
+    RpcSetup(#[from] RpcSetup),
+    #[error("Alarms dispatcher loop exited unexpectedly! Cause: {0}")]
+    DispatchAlarms(#[from] DispatchAlarms),
+}
+
+pub type Result<T> = std::result::Result<T, Application>;
+
+#[derive(Debug, ThisError)]
+pub enum RpcSetup {
+    #[error("Failed to resolve signing key! Cause: {0}")]
+    SigningKey(#[from] SigningKey),
+    #[error("Failed to load application configuration! Cause: {0}")]
+    Configuration(#[from] alarms_dispatcher::configuration::error::Error),
+    #[error("Failed to set up RPC client! Cause: {0}")]
+    RpcClient(#[from] alarms_dispatcher::client::error::Error),
+    #[error("Failed to resolve account ID! Cause: {0}")]
+    AccountId(#[from] alarms_dispatcher::account::error::AccountId),
+    #[error("Failed to resolve account state data! Cause: {0}")]
+    AccountData(#[from] alarms_dispatcher::account::error::AccountData),
 }
 
 #[derive(Debug, ThisError)]
-pub struct ContextError<E>
-where
-    E: Debug + Display,
-{
-    error: E,
-    context: Vec<String>,
+pub enum SigningKey {
+    #[error("Couldn't read secret mnemonic from the standard input! Cause: {0}")]
+    ReadingMnemonic(#[from] tokio::io::Error),
+    #[error("Invalid mnemonic passed or is not in English! Cause: {0}")]
+    ParsingMnemonic(cosmrs::bip32::Error),
+    #[error("Couldn't parse derivation path! Cause: {0}")]
+    ParsingDerivationPath(cosmrs::bip32::Error),
+    #[error("Couldn't derive signing key! Cause: {0}")]
+    DerivingKey(cosmrs::bip32::Error),
 }
 
-impl<E> ContextError<E>
-where
-    E: Debug + Display,
-{
-    pub fn map<NewE>(self) -> ContextError<NewE>
-    where
-        E: Into<NewE>,
-        NewE: Debug + Display,
-    {
-        ContextError {
-            error: self.error.into(),
-            context: self.context,
-        }
-    }
-
-    pub fn into_inner(self) -> E {
-        self.error
-    }
+#[derive(Debug, ThisError)]
+pub enum DispatchAlarms {
+    #[error("Failed to serialize query message as JSON! Cause: {0}")]
+    SerializeQueryMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Failed to dispatch alarm! Cause: {0}")]
+    DispatchAlarm(#[from] DispatchAlarm),
 }
 
-impl<E> Display for ContextError<E>
-where
-    E: Debug + Display,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}\nCaller stack context:", self.error))?;
-
-        self.context
-            .iter()
-            .try_for_each(move |context| f.write_fmt(format_args!("\n\t=> {context}")))
-    }
+#[derive(Debug, ThisError)]
+pub enum DispatchAlarm {
+    #[error("Failed to query smart contract! Cause: {0}")]
+    StatusQuery(#[from] StatusQuery),
+    #[error("Failed to commit transaction! Cause: {0}")]
+    TxCommit(#[from] TxCommit),
 }
 
-pub trait WithOriginContext
-where
-    Self: Debug + Display,
-{
-    type ContextHolder: std::error::Error;
-
-    fn with_origin_context(self, context: &str) -> Self::ContextHolder;
+#[derive(Debug, ThisError)]
+pub enum StatusQuery {
+    #[error("Connection failure occurred! Cause: {0}")]
+    Connection(#[from] tonic::Status),
+    #[error("Failed to deserialize smart contract's query response from JSON! Cause: {0}")]
+    DeserializeResponse(#[from] serde_json_wasm::de::Error),
 }
 
-impl<E> WithOriginContext for E
-where
-    E: Debug + Display,
-{
-    type ContextHolder = ContextError<E>;
-
-    fn with_origin_context(self, context: &str) -> ContextError<Self> {
-        ContextError {
-            error: self,
-            context: vec![context.into()],
-        }
-    }
-}
-
-pub trait WithCallerContext {
-    fn with_caller_context(self, context: &str) -> Self;
-}
-
-impl<E> WithCallerContext for ContextError<E>
-where
-    E: Debug + Display,
-{
-    fn with_caller_context(mut self, context: &str) -> Self {
-        self.context.push(context.into());
-
-        self
-    }
-}
-
-impl<T, E> WithCallerContext for Result<T, E>
-where
-    E: WithCallerContext,
-{
-    fn with_caller_context(self, context: &str) -> Self {
-        self.map_err(move |error| error.with_caller_context(context))
-    }
+#[derive(Debug, ThisError)]
+pub enum TxCommit {
+    #[error("Failed serializing execution message as JSON! Cause: {0}")]
+    SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Failed committing and signing execution message! Cause: {0}")]
+    Commit(#[from] alarms_dispatcher::tx::error::Error),
+    #[error("Failed to broadcast committed message! Cause: {0}")]
+    Broadcast(#[from] cosmrs::ErrorReport),
+    #[error("Failed serializing execution response message from JSON! Cause: {0}")]
+    DeserializeExecutionResponse(#[from] serde_json_wasm::de::Error),
 }
