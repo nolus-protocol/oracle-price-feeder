@@ -15,17 +15,13 @@ use tokio::{
 };
 use tracing::{error, info, Dispatch};
 
-use alarms_dispatcher::error::{ContextError, WithOriginContext};
 use alarms_dispatcher::{
     account::{account_data, account_id},
     client::Client,
     configuration::{read_config, Config, Node},
     context_message,
-    error::{Error, WithCallerContext},
-    messages::{
-        ExecuteMsg, ExecuteResponse, OracleDispatchResponse, OracleStatusResponse, QueryMsg,
-        QueryResponse,
-    },
+    error::{ContextError, Error, WithCallerContext, WithOriginContext},
+    messages::{DispatchResponse, ExecuteMsg, QueryMsg, StatusResponse},
     signer::Signer,
     tx::ContractTx,
 };
@@ -204,39 +200,30 @@ async fn dispatch_alarms(
     })?;
 
     loop {
-        // TODO uncomment & refactor accordingly when after discussions
-        //  about implementation
-        // let time_alarms_response = dispatch_alarm::<TimeAlarmsResponse>(
-        //     &mut signer,
-        //     &client,
-        //     config.node(),
-        //     config.time_alarms().address(),
-        //     config.time_alarms().max_alarms_group(),
-        //     query_data.clone(),
-        //     "time",
-        // )
-        // .await?;
-
-        dispatch_alarm::<OracleStatusResponse, OracleDispatchResponse>(
-            &mut signer,
-            &client,
-            config.node(),
-            config.market_price_oracle().address(),
-            config.market_price_oracle().max_alarms_group(),
-            &query,
-            "market price",
-        )
-        .await
-        .with_caller_context("Something went wrong while dispatching market price alarm!")?;
-
-        // TODO uncomment when after discussions about implementation
-        // sleep_with_response(&time_alarms_response, poll_period).await;
+        for (contract, type_name) in [
+            (config.market_price_oracle(), "market price"),
+            (config.time_alarms(), "time"),
+        ] {
+            dispatch_alarm(
+                &mut signer,
+                &client,
+                config.node(),
+                contract.address(),
+                contract.max_alarms_group(),
+                &query,
+                type_name,
+            )
+            .await
+            .with_caller_context(&format!(
+                "Something went wrong while dispatching {type_name} alarms!"
+            ))?;
+        }
 
         sleep(poll_period).await;
     }
 }
 
-async fn dispatch_alarm<'r, Q, E>(
+async fn dispatch_alarm<'r>(
     signer: &'r mut Signer,
     client: &'r Client,
     config: &'r Node,
@@ -244,43 +231,16 @@ async fn dispatch_alarm<'r, Q, E>(
     max_alarms: u32,
     query: &'r [u8],
     alarm_type: &'static str,
-) -> Result<()>
-where
-    Q: QueryResponse,
-    E: ExecuteResponse,
-{
+) -> Result<()> {
     loop {
-        let response: Q = serde_json_wasm::from_slice(
-            &client
-                .with_grpc({
-                    let query_data = query.to_vec();
-
-                    move |rpc| async move {
-                        WasmQueryClient::new(rpc)
-                            .smart_contract_state(QuerySmartContractStateRequest {
-                                address: address.into(),
-                                query_data,
-                            })
-                            .await
-                            .map_err(|error| {
-                                AnyError::from(error).with_origin_context(context_message!(
-                                    "Status fetching query failed due to a connection error!"
-                                ))
-                            })
-                    }
-                })
-                .await?
-                .into_inner()
-                .data,
-        )
-        .map_err(|error| {
-            AnyError::from(error).with_origin_context(context_message!(
-                "Deserialization of query response from JSON failed!"
-            ))
-        })?;
+        let response: StatusResponse = query_status(client, address, query)
+            .await
+            .with_caller_context(context_message!(
+                "Something went wrong while preparing query!"
+            ))?;
 
         if response.remaining_for_dispatch() {
-            let result: E = commit_tx(signer, client, config, address, max_alarms)
+            let result = commit_tx(signer, client, config, address, max_alarms)
                 .await
                 .with_caller_context(context_message!(
                     "Something went wrong while committing transaction!"
@@ -301,16 +261,44 @@ where
     }
 }
 
-async fn commit_tx<E>(
+async fn query_status(client: &Client, address: &str, query: &[u8]) -> Result<StatusResponse> {
+    serde_json_wasm::from_slice(
+        &client
+            .with_grpc({
+                let query_data = query.to_vec();
+
+                move |rpc| async move {
+                    WasmQueryClient::new(rpc)
+                        .smart_contract_state(QuerySmartContractStateRequest {
+                            address: address.into(),
+                            query_data,
+                        })
+                        .await
+                        .map_err(|error| {
+                            AnyError::from(error).with_origin_context(context_message!(
+                                "Status fetching query failed due to a connection error!"
+                            ))
+                        })
+                }
+            })
+            .await?
+            .into_inner()
+            .data,
+    )
+    .map_err(|error| {
+        AnyError::from(error).with_origin_context(context_message!(
+            "Deserialization of query response from JSON failed!"
+        ))
+    })
+}
+
+async fn commit_tx(
     signer: &mut Signer,
     client: &Client,
     config: &Node,
     address: &str,
     max_count: u32,
-) -> Result<E>
-where
-    E: ExecuteResponse,
-{
+) -> Result<DispatchResponse> {
     let tx = ContractTx::new(address.into())
         .add_message(
             serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count }).map_err(
@@ -353,34 +341,3 @@ where
 
     Ok(response)
 }
-
-// TODO uncomment & refactor accordingly when after discussions
-//  about implementation
-// async fn sleep_with_response(response: &TimeAlarmsResponse, poll_period: Duration) {
-//     sleep(
-//         handle_time_alarms_response(response)
-//             .await
-//             .unwrap_or(poll_period)
-//             .min(poll_period),
-//     )
-//     .await;
-// }
-//
-// async fn handle_time_alarms_response(response: &TimeAlarmsResponse) -> Option<Duration> {
-//     if let TimeAlarmsResponse::NextAlarm { timestamp } = response {
-//         let Some(until) = SystemTime::UNIX_EPOCH
-//             .checked_add(Duration::from_nanos(timestamp.as_nanos())) else {
-//             error!(unix_timestamp = %timestamp.as_nanos(), "Couldn't calculate time of next alarm!");
-//
-//             return None;
-//         };
-//
-//         return log_error!(
-//             until.duration_since(SystemTime::now()),
-//             "Error occurred while calculating duration between current time and time of next alarm!"
-//         )
-//         .ok();
-//     }
-//
-//     None
-// }
