@@ -51,7 +51,7 @@ pub enum ExecuteMsg {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum AlarmsResponse {
-    RemainingForDispatch { count: u128 },
+    RemainingForDispatch {},
     NextAlarm { unix_time: u64 },
 }
 

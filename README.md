@@ -125,7 +125,7 @@ has to be rebuilt as it's part of the image.*
 The command to do so is the following:
 
 ```shell
-docker build --rm -f Runnable.Dockerfile -t market-data-feeder .
+docker build --rm -f Feeder.Dockerfile -t market-data-feeder .
 ```
 
 ## Running service
