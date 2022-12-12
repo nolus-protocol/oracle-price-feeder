@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
-use cosmos_sdk_proto::cosmos::auth::v1beta1::BaseAccount;
 use cosmrs::{
     cosmwasm::MsgExecuteContract,
+    proto::cosmos::auth::v1beta1::BaseAccount,
     rpc::{self},
     tx::{Msg, Raw},
     AccountId,
@@ -12,7 +12,11 @@ use serde::{Deserialize, Serialize};
 use crate::{configuration::Oracle, provider::Price};
 
 use self::error::Cosmos as CosmosError;
-pub use self::{client::Client, tx::Builder as TxBuilder, wallet::Wallet};
+pub use self::{
+    client::Client,
+    tx::{Builder as TxBuilder, TxResponse},
+    wallet::Wallet,
+};
 
 pub mod client;
 pub mod error;

@@ -12,7 +12,7 @@ use market_data_feeder::{
     configuration::{Config, Providers},
     cosmos::{
         construct_rpc_client, construct_tx, get_account_data, get_sender_account_id, Client,
-        ExecuteMsg, Wallet,
+        ExecuteMsg, TxResponse, Wallet,
     },
     error::Result,
     provider::{Factory, Provider, Type},
@@ -57,6 +57,11 @@ async fn main() -> Result<()> {
             .finish(),
     ))
     .expect("Couldn't register global default tracing dispatcher!");
+
+    info!(concat!(
+        "Running version built on: ",
+        env!("BUILD_START_TIME_DATE", "No build time provided!")
+    ));
 
     let wallet = {
         println!("Enter feeder's account secret: ");
@@ -226,29 +231,37 @@ fn print_tx_response(tx_commit_response: &Response) {
         info!("Hash: {}", tx_commit_response.hash);
 
         for (tx_name, tx_result) in [
-            ("Check", &tx_commit_response.check_tx),
-            ("Deliver", &tx_commit_response.deliver_tx),
+            ("Check", &tx_commit_response.check_tx as &dyn TxResponse),
+            ("Deliver", &tx_commit_response.deliver_tx as &dyn TxResponse),
         ] {
-            if tx_result.code.is_ok() {
-                debug!("[{}] Log: {}", tx_name, tx_result.log);
-            } else {
-                error!(
-                    log = %tx_result.log,
-                    "[{}] Error with code {} has occurred!",
-                    tx_name,
-                    tx_result.code.value(),
-                );
+            {
+                let (code, log) = (tx_result.code(), tx_result.log());
+
+                if code.is_ok() {
+                    debug!("[{}] Log: {}", tx_name, log);
+                } else {
+                    error!(
+                        log = %log,
+                        "[{}] Error with code {} has occurred!",
+                        tx_name,
+                        code.value(),
+                    );
+                }
             }
 
-            if tx_result.gas_wanted < tx_result.gas_used {
-                error!(
-                    wanted = %tx_result.gas_wanted,
-                    used = %tx_result.gas_used,
-                    "[{}] Out of gas!",
-                    tx_name,
-                );
-            } else {
-                info!("[{}] Gas used: {}", tx_name, tx_result.gas_used);
+            {
+                let (gas_wanted, gas_used) = (tx_result.gas_wanted(), tx_result.gas_used());
+
+                if gas_wanted < gas_used {
+                    error!(
+                        wanted = %gas_wanted,
+                        used = %gas_used,
+                        "[{}] Out of gas!",
+                        tx_name,
+                    );
+                } else {
+                    info!("[{}] Gas used: {}", tx_name, gas_used);
+                }
             }
         }
     });

@@ -1,4 +1,4 @@
-use cosmos_sdk_proto::{
+use cosmrs::proto::{
     cosmos::auth::v1beta1::{query_client::QueryClient, BaseAccount, QueryAccountRequest},
     cosmwasm::wasm::v1::{
         query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,

@@ -37,6 +37,11 @@ async fn main() -> Result<(), error::Application> {
 
     setup_logging(log_writer)?;
 
+    info!(concat!(
+        "Running version built on: ",
+        env!("BUILD_START_TIME_DATE", "No build time provided!")
+    ));
+
     let result = dispatch_alarms(prepare_rpc().await?).await;
 
     if let Err(error) = &result {
