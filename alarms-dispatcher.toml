@@ -3,7 +3,7 @@ poll_period_seconds = 60
 [node]
 json_rpc_protocol = "http"
 grpc_protocol = "http"
-host = "localhost"
+host = "http://host.docker.internal"
 json_rpc_port = 26612
 # json_rpc_api_path = "/json-rpc/api"
 grpc_port = 26615
