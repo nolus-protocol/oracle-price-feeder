@@ -160,7 +160,7 @@ async fn dispatch_alarms(
 ) -> Result<(), error::DispatchAlarms> {
     let poll_period = Duration::from_secs(config.poll_period_seconds());
 
-    let query = serde_json_wasm::to_vec(&QueryMsg::Status {})?;
+    let query = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
     loop {
         for (contract, type_name) in [
