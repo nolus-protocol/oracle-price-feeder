@@ -12,7 +12,7 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader as AsyncBufReader},
     time::sleep,
 };
-use tracing::{error, info, Dispatch, debug};
+use tracing::{debug, error, info, Dispatch};
 
 use alarms_dispatcher::{
     account::{account_data, account_id},
@@ -222,33 +222,31 @@ async fn query_status(
     address: &str,
     query: &[u8],
 ) -> Result<StatusResponse, error::StatusQuery> {
-    serde_json_wasm::from_slice(
-        &{
-            let data = client
-                .with_grpc({
-                    let query_data = query.to_vec();
+    serde_json_wasm::from_slice(&{
+        let data = client
+            .with_grpc({
+                let query_data = query.to_vec();
 
-                    move |rpc| async move {
-                        WasmQueryClient::new(rpc)
-                            .smart_contract_state(QuerySmartContractStateRequest {
-                                address: address.into(),
-                                query_data,
-                            })
-                            .await
-                    }
-                })
-                .await?
-                .into_inner()
-                .data;
+                move |rpc| async move {
+                    WasmQueryClient::new(rpc)
+                        .smart_contract_state(QuerySmartContractStateRequest {
+                            address: address.into(),
+                            query_data,
+                        })
+                        .await
+                }
+            })
+            .await?
+            .into_inner()
+            .data;
 
-            debug!(
-                data = %String::from_utf8_lossy(&data),
-                "gRPC status response from {address} returned successfully!",
-            );
+        debug!(
+            data = %String::from_utf8_lossy(&data),
+            "gRPC status response from {address} returned successfully!",
+        );
 
-            data
-        },
-    )
+        data
+    })
     .map_err(Into::into)
 }
 
