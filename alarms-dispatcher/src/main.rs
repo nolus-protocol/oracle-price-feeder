@@ -9,10 +9,10 @@ use cosmrs::{
     tx::Fee,
 };
 use tokio::{
-    io::{stdin, AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, BufReader as AsyncBufReader},
     time::sleep,
 };
-use tracing::{error, info, Dispatch};
+use tracing::{error, info, Dispatch, debug};
 
 use alarms_dispatcher::{
     account::{account_data, account_id},
@@ -24,6 +24,7 @@ use alarms_dispatcher::{
 };
 
 pub mod error;
+pub mod log;
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
@@ -33,7 +34,8 @@ pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 async fn main() -> Result<(), error::Application> {
     let log_writer = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
 
-    let (log_writer, _guard) = tracing_appender::non_blocking(log_writer);
+    let (log_writer, _guard) =
+        tracing_appender::non_blocking(log::CombinedWriter::new(std::io::stdout(), log_writer));
 
     setup_logging(log_writer)?;
 
@@ -73,7 +75,7 @@ where
                 {
                     use std::{env::var_os, ffi::OsStr};
 
-                    if var_os("MARKET_DATA_FEEDER_DEBUG")
+                    if var_os("ALARMS_DISPATCHER_DEBUG")
                         .map(|value| {
                             [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
                                 .contains(&value.as_os_str())
@@ -101,7 +103,9 @@ pub async fn signing_key(
     let mut secret = String::new();
 
     // Returns number of read bytes, which is meaningless for current case.
-    let _ = BufReader::new(stdin()).read_line(&mut secret).await?;
+    let _ = AsyncBufReader::new(tokio::io::stdin())
+        .read_line(&mut secret)
+        .await?;
 
     SigningKey::derive_from_path(
         Mnemonic::new(secret.trim(), Language::English)
@@ -219,22 +223,31 @@ async fn query_status(
     query: &[u8],
 ) -> Result<StatusResponse, error::StatusQuery> {
     serde_json_wasm::from_slice(
-        &client
-            .with_grpc({
-                let query_data = query.to_vec();
+        &{
+            let data = client
+                .with_grpc({
+                    let query_data = query.to_vec();
 
-                move |rpc| async move {
-                    WasmQueryClient::new(rpc)
-                        .smart_contract_state(QuerySmartContractStateRequest {
-                            address: address.into(),
-                            query_data,
-                        })
-                        .await
-                }
-            })
-            .await?
-            .into_inner()
-            .data,
+                    move |rpc| async move {
+                        WasmQueryClient::new(rpc)
+                            .smart_contract_state(QuerySmartContractStateRequest {
+                                address: address.into(),
+                                query_data,
+                            })
+                            .await
+                    }
+                })
+                .await?
+                .into_inner()
+                .data;
+
+            debug!(
+                data = %String::from_utf8_lossy(&data),
+                "gRPC status response from {address} returned successfully!",
+            );
+
+            data
+        },
     )
     .map_err(Into::into)
 }
