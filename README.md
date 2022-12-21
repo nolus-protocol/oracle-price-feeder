@@ -1,5 +1,7 @@
 # Market Data Feeder
 
+<br /><p align="center"><img alt="Market Data Feeder" src="docs/price-feeder-logo.svg" width="100"/></p><br />
+
 Market Data feeder is an off-chain service that collects prices from configured price providers and push them to the
 Oracle contract
 Currently only the Osmosis client is implemented
