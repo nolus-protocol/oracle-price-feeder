@@ -12,7 +12,7 @@ use tokio::{
     io::{AsyncBufReadExt, BufReader as AsyncBufReader},
     time::sleep,
 };
-use tracing::{debug, error, info, Dispatch};
+use tracing::{debug, error, info, info_span, Dispatch};
 
 use alarms_dispatcher::{
     account::{account_data, account_id},
@@ -20,7 +20,7 @@ use alarms_dispatcher::{
     configuration::{read_config, Config, Node},
     messages::{DispatchResponse, ExecuteMsg, QueryMsg, StatusResponse},
     signer::Signer,
-    tx::ContractTx,
+    tx::{ContractTx, TxResponse},
 };
 
 pub mod error;
@@ -273,9 +273,48 @@ async fn commit_tx(
         .with_json_rpc(|rpc| async move { tx.broadcast_commit(&rpc).await })
         .await?;
 
-    let response = serde_json_wasm::from_slice(&tx_commit_response.deliver_tx.data)?;
-
     signer.tx_confirmed();
+
+    info_span!("Tx").in_scope(|| {
+        info!("Hash: {}", tx_commit_response.hash);
+
+        for (tx_name, tx_result) in [
+            ("Check", &tx_commit_response.check_tx as &dyn TxResponse),
+            ("Deliver", &tx_commit_response.deliver_tx as &dyn TxResponse),
+        ] {
+            {
+                let (code, log) = (tx_result.code(), tx_result.log());
+
+                if code.is_ok() {
+                    debug!("[{}] Log: {}", tx_name, log);
+                } else {
+                    error!(
+                        log = %log,
+                        "[{}] Error with code {} has occurred!",
+                        tx_name,
+                        code.value(),
+                    );
+                }
+            }
+
+            {
+                let (gas_wanted, gas_used) = (tx_result.gas_wanted(), tx_result.gas_used());
+
+                if gas_wanted < gas_used {
+                    error!(
+                        wanted = %gas_wanted,
+                        used = %gas_used,
+                        "[{}] Out of gas!",
+                        tx_name,
+                    );
+                } else {
+                    info!("[{}] Gas used: {}", tx_name, gas_used);
+                }
+            }
+        }
+    });
+
+    let response = serde_json_wasm::from_slice(&tx_commit_response.deliver_tx.data)?;
 
     Ok(response)
 }

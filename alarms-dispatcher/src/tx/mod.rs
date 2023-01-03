@@ -1,5 +1,9 @@
 use cosmrs::{
     proto::{cosmos::base::v1beta1::Coin, cosmwasm::wasm::v1::MsgExecuteContract},
+    tendermint::{
+        abci::response::{CheckTx, DeliverTx},
+        abci::Code,
+    },
     tx::{Body, Fee, MessageExt, Raw as RawTx},
     Any,
 };
@@ -70,5 +74,51 @@ impl ContractTx {
                 fee,
             )
             .map_err(Into::into)
+    }
+}
+
+pub trait TxResponse {
+    fn code(&self) -> Code;
+
+    fn log(&self) -> &str;
+
+    fn gas_wanted(&self) -> i64;
+
+    fn gas_used(&self) -> i64;
+}
+
+impl TxResponse for CheckTx {
+    fn code(&self) -> Code {
+        self.code
+    }
+
+    fn log(&self) -> &str {
+        &self.log
+    }
+
+    fn gas_wanted(&self) -> i64 {
+        self.gas_wanted
+    }
+
+    fn gas_used(&self) -> i64 {
+        self.gas_used
+    }
+}
+
+impl TxResponse for DeliverTx {
+    fn code(&self) -> Code {
+        self.code
+    }
+
+    fn log(&self) -> &str {
+        &self.log
+    }
+
+    fn gas_wanted(&self) -> i64 {
+        self.gas_wanted
+    }
+
+    fn gas_used(&self) -> i64 {
+        self.gas_used
     }
 }
