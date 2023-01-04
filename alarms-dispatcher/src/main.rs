@@ -167,9 +167,19 @@ async fn dispatch_alarms(
     let query = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
     loop {
-        for (contract, type_name) in [
-            (config.market_price_oracle(), "market price"),
-            (config.time_alarms(), "time"),
+        for (contract, type_name, to_error) in [
+            (
+                config.market_price_oracle(),
+                "market price",
+                error::DispatchAlarms::DispatchPriceAlarm
+                    as fn(error::DispatchAlarm) -> error::DispatchAlarms,
+            ),
+            (
+                config.time_alarms(),
+                "time",
+                error::DispatchAlarms::DispatchTimeAlarm
+                    as fn(error::DispatchAlarm) -> error::DispatchAlarms,
+            ),
         ] {
             dispatch_alarm(
                 &mut signer,
@@ -180,7 +190,8 @@ async fn dispatch_alarms(
                 &query,
                 type_name,
             )
-            .await?;
+            .await
+            .map_err(to_error)?;
         }
 
         sleep(poll_period).await;

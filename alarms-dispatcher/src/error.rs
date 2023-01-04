@@ -42,8 +42,10 @@ pub enum SigningKey {
 pub enum DispatchAlarms {
     #[error("Failed to serialize query message as JSON! Cause: {0}")]
     SerializeQueryMessage(#[from] serde_json_wasm::ser::Error),
-    #[error("Failed to dispatch alarm! Cause: {0}")]
-    DispatchAlarm(#[from] DispatchAlarm),
+    #[error("Failed to dispatch time alarm! Cause: {0}")]
+    DispatchTimeAlarm(DispatchAlarm),
+    #[error("Failed to dispatch price alarm! Cause: {0}")]
+    DispatchPriceAlarm(DispatchAlarm),
 }
 
 #[derive(Debug, ThisError)]
