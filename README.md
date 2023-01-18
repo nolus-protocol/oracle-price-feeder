@@ -60,12 +60,15 @@ nolusd tx bank send $(nolusd keys show -a reserve) $(nolusd keys show -a wallet)
 
 * Build feeder service binary
 
-```shell
-cargo build --release
-```
+  ```shell
+  cargo build --release
+  ```
 
 * Configuration
-  Edit `market-data-feeder.toml` file
+  At the root of the repository there are two files: `market-data-feeder.main.toml` and `market-data-feeder.test.toml`.
+  Depending on whether you want to run the feeder against the main-net or the test-net, rename the corresponding file to `market-data-feeder.toml`.
+
+  Editing the `market-data-feeder.toml` file:
 
 | Key            | Value                    | Default | Description                                                                                                                                       |
 |----------------|--------------------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -109,13 +112,19 @@ with the environment variable `MARKET_DATA_FEEDER_DEBUG` to one of the following
 First you the project has to be compiled.
 This has to be done whenever the codebase is changed.
 
+Before running the command, if you are targeting the test-net, then run:
+
+```shell
+NET_NAME="test"
+```
+
 The command to do so is:
 
 ```shell
 docker build --rm -f Compile.Dockerfile -t compile-market-data-feeder . && \
   docker run -v $(pwd):/code/ -v $(pwd)/artifacts/:/artifacts/ \
     -v market_data_feeder_cache:/code/target/ -v cargo_cache:/usr/local/cargo/ \
-    --rm compile-market-data-feeder
+    --rm compile-market-data-feeder --build-arg net_name=${NET_NAME:-main}
 ```
 
 ## Building service's image
