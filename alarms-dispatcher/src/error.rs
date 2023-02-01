@@ -68,6 +68,10 @@ pub enum StatusQuery {
 pub enum TxCommit {
     #[error("Failed serializing execution message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Attempt to run simulation resulted in an error! Cause: {0}")]
+    SimulationRunError(#[from] tonic::Status),
+    #[error("Simulation result is missing gas into!")]
+    MissingSimulationGasInto,
     #[error("Failed committing and signing execution message! Cause: {0}")]
     Commit(#[from] alarms_dispatcher::tx::error::Error),
     #[error("Failed to broadcast committed message! Cause: {0}")]

@@ -14,11 +14,13 @@ use self::error::Result;
 
 pub mod error;
 
+#[derive(Clone)]
 struct Msg {
     message: Vec<u8>,
     funds: Vec<Coin>,
 }
 
+#[derive(Clone)]
 pub struct ContractTx {
     contract: String,
     messages: Vec<Msg>,

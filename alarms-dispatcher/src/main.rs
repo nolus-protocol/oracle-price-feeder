@@ -3,9 +3,16 @@ use std::time::Duration;
 use cosmrs::{
     bip32::{Language, Mnemonic},
     crypto::secp256k1::SigningKey,
-    proto::cosmwasm::wasm::v1::{
-        query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+    proto::{
+        cosmos::{
+            base::abci::v1beta1::GasInfo,
+            tx::v1beta1::{service_client::ServiceClient, SimulateRequest},
+        },
+        cosmwasm::wasm::v1::{
+            query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+        },
     },
+    tendermint::Hash,
     tx::Fee,
 };
 use tokio::{
@@ -268,64 +275,120 @@ async fn commit_tx(
     address: &str,
     max_count: u32,
 ) -> Result<DispatchResponse, error::TxCommit> {
-    let tx = ContractTx::new(address.into())
-        .add_message(
-            serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
-            Vec::new(),
-        )
-        .commit(
-            signer,
-            Fee::from_amount_and_gas(config.fee().clone(), config.gas_limit_per_alarm()),
-            None,
-            None,
-        )?;
+    let unsigned_tx = ContractTx::new(address.into()).add_message(
+        serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
+        Vec::new(),
+    );
+
+    let gas_info =
+        simulation_gas_info(signer, client, config, max_count, unsigned_tx.clone()).await?;
+
+    let signed_tx = unsigned_tx.commit(
+        signer,
+        Fee::from_amount_and_gas(
+            config.fee().clone(),
+            gas_info
+                .gas_used
+                .checked_mul(11)
+                .and_then(|result| result.checked_div(10))
+                .unwrap_or(gas_info.gas_used),
+        ),
+        None,
+        None,
+    )?;
 
     let tx_commit_response = client
-        .with_json_rpc(|rpc| async move { tx.broadcast_commit(&rpc).await })
+        .with_json_rpc(|rpc| async move { signed_tx.broadcast_commit(&rpc).await })
         .await?;
 
     signer.tx_confirmed();
 
-    info_span!("Tx").in_scope(|| {
-        info!("Hash: {}", tx_commit_response.hash);
-
-        for (tx_name, tx_result) in [
-            ("Check", &tx_commit_response.check_tx as &dyn TxResponse),
-            ("Deliver", &tx_commit_response.deliver_tx as &dyn TxResponse),
-        ] {
-            {
-                let (code, log) = (tx_result.code(), tx_result.log());
-
-                if code.is_ok() {
-                    debug!("[{}] Log: {}", tx_name, log);
-                } else {
-                    error!(
-                        log = %log,
-                        "[{}] Error with code {} has occurred!",
-                        tx_name,
-                        code.value(),
-                    );
-                }
-            }
-
-            {
-                let (gas_wanted, gas_used) = (tx_result.gas_wanted(), tx_result.gas_used());
-
-                if gas_wanted < gas_used {
-                    error!(
-                        wanted = %gas_wanted,
-                        used = %gas_used,
-                        "[{}] Out of gas!",
-                        tx_name,
-                    );
-                } else {
-                    info!("[{}] Gas used: {}", tx_name, gas_used);
-                }
-            }
-        }
-    });
-
     let response = serde_json_wasm::from_slice(&tx_commit_response.deliver_tx.data)?;
 
+    info_span!("Tx").in_scope(|| {
+        log_commit_response(
+            tx_commit_response.hash,
+            &[
+                ("Check", &tx_commit_response.check_tx as &dyn TxResponse),
+                ("Deliver", &tx_commit_response.deliver_tx as &dyn TxResponse),
+            ],
+            &response
+        )
+    });
+
     Ok(response)
+}
+
+async fn simulation_gas_info(
+    signer: &mut Signer,
+    client: &Client,
+    config: &Node,
+    max_count: u32,
+    unsigned_tx: ContractTx,
+) -> Result<GasInfo, error::TxCommit> {
+    let simulation_tx = unsigned_tx
+        .commit(
+            signer,
+            Fee::from_amount_and_gas(
+                config.fee().clone(),
+                config
+                    .gas_limit_per_alarm()
+                    .saturating_mul(max_count.into()),
+            ),
+            None,
+            None,
+        )?
+        .to_bytes()?;
+
+    client
+        .with_grpc(move |channel| async move {
+            ServiceClient::new(channel)
+                .simulate(SimulateRequest {
+                    tx_bytes: simulation_tx,
+                    ..Default::default()
+                })
+                .await
+        })
+        .await?
+        .into_inner()
+        .gas_info
+        .ok_or(error::TxCommit::MissingSimulationGasInto)
+}
+
+fn log_commit_response(hash: Hash, results: &[(&str, &dyn TxResponse)], dispatch_response: &DispatchResponse) {
+    info!("Hash: {}", hash);
+
+    info!("Dispatched {} alarms in total.", dispatch_response.dispatched_alarms());
+
+    for &(tx_name, tx_result) in results {
+        {
+            let (code, log) = (tx_result.code(), tx_result.log());
+
+            if code.is_ok() {
+                debug!("[{}] Log: {}", tx_name, log);
+            } else {
+                error!(
+                    log = %log,
+                    "[{}] Error with code {} has occurred!",
+                    tx_name,
+                    code.value(),
+                );
+            }
+        }
+
+        {
+            let (gas_wanted, gas_used) = (tx_result.gas_wanted(), tx_result.gas_used());
+
+            if gas_wanted < gas_used {
+                error!(
+                    wanted = %gas_wanted,
+                    used = %gas_used,
+                    "[{}] Out of gas!",
+                    tx_name,
+                );
+            } else {
+                info!("[{}] Gas used: {}", tx_name, gas_used);
+            }
+        }
+    }
 }

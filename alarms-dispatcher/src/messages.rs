@@ -26,7 +26,7 @@ impl StatusResponse {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct DispatchResponse(pub u32);
+pub struct DispatchResponse(u32);
 
 impl DispatchResponse {
     pub fn dispatched_alarms(&self) -> u32 {
