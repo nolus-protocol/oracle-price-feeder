@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "chain-comms",
     "market-data-feeder",
     "alarms-dispatcher",
 ]
@@ -9,6 +10,9 @@ resolver = "2"
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
+
+[workspace.dependencies]
+chain-comms = { path = "./chain-comms" }
 
 [profile.release]
 overflow-checks = true

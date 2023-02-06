@@ -11,12 +11,15 @@ grpc_port = 26615
 address_prefix = "nolus"
 chain_id = "nolus-local"
 fee = { amount = "1500", denom = "unls" }
-gas_limit_per_alarm = 500_000
+gas_adjustment_numerator = 1015
+gas_adjustment_denominator = 1000
 
 [time_alarms]
 address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
 max_alarms_group = 16
+gas_limit_per_alarm = 500_000
 
 [market_price_oracle]
 address = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
 max_alarms_group = 16
+gas_limit_per_alarm = 500_000

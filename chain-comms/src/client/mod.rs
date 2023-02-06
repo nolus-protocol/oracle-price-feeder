@@ -3,7 +3,7 @@ use std::future::Future;
 use cosmrs::rpc::HttpClient as TendermintRpcClient;
 use tonic::transport::Channel;
 
-use crate::configuration::{Node, Protocol};
+use crate::config::{Node, Protocol};
 
 use self::error::Result;
 

@@ -5,13 +5,13 @@ use cosmrs::{
 };
 use prost::Message;
 
-use crate::{client::Client, configuration::Node};
+use crate::{client::Client, config::Node};
 
 use self::error::{AccountData as AccountDataError, AccountDataResult, AccountIdResult};
 
 pub mod error;
 
-pub fn account_id(signing_key: &SigningKey, config: &Node) -> AccountIdResult<AccountId> {
+pub fn account_id(config: &Node, signing_key: &SigningKey) -> AccountIdResult<AccountId> {
     signing_key
         .public_key()
         .account_id(config.address_prefix())
@@ -19,8 +19,8 @@ pub fn account_id(signing_key: &SigningKey, config: &Node) -> AccountIdResult<Ac
 }
 
 pub async fn account_data(
-    account_id: AccountId,
     client: &Client,
+    account_id: AccountId,
 ) -> AccountDataResult<BaseAccount> {
     let account_data = client
         .with_grpc(|grpc| async {

@@ -5,6 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/alarms-dispatcher/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/market-data-feeder/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/chain-comms/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/artifacts" />
     </content>

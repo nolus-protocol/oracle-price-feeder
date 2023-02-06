@@ -1,7 +1,12 @@
+use std::path::Path;
+
 use cosmrs::{
     proto::cosmos::base::v1beta1::Coin as CoinProto, tendermint::chain::Id as ChainId, Coin,
 };
-use serde::{de::Error as DeserializeError, Deserialize, Deserializer, Serialize};
+use serde::{
+    de::{DeserializeOwned, Error as DeserializeError},
+    Deserialize, Deserializer, Serialize,
+};
 use tokio::fs::read_to_string;
 
 use self::error::Result as ModuleResult;
@@ -41,29 +46,8 @@ pub struct Node {
     chain_id: ChainId,
     #[serde(deserialize_with = "deserialize_coin")]
     fee: Coin,
-    gas_limit_per_alarm: u64,
-}
-
-fn deserialize_chain_id<'de, D>(deserializer: D) -> Result<ChainId, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    String::deserialize(deserializer)?
-        .parse()
-        .map_err(DeserializeError::custom)
-}
-
-fn deserialize_coin<'de, D>(deserializer: D) -> Result<Coin, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    <CoinDTO as Deserialize>::deserialize(deserializer)
-        .map(|coin| CoinProto {
-            denom: coin.denom,
-            amount: coin.amount,
-        })?
-        .try_into()
-        .map_err(D::Error::custom)
+    gas_adjustment_numerator: u64,
+    gas_adjustment_denominator: u64,
 }
 
 impl Node {
@@ -107,55 +91,47 @@ impl Node {
         &self.fee
     }
 
-    pub fn gas_limit_per_alarm(&self) -> u64 {
-        self.gas_limit_per_alarm
+    pub fn gas_adjustment_numerator(&self) -> u64 {
+        self.gas_adjustment_numerator
+    }
+
+    pub fn gas_adjustment_denominator(&self) -> u64 {
+        self.gas_adjustment_denominator
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[must_use]
-pub struct Contract {
-    address: String,
-    max_alarms_group: u32,
-}
-
-impl Contract {
-    pub fn address(&self) -> &str {
-        &self.address
-    }
-
-    pub fn max_alarms_group(&self) -> u32 {
-        self.max_alarms_group
+impl AsRef<Self> for Node {
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[must_use]
-pub struct Config {
-    poll_period_seconds: u64,
-    node: Node,
-    time_alarms: Contract,
-    market_price_oracle: Contract,
+fn deserialize_chain_id<'de, D>(deserializer: D) -> Result<ChainId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer)?
+        .parse()
+        .map_err(DeserializeError::custom)
 }
 
-impl Config {
-    pub const fn poll_period_seconds(&self) -> u64 {
-        self.poll_period_seconds
-    }
-
-    pub const fn node(&self) -> &Node {
-        &self.node
-    }
-
-    pub const fn time_alarms(&self) -> &Contract {
-        &self.time_alarms
-    }
-
-    pub const fn market_price_oracle(&self) -> &Contract {
-        &self.market_price_oracle
-    }
+fn deserialize_coin<'de, D>(deserializer: D) -> Result<Coin, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    <CoinDTO as Deserialize>::deserialize(deserializer)
+        .map(|coin| CoinProto {
+            denom: coin.denom,
+            amount: coin.amount,
+        })?
+        .try_into()
+        .map_err(D::Error::custom)
 }
 
-pub async fn read_config() -> ModuleResult<Config> {
-    toml::from_str(&read_to_string("alarms-dispatcher.toml").await?).map_err(Into::into)
+pub async fn read_config<C, P>(path: P) -> ModuleResult<C>
+where
+    C: DeserializeOwned + AsRef<Node>,
+    P: AsRef<Path>,
+{
+    toml::from_str(&read_to_string(path).await?).map_err(Into::into)
 }
