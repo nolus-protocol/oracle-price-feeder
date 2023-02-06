@@ -2,13 +2,14 @@ use std::{borrow::Cow, str::FromStr};
 
 use async_trait::async_trait;
 
+use chain_comms::client::Client as NodeClient;
+
 use crate::{
-    configuration,
-    cosmos::{Client, QueryMsg, SupportedCurrencyPairsResponse},
+    config,
     provider::{CryptoFactory, CryptoType},
 };
 
-use super::{FeedProviderError, Price};
+use super::{FeedProviderError, InvalidProviderType, Price};
 
 #[async_trait]
 pub trait Provider
@@ -19,7 +20,8 @@ where
 
     async fn get_spot_prices(
         &self,
-        cosm_client: &Client,
+        node_client: &NodeClient,
+        oracle_addr: &str,
     ) -> Result<Box<[Price]>, FeedProviderError>;
 }
 
@@ -29,12 +31,12 @@ pub enum Type {
 }
 
 impl FromStr for Type {
-    type Err = ();
+    type Err = InvalidProviderType;
 
     fn from_str(input: &str) -> Result<Type, Self::Err> {
         match input {
             "crypto" => Ok(Type::Crypto),
-            _ => Err(()),
+            _ => Err(InvalidProviderType::new(input.into())),
         }
     }
 }
@@ -44,7 +46,7 @@ pub struct Factory;
 impl Factory {
     pub fn new_provider(
         s: &Type,
-        cfg: &configuration::Providers,
+        cfg: &config::Providers,
     ) -> Result<Box<dyn Provider + Send + 'static>, FeedProviderError> {
         match s {
             Type::Crypto => {
@@ -57,22 +59,12 @@ impl Factory {
     }
 }
 
-pub async fn get_supported_denom_pairs(
-    cosm_client: &Client,
-) -> Result<SupportedCurrencyPairsResponse, FeedProviderError> {
-    cosm_client
-        .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
-        .await
-        .map_err(Into::into)
-        .and_then(|resp| serde_json::from_slice(&resp.data).map_err(Into::into))
-}
-
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, str::FromStr};
 
     use crate::{
-        configuration::Providers,
+        config::Providers,
         provider::{Factory, Type},
     };
 

@@ -1,39 +1,35 @@
-use crate::{
-    configuration::Oracle,
-    cosmos::{client::Client, QueryMsg, SupportedCurrencyPairsResponse},
+use chain_comms::{
+    client::Client,
+    config::Node,
+    interact::{query_account_data, query_wasm},
 };
 
-use super::ORACLE_ADDRESS;
+use crate::messages::{QueryMsg, SupportedCurrencyPairsResponse};
+
+use super::{NODE_CONFIG, ORACLE_ADDRESS};
 
 #[actix_rt::test]
 async fn get_account_data_example() {
-    let config = Oracle::create(ToOwned::to_owned(ORACLE_ADDRESS))
-        .host_url("https://net-dev.nolus.io")
-        .grpc_port(26625)
-        .build();
-    let client = Client::new(config.clone()).unwrap();
+    let config = toml::from_str::<Node>(NODE_CONFIG).unwrap();
+    let client = Client::new(&config).await.unwrap();
 
-    let account = client
-        .get_account_data(&config.contract_addrs)
-        .await
-        .unwrap();
+    let account = query_account_data(&client, ORACLE_ADDRESS).await.unwrap();
     assert_eq!(account.account_number, 15);
     assert_eq!(account.address, ToOwned::to_owned(ORACLE_ADDRESS));
 }
 
 #[actix_rt::test]
 async fn get_supported_denom_pairs() {
-    let config = Oracle::create(ToOwned::to_owned(ORACLE_ADDRESS))
-        .host_url("https://net-dev.nolus.io")
-        .grpc_port(26625)
-        .build();
-    let client = Client::new(config).unwrap();
+    let config = toml::from_str::<Node>(NODE_CONFIG).unwrap();
+    let client = Client::new(&config).await.unwrap();
 
-    let response = client
-        .cosmwasm_query(&QueryMsg::SupportedCurrencyPairs {})
-        .await
-        .unwrap();
-    let pairs: SupportedCurrencyPairsResponse = serde_json::from_slice(&response.data).unwrap();
+    let pairs: SupportedCurrencyPairsResponse = query_wasm(
+        &client,
+        ORACLE_ADDRESS,
+        &serde_json_wasm::to_vec(&QueryMsg::SupportedCurrencyPairs {}).unwrap(),
+    )
+    .await
+    .unwrap();
     println!("{:?}", pairs);
 }
 
@@ -42,17 +38,11 @@ async fn get_account_data_example_dev() {
     // https://github.com/hyperium/tonic/issues/240
     // https://github.com/hyperium/tonic/issues/643
 
-    let config = Oracle::create(ToOwned::to_owned(ORACLE_ADDRESS))
-        .host_url("https://net-dev.nolus.io")
-        .grpc_port(26625)
-        .build();
+    let config = toml::from_str::<Node>(NODE_CONFIG).unwrap();
 
-    let cosmos_client = Client::new(config).unwrap();
+    let client = Client::new(&config).await.unwrap();
 
-    let account = cosmos_client
-        .get_account_data(ORACLE_ADDRESS)
-        .await
-        .unwrap();
+    let account = query_account_data(&client, ORACLE_ADDRESS).await.unwrap();
     assert_eq!(account.account_number, 15);
 }
 

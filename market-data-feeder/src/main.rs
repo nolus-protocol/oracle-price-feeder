@@ -1,22 +1,33 @@
-use std::{ffi::OsString, io, process::exit, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io, str::FromStr, sync::Arc, time::Duration};
 
-use cosmrs::rpc::endpoint::broadcast::tx_commit::Response;
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{unbounded_channel, UnboundedReceiver},
     task::JoinSet,
-    time::{interval, sleep, Instant},
+    time::{interval, sleep, timeout, Instant},
 };
-use tracing::{debug, error, info, info_span, Dispatch};
+use tracing::{error, info};
 
-use market_data_feeder::{
-    configuration::{Config, Providers},
-    cosmos::{
-        construct_rpc_client, construct_tx, get_account_data, get_sender_account_id, Client,
-        ExecuteMsg, TxResponse, Wallet,
-    },
-    error::Result,
+use chain_comms::{
+    build_tx::ContractTx,
+    client::Client,
+    interact::commit_tx_with_gas_estimation,
+    log::{self, log_commit_response, setup_logging},
+    rpc_setup::{prepare_rpc, RpcSetup},
+};
+
+use self::{
+    config::{Config, Providers},
+    error::{AppResult, Application},
+    messages::ExecuteMsg,
     provider::{Factory, Provider, Type},
 };
+
+pub mod config;
+pub mod error;
+pub mod messages;
+pub mod provider;
+
+pub mod tests;
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
@@ -25,100 +36,76 @@ pub const MAX_SEQ_ERRORS: u8 = 5;
 pub const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    tracing::dispatcher::set_global_default(Dispatch::new(
-        tracing_subscriber::fmt()
-            .with_level(true)
-            .with_ansi(true)
-            .with_file(true)
-            .with_line_number(true)
-            .with_max_level({
-                #[cfg(debug_assertions)]
-                {
-                    tracing::level_filters::LevelFilter::DEBUG
-                }
-                #[cfg(not(debug_assertions))]
-                {
-                    use std::{env::var_os, ffi::OsStr};
+async fn main() -> AppResult<()> {
+    let log_writer = tracing_appender::rolling::hourly("./feeder-logs", "log");
 
-                    if var_os("MARKET_DATA_FEEDER_DEBUG")
-                        .map(|value| {
-                            [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
-                                .contains(&value.as_os_str())
-                        })
-                        .unwrap_or_default()
-                    {
-                        tracing::level_filters::LevelFilter::DEBUG
-                    } else {
-                        tracing::level_filters::LevelFilter::INFO
-                    }
-                }
-            })
-            .finish(),
-    ))
-    .expect("Couldn't register global default tracing dispatcher!");
+    let (log_writer, _guard) =
+        tracing_appender::non_blocking(log::CombinedWriter::new(io::stdout(), log_writer));
+
+    setup_logging(log_writer)?;
 
     info!(concat!(
         "Running version built on: ",
         env!("BUILD_START_TIME_DATE", "No build time provided!")
     ));
 
-    let wallet = {
-        println!("Enter feeder's account secret: ");
-        let mut secret = String::new();
-        io::stdin().read_line(&mut secret)?;
+    let RpcSetup {
+        mut signer,
+        config,
+        client,
+        ..
+    } = prepare_rpc::<Config, _>("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
-        Wallet::new(secret.trim(), DEFAULT_COSMOS_HD_PATH)?
-    };
-
-    info!("Successfully derived private key.");
-
-    let cfg = read_config().unwrap_or_else(|err| {
-        error!("Can not read config file: {}", err);
-
-        exit(1);
-    });
-
-    info!("Successfully read configuration file.");
-
-    let client = Arc::new(Client::new(cfg.oracle.clone())?);
-    let oracle = Arc::new(cfg.oracle);
-
-    info!("Fetching account data from network...");
-
-    let sender_account_id = get_sender_account_id(&wallet, &oracle)?;
-    let mut account_data = get_account_data(&client, &sender_account_id).await?;
-
-    let rpc_client = Arc::new(construct_rpc_client(&oracle)?);
+    let client = Arc::new(client);
 
     info!("Starting workers...");
 
-    let tick_time = Duration::from_secs(cfg.tick_time);
+    let tick_time = Duration::from_secs(config.tick_time());
 
-    let (mut set, mut receiver) = spawn_workers(&client, cfg.providers, tick_time);
+    let (mut set, mut receiver) =
+        spawn_workers(&client, config.providers(), config.oracle_addr(), tick_time)?;
 
     info!("Workers started. Entering broadcasting loop...");
 
-    while let Some((instant, data)) = receiver.recv().await {
-        if Instant::now().duration_since(instant) < tick_time {
-            let tx_raw = construct_tx(&sender_account_id, &account_data, &wallet, &oracle, data)?;
+    loop {
+        let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
 
-            match tx_raw.broadcast_commit(rpc_client.as_ref()).await {
-                Ok(response) => {
-                    if response.check_tx.code.is_ok() {
-                        account_data.sequence += 1;
-                    } else {
-                        account_data =
-                            get_account_data(client.as_ref(), &sender_account_id).await?;
-                    }
-
-                    print_tx_response(&response);
+        let channel_closed = timeout(tick_time, async {
+            while let Some((id, instant, data)) = receiver.recv().await {
+                if Instant::now().duration_since(instant) < tick_time {
+                    messages.insert(id, Vec::from(data));
                 }
-                Err(error) => error!(
-                    context = %error,
-                    "Error occurred while trying to broadcast transaction!"
-                ),
             }
+
+            true
+        })
+        .await
+        .unwrap_or(false);
+
+        if messages.is_empty() {
+            continue;
+        }
+
+        let tx = messages.into_values().fold(
+            ContractTx::new(config.oracle_addr().to_string()),
+            |tx, msg| tx.add_message(msg, Vec::new()),
+        );
+
+        log_commit_response(
+            &commit_tx_with_gas_estimation(
+                &mut signer,
+                &client,
+                config.as_ref(),
+                config.gas_limit(),
+                tx,
+            )
+            .await?,
+        );
+
+        if channel_closed {
+            drop(receiver);
+
+            break;
         }
     }
 
@@ -127,11 +114,17 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+type SpawnWorkersResult = AppResult<(
+    JoinSet<Result<(), error::Worker>>,
+    UnboundedReceiver<(usize, Instant, String)>,
+)>;
+
 fn spawn_workers(
     client: &Arc<Client>,
-    providers: Vec<Providers>,
+    providers: &[Providers],
+    oracle_addr: &str,
     tick_time: Duration,
-) -> (JoinSet<Result<()>>, UnboundedReceiver<(Instant, String)>) {
+) -> SpawnWorkersResult {
     let mut set = JoinSet::new();
 
     let (sender, receiver) = unbounded_channel();
@@ -139,18 +132,12 @@ fn spawn_workers(
     providers
         .into_iter()
         .map(|provider_cfg| {
-            let p_type = Type::from_str(&provider_cfg.main_type).unwrap_or_else(|()| {
-                error!("Unknown provider type {}", &provider_cfg.main_type);
+            let p_type = Type::from_str(&provider_cfg.main_type)?;
 
-                exit(1);
-            });
-
-            Factory::new_provider(&p_type, &provider_cfg).unwrap_or_else(|err| {
-                error!("Can not create provider instance {:?}", err);
-
-                exit(1);
-            })
+            Factory::new_provider(&p_type, provider_cfg).map_err(Application::InstantiateProvider)
         })
+        .collect::<AppResult<Vec<_>>>()?
+        .into_iter()
         .enumerate()
         .for_each(|(monotonic_id, provider)| {
             let client = client.clone();
@@ -162,22 +149,27 @@ fn spawn_workers(
             set.spawn(provider_main_loop(
                 provider,
                 client,
-                sender,
+                oracle_addr.into(),
+                move |instant, data| sender.send((monotonic_id, instant, data)).map_err(|_| ()),
                 provider_name,
                 tick_time,
             ));
         });
 
-    (set, receiver)
+    Ok((set, receiver))
 }
 
-async fn provider_main_loop(
+async fn provider_main_loop<SenderFn>(
     provider: Box<dyn Provider + Send>,
     client: Arc<Client>,
-    sender: UnboundedSender<(Instant, String)>,
+    oracle_addr: String,
+    sender: SenderFn,
     provider_name: String,
     tick_time: Duration,
-) -> Result<()> {
+) -> Result<(), error::Worker>
+where
+    SenderFn: Fn(Instant, String) -> Result<(), ()>,
+{
     let provider = { provider };
 
     let mut interval = interval(tick_time);
@@ -187,19 +179,19 @@ async fn provider_main_loop(
     loop {
         interval.tick().await;
 
-        let f = provider.get_spot_prices(&client);
+        let spot_prices_future = provider.get_spot_prices(&client, &oracle_addr);
 
-        match f.await {
+        match spot_prices_future.await {
             Ok(prices) => {
                 seq_error_counter = 0;
 
                 let price_feed_json =
                     serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?;
 
-                if sender.send((Instant::now(), price_feed_json)).is_err() {
+                if sender(Instant::now(), price_feed_json).is_err() {
                     info!(
                         provider_name = %provider_name,
-                        "Feed broadcasting has been stopped! Exiting task..."
+                        "Communication channel has been closed! Exiting worker task..."
                     );
 
                     return Ok(());
@@ -208,7 +200,7 @@ async fn provider_main_loop(
             Err(error) => {
                 error!(
                     provider_name = %provider_name,
-                    "Couldn't get price feed! Context: {:?}",
+                    "Couldn't get price feed! Cause: {:?}",
                     error
                 );
 
@@ -223,57 +215,3 @@ async fn provider_main_loop(
         };
     }
 }
-
-fn print_tx_response(tx_commit_response: &Response) {
-    let tx_span = info_span!("Tx");
-
-    tx_span.in_scope(|| {
-        info!("Hash: {}", tx_commit_response.hash);
-
-        for (tx_name, tx_result) in [
-            ("Check", &tx_commit_response.check_tx as &dyn TxResponse),
-            ("Deliver", &tx_commit_response.deliver_tx as &dyn TxResponse),
-        ] {
-            {
-                let (code, log) = (tx_result.code(), tx_result.log());
-
-                if code.is_ok() {
-                    debug!("[{}] Log: {}", tx_name, log);
-                } else {
-                    error!(
-                        log = %log,
-                        "[{}] Error with code {} has occurred!",
-                        tx_name,
-                        code.value(),
-                    );
-                }
-            }
-
-            {
-                let (gas_wanted, gas_used) = (tx_result.gas_wanted(), tx_result.gas_used());
-
-                if gas_wanted < gas_used {
-                    error!(
-                        wanted = %gas_wanted,
-                        used = %gas_used,
-                        "[{}] Out of gas!",
-                        tx_name,
-                    );
-                } else {
-                    info!("[{}] Gas used: {}", tx_name, gas_used);
-                }
-            }
-        }
-    });
-}
-
-fn read_config() -> io::Result<Config> {
-    std::fs::read_to_string(
-        std::env::var_os("CONFIG_PATH")
-            .unwrap_or_else(|| OsString::from("./market-data-feeder.toml")),
-    )
-    .and_then(|content| toml::from_str(&content).map_err(Into::into))
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-struct Dropped(pub usize);

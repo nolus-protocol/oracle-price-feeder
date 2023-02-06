@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub use self::{errors::FeedProviderError, provider::*};
+pub use self::{errors::*, provider::*};
 
 mod errors;
 mod provider;

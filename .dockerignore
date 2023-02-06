@@ -86,3 +86,4 @@ target/
 
 ### Application Logs
 dispatcher-logs/
+feeder-logs/

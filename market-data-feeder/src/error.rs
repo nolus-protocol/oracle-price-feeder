@@ -1,45 +1,27 @@
-use thiserror::Error;
-use tonic::codegen::http;
+use thiserror::Error as ThisError;
 
-use crate::{
-    cosmos::error::{Cosmos, Wallet},
-    provider::FeedProviderError,
-};
+use crate::provider::{FeedProviderError, InvalidProviderType};
 
-#[derive(Error, Debug)]
-pub enum Feeder {
-    #[error("Configuration error: {message}")]
-    ConfigurationError { message: String },
-
-    #[error("Invalid contract address {address}")]
-    InvalidOracleContractAddress { address: String },
-
-    #[error("Authentication error. Cause {message}")]
-    AuthError { message: String },
-
-    #[error("{0}")]
-    ReqwestError(#[from] reqwest::Error),
-
-    #[error("{0}")]
-    InvalidUri(#[from] http::uri::InvalidUri),
-
-    #[error("{0}")]
-    StdError(#[from] std::io::Error),
-
-    #[error("{0}")]
-    WalletError(#[from] Wallet),
-
-    #[error("{0}")]
-    Provider(#[from] FeedProviderError),
-
-    #[error("{0}")]
-    Json(#[from] serde_json::Error),
-
-    #[error("{0}")]
-    WasmJson(#[from] serde_json_wasm::ser::Error),
-
-    #[error("{0}")]
-    Cosmos(#[from] Cosmos),
+#[derive(Debug, ThisError)]
+pub enum Application {
+    #[error("Couldn't register global default tracing dispatcher! Cause: {0}")]
+    SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
+    #[error("Setting up RPC environment failed! Cause: {0}")]
+    RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
+    #[error("Configuration error has occurred! Cause: {0}")]
+    InvalidProviderType(#[from] InvalidProviderType),
+    #[error("Failed to instantiate provider! Cause: {0}")]
+    InstantiateProvider(#[from] FeedProviderError),
+    #[error("Failed to commit price feeding transaction! Cause: {0}")]
+    CommitTx(#[from] chain_comms::interact::error::GasEstimatingTxCommit),
+    #[error("A worker thread has exited due to an error! Cause: {0}")]
+    Worker(#[from] Worker),
 }
 
-pub type Result<T> = std::result::Result<T, Feeder>;
+#[derive(Debug, ThisError)]
+pub enum Worker {
+    #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
+    SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
+}
+
+pub type AppResult<T> = Result<T, Application>;

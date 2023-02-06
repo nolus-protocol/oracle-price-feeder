@@ -1,6 +1,14 @@
 use thiserror::Error;
 
-use crate::cosmos::error::Cosmos;
+#[derive(Error, Debug)]
+#[error("Invalid type of provider encountered! Type: {0}")]
+pub struct InvalidProviderType(String);
+
+impl InvalidProviderType {
+    pub(crate) fn new(input: String) -> Self {
+        Self(input)
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum FeedProviderError {
@@ -34,12 +42,15 @@ pub enum FeedProviderError {
     #[error("Unsupported provider type {0}")]
     UnsupportedProviderType(String),
 
-    #[error("{0}")]
-    ReqwestError(#[from] reqwest::Error),
+    #[error("Failed to fetch price from pool! Cause: {0}")]
+    FetchPoolPrice(reqwest::Error),
+
+    #[error("Failed to deserialize fetched price from response's body! Cause: {0}")]
+    DeserializePoolPrice(reqwest::Error),
 
     #[error("{0}")]
-    CosmosError(#[from] Cosmos),
+    WasmQueryError(#[from] chain_comms::interact::error::WasmQuery),
 
     #[error("{0}")]
-    Json(#[from] serde_json::Error),
+    SerializationError(#[from] serde_json_wasm::ser::Error),
 }

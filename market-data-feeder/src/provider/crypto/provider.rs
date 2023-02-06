@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, str::FromStr};
 
 use crate::{
-    configuration::{Symbol, Ticker},
+    config::{Symbol, Ticker},
     provider::{FeedProviderError, Provider},
 };
 

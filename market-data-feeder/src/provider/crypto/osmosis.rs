@@ -5,10 +5,12 @@ use reqwest::{Client as ReqwestClient, RequestBuilder, StatusCode, Url};
 use serde::{Deserialize, Deserializer};
 use tracing::error;
 
+use chain_comms::{client::Client as NodeClient, interact::query_wasm};
+
 use crate::{
-    configuration::{Symbol, Ticker},
-    cosmos::Client as CosmosClient,
-    provider::{get_supported_denom_pairs, FeedProviderError, Price, Provider},
+    config::{Symbol, Ticker},
+    messages::{QueryMsg, SupportedCurrencyPairsResponse},
+    provider::{FeedProviderError, Price, Provider},
 };
 
 #[derive(Debug, Deserialize)]
@@ -64,8 +66,10 @@ impl<'de> Deserialize<'de> for Ratio {
 }
 
 pub struct Client {
+    http_client: ReqwestClient,
     base_url: Url,
     currencies: BTreeMap<Ticker, Symbol>,
+    supported_currencies_query: Vec<u8>,
 }
 
 impl Client {
@@ -75,8 +79,12 @@ impl Client {
     ) -> Result<Self, FeedProviderError> {
         match Url::parse(url_str) {
             Ok(base_url) => Ok(Self {
+                http_client: ReqwestClient::new(),
                 base_url,
                 currencies: currencies.clone(),
+                supported_currencies_query: serde_json_wasm::to_vec(
+                    &QueryMsg::SupportedCurrencyPairs {},
+                )?,
             }),
             Err(err) => {
                 eprintln!("{:?}", err);
@@ -87,11 +95,9 @@ impl Client {
     }
 
     fn get_request_builder(&self, url_str: &str) -> Result<RequestBuilder, FeedProviderError> {
-        let http_client = ReqwestClient::new();
-
         self.base_url
             .join(url_str)
-            .map(|url| http_client.get(url))
+            .map(|url| self.http_client.get(url))
             .map_err(|_| FeedProviderError::URLParsingError)
     }
 }
@@ -104,24 +110,29 @@ impl Provider for Client {
 
     async fn get_spot_prices(
         &self,
-        cosm_client: &CosmosClient,
+        node_client: &NodeClient,
+        oracle_addr: &str,
     ) -> Result<Box<[Price]>, FeedProviderError> {
         let mut prices = vec![];
 
         for (pool_id, (from_ticker, from_symbol), (to_ticker, to_symbol)) in
-            get_supported_denom_pairs(cosm_client)
-                .await?
-                .into_iter()
-                .filter_map(|swap| {
-                    let from_symbol = self.currencies.get(&swap.from).cloned()?;
-                    let to_symbol = self.currencies.get(&swap.to.target).cloned()?;
+            query_wasm::<SupportedCurrencyPairsResponse>(
+                node_client,
+                oracle_addr,
+                &self.supported_currencies_query,
+            )
+            .await?
+            .into_iter()
+            .filter_map(|swap| {
+                let from_symbol = self.currencies.get(&swap.from).cloned()?;
+                let to_symbol = self.currencies.get(&swap.to.target).cloned()?;
 
-                    Some((
-                        swap.to.pool_id,
-                        (swap.from, from_symbol),
-                        (swap.to.target, to_symbol),
-                    ))
-                })
+                Some((
+                    swap.to.pool_id,
+                    (swap.from, from_symbol),
+                    (swap.to.target, to_symbol),
+                ))
+            })
         {
             let resp = self
                 .get_request_builder(&format!("pools/{pool_id}/prices"))
@@ -131,7 +142,8 @@ impl Provider for Client {
                     ("quote_asset_denom", to_symbol),
                 ])
                 .send()
-                .await?;
+                .await
+                .map_err(FeedProviderError::FetchPoolPrice)?;
 
             if resp.status() == StatusCode::OK {
                 let AssetPrice {
@@ -140,7 +152,10 @@ impl Provider for Client {
                             numerator: base,
                             denominator: quote,
                         },
-                } = resp.json().await?;
+                } = resp
+                    .json()
+                    .await
+                    .map_err(FeedProviderError::DeserializePoolPrice)?;
 
                 prices.push(Price::new(from_ticker, base, to_ticker, quote));
             } else {
