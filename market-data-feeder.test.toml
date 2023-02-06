@@ -33,3 +33,5 @@ grpc_port = 1318
 address_prefix = "nolus"
 chain_id = "nolus-rila"
 fee = { amount = "1500", denom = "unls" }
+gas_adjustment_numerator = 1015
+gas_adjustment_denominator = 1000

@@ -1,15 +1,15 @@
 poll_period_seconds = 60
 
 [node]
-json_rpc_protocol = "http"
-grpc_protocol = "http"
-host = "http://host.docker.internal"
+json_rpc_protocol = "https"
+grpc_protocol = "https"
+host = "net-dev.nolus.io"
 json_rpc_port = 26612
 # json_rpc_api_path = "/json-rpc/api"
-grpc_port = 26615
+grpc_port = 26625
 # grpc_api_path = "/grpc/api"
 address_prefix = "nolus"
-chain_id = "nolus-local"
+chain_id = "nolus-dev-v0-1-42"
 fee = { amount = "1500", denom = "unls" }
 gas_adjustment_numerator = 1015
 gas_adjustment_denominator = 1000
