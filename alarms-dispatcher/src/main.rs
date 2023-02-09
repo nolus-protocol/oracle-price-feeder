@@ -106,7 +106,7 @@ async fn dispatch_alarm<'r>(
     signer: &'r mut Signer,
     client: &'r Client,
     config: &'r Node,
-    contract: &Contract,
+    contract: &'r Contract,
     query: &'r [u8],
     alarm_type: &'static str,
     fallback_gas_limit: u64,
@@ -114,9 +114,9 @@ async fn dispatch_alarm<'r>(
     let mut max_gas_used: Option<GasUsed> = None;
 
     loop {
-        let response: StatusResponse = query_wasm(client, address, query).await?;
+        let response: StatusResponse = query_wasm(client, contract.address(), query).await?;
 
-        let gas_used: GasUsed = if response.remaining_for_dispatch() {
+        return Ok(if response.remaining_for_dispatch() {
             let result: CommitResult =
                 commit_dispatch_tx(signer, client, config, contract, fallback_gas_limit).await?;
 
@@ -130,16 +130,16 @@ async fn dispatch_alarm<'r>(
 
             *max_gas_used = Ord::max(*max_gas_used, result.gas_used);
 
-            if result.dispatch_response.dispatched_alarms() == max_alarms {
+            if result.dispatch_response.dispatched_alarms() == contract.max_alarms_group() {
                 continue;
             }
 
-            *max_gas_used
+            return Ok(*max_gas_used);
         } else {
             debug!("Queue for {} alarms is empty.", alarm_type);
-        };
 
-        return Ok(gas_used);
+            max_gas_used.unwrap_or_default()
+        });
     }
 }
 
@@ -154,7 +154,9 @@ async fn commit_dispatch_tx(
     fallback_gas_limit: u64,
 ) -> Result<CommitResult, error::CommitDispatchTx> {
     let unsigned_tx = ContractTx::new(contract.address().into()).add_message(
-        serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
+        serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
+            max_count: contract.max_alarms_group(),
+        })?,
         Vec::new(),
     );
 
