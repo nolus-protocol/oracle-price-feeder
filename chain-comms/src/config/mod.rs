@@ -34,6 +34,8 @@ struct CoinDTO {
 pub struct Node {
     json_rpc_protocol: Protocol,
     grpc_protocol: Protocol,
+    #[serde(default)]
+    http2_concurrency_limit: Option<usize>,
     host: String,
     json_rpc_port: u16,
     #[serde(default)]
@@ -57,6 +59,10 @@ impl Node {
 
     pub fn grpc_protocol(&self) -> Protocol {
         self.grpc_protocol
+    }
+
+    pub fn http2_concurrency_limit(&self) -> Option<usize> {
+        self.http2_concurrency_limit
     }
 
     pub fn host(&self) -> &str {
