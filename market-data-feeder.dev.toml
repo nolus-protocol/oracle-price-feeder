@@ -25,7 +25,7 @@ currencies = [
 [node]
 json_rpc_protocol = "https"
 grpc_protocol = "https"
-http2_concurrency_limit = 2
+#http2_concurrency_limit = 1
 host = "net-dev.nolus.io"
 json_rpc_port = 26622
 # json_rpc_api_path = "/json-rpc/api"
