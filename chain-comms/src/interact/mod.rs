@@ -17,7 +17,7 @@ use cosmrs::{
     tx::Fee,
 };
 use serde::de::DeserializeOwned;
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
 
@@ -169,20 +169,36 @@ pub async fn commit_tx_with_gas_estimation(
     node_config: &Node,
     gas_limit: u64,
     unsigned_tx: ContractTx,
+    fallback_gas_limit: u64,
 ) -> Result<CommitResponse, error::GasEstimatingTxCommit> {
-    let gas_info = simulate_tx(signer, client, node_config, gas_limit, unsigned_tx.clone()).await?;
-
-    commit_tx(
+    let tx_gas_limit: u64 = match simulate_tx(
         signer,
         client,
         node_config,
-        unsigned_tx,
-        u128::from(gas_info.gas_used)
-            .checked_mul(node_config.gas_adjustment_numerator().into())
-            .and_then(|result| result.checked_div(node_config.gas_adjustment_denominator().into()))
-            .map(|result| u64::try_from(result).unwrap_or(u64::MAX))
-            .unwrap_or(gas_info.gas_used),
+        gas_limit,
+        unsigned_tx.clone(),
     )
     .await
-    .map_err(Into::into)
+    {
+        Ok(gas_info) => gas_info.gas_used,
+        Err(error) => {
+            error!(
+                error = %error,
+                "Failed to simulate transaction! Falling back to provided gas limit. Fallback gas limit: {gas_limit}.",
+                gas_limit = fallback_gas_limit
+            );
+
+            fallback_gas_limit
+        }
+    };
+
+    let adjusted_gas_limit: u64 = u128::from(tx_gas_limit)
+        .checked_mul(node_config.gas_adjustment_numerator().into())
+        .and_then(|result| result.checked_div(node_config.gas_adjustment_denominator().into()))
+        .map(|result| u64::try_from(result).unwrap_or(u64::MAX))
+        .unwrap_or(tx_gas_limit);
+
+    commit_tx(signer, client, node_config, unsigned_tx, adjusted_gas_limit)
+        .await
+        .map_err(Into::into)
 }

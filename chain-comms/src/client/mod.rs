@@ -20,7 +20,8 @@ impl Client {
         let json_rpc = TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str())?;
 
         let grpc = {
-            let mut channel_builder = Channel::builder(Self::construct_grpc_url(config).try_into()?);
+            let mut channel_builder =
+                Channel::builder(Self::construct_grpc_url(config).try_into()?);
 
             if let Some(limit) = config.http2_concurrency_limit() {
                 channel_builder = channel_builder.concurrency_limit(limit);

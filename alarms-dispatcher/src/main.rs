@@ -14,7 +14,7 @@ use chain_comms::{
 };
 
 use self::{
-    config::Config,
+    config::{Config, Contract},
     messages::{DispatchResponse, ExecuteMsg, QueryMsg, StatusResponse},
 };
 
@@ -66,6 +66,8 @@ async fn dispatch_alarms(
 
     let query = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
+    let mut fallback_gas_limit: u64 = 0;
+
     loop {
         for (contract, type_name, to_error) in [
             (
@@ -81,18 +83,19 @@ async fn dispatch_alarms(
                     as fn(error::DispatchAlarm) -> error::DispatchAlarms,
             ),
         ] {
-            dispatch_alarm(
+            fallback_gas_limit = dispatch_alarm(
                 &mut signer,
                 &client,
                 config.node(),
-                contract.address(),
-                contract.gas_limit_per_alarm(),
-                contract.max_alarms_group(),
+                contract,
                 &query,
                 type_name,
+                fallback_gas_limit,
             )
             .await
-            .map_err(to_error)?;
+            .map_err(to_error)?
+            .0
+            .max(fallback_gas_limit);
         }
 
         sleep(poll_period).await;
@@ -103,52 +106,54 @@ async fn dispatch_alarm<'r>(
     signer: &'r mut Signer,
     client: &'r Client,
     config: &'r Node,
-    address: &'r str,
-    gas_limit_per_alarm: u64,
-    max_alarms: u32,
+    contract: &Contract,
     query: &'r [u8],
     alarm_type: &'static str,
-) -> Result<(), error::DispatchAlarm> {
+    fallback_gas_limit: u64,
+) -> Result<GasUsed, error::DispatchAlarm> {
+    let mut max_gas_used: Option<GasUsed> = None;
+
     loop {
         let response: StatusResponse = query_wasm(client, address, query).await?;
 
-        if response.remaining_for_dispatch() {
-            let result: DispatchResponse = commit_dispatch_tx(
-                signer,
-                client,
-                config,
-                address,
-                gas_limit_per_alarm,
-                max_alarms,
-            )
-            .await?;
+        let gas_used: GasUsed = if response.remaining_for_dispatch() {
+            let result: CommitResult =
+                commit_dispatch_tx(signer, client, config, contract, fallback_gas_limit).await?;
 
             info!(
                 "Dispatched {} {} alarms.",
-                result.dispatched_alarms(),
+                result.dispatch_response.dispatched_alarms(),
                 alarm_type
             );
 
-            if result.dispatched_alarms() == max_alarms {
+            let max_gas_used: &mut GasUsed = &mut max_gas_used.get_or_insert(result.gas_used);
+
+            *max_gas_used = Ord::max(*max_gas_used, result.gas_used);
+
+            if result.dispatch_response.dispatched_alarms() == max_alarms {
                 continue;
             }
+
+            *max_gas_used
         } else {
             debug!("Queue for {} alarms is empty.", alarm_type);
-        }
+        };
 
-        return Ok(());
+        return Ok(gas_used);
     }
 }
+
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Default)]
+struct GasUsed(u64);
 
 async fn commit_dispatch_tx(
     signer: &mut Signer,
     client: &Client,
     config: &Node,
-    address: &str,
-    gas_limit_per_alarm: u64,
-    max_count: u32,
-) -> Result<DispatchResponse, error::CommitDispatchTx> {
-    let unsigned_tx = ContractTx::new(address.into()).add_message(
+    contract: &Contract,
+    fallback_gas_limit: u64,
+) -> Result<CommitResult, error::CommitDispatchTx> {
+    let unsigned_tx = ContractTx::new(contract.address().into()).add_message(
         serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms { max_count })?,
         Vec::new(),
     );
@@ -157,8 +162,11 @@ async fn commit_dispatch_tx(
         signer,
         client,
         config,
-        gas_limit_per_alarm.saturating_mul(max_count.into()),
+        contract
+            .gas_limit_per_alarm()
+            .saturating_mul(contract.max_alarms_group().into()),
         unsigned_tx,
+        fallback_gas_limit,
     )
     .await?;
 
@@ -166,7 +174,7 @@ async fn commit_dispatch_tx(
         serde_json_wasm::from_slice::<DispatchResponse>(&tx_commit_response.deliver_tx.data);
 
     info_span!("Tx").in_scope(|| {
-        if let Ok(response) = &response {
+        if let Ok(response) = response.as_ref() {
             info!(
                 "Dispatched {} alarms in total.",
                 response.dispatched_alarms()
@@ -179,5 +187,13 @@ async fn commit_dispatch_tx(
         log_commit_response(&tx_commit_response);
     });
 
-    response.map_err(Into::into)
+    Ok(CommitResult {
+        dispatch_response: response?,
+        gas_used: GasUsed(tx_commit_response.deliver_tx.gas_used.unsigned_abs()),
+    })
+}
+
+pub struct CommitResult {
+    dispatch_response: DispatchResponse,
+    gas_used: GasUsed,
 }

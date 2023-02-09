@@ -10,7 +10,7 @@ use tracing::{error, info};
 use chain_comms::{
     build_tx::ContractTx,
     client::Client,
-    interact::commit_tx_with_gas_estimation,
+    interact::{commit_tx_with_gas_estimation, CommitResponse},
     log::{self, log_commit_response, setup_logging},
     rpc_setup::{prepare_rpc, RpcSetup},
 };
@@ -67,6 +67,8 @@ async fn main() -> AppResult<()> {
 
     info!("Workers started. Entering broadcasting loop...");
 
+    let mut fallback_gas_limit: u64 = 0;
+
     loop {
         let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
 
@@ -91,16 +93,23 @@ async fn main() -> AppResult<()> {
             |tx, msg| tx.add_message(msg, Vec::new()),
         );
 
-        log_commit_response(
-            &commit_tx_with_gas_estimation(
-                &mut signer,
-                &client,
-                config.as_ref(),
-                config.gas_limit(),
-                tx,
-            )
-            .await?,
-        );
+        let response: CommitResponse = commit_tx_with_gas_estimation(
+            &mut signer,
+            &client,
+            config.as_ref(),
+            config.gas_limit(),
+            tx,
+            fallback_gas_limit,
+        )
+        .await?;
+
+        fallback_gas_limit = response
+            .deliver_tx
+            .gas_used
+            .unsigned_abs()
+            .max(fallback_gas_limit);
+
+        log_commit_response(&response);
 
         if channel_closed {
             drop(receiver);
