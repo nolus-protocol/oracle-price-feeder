@@ -1,10 +1,11 @@
 poll_period_seconds = 60
 
 [node]
+#http2_concurrency_limit = 1
 json_rpc_protocol = "https"
 grpc_protocol = "https"
-#http2_concurrency_limit = 1
-host = "net-dev.nolus.io"
+json_rpc_host = "net-dev.nolus.io"
+grpc_host = "net-dev.nolus.io"
 json_rpc_port = 26617
 # json_rpc_api_path = "/json-rpc/api"
 grpc_port = 26620

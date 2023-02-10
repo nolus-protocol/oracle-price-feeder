@@ -55,7 +55,7 @@ impl Client {
     fn construct_json_rpc_url(config: &Node) -> String {
         Self::construct_url(
             config.json_rpc_protocol(),
-            config.host(),
+            config.json_rpc_host(),
             config.json_rpc_port(),
             config.json_rpc_api_path(),
         )
@@ -64,7 +64,7 @@ impl Client {
     fn construct_grpc_url(config: &Node) -> String {
         Self::construct_url(
             config.grpc_protocol(),
-            config.host(),
+            config.grpc_host(),
             config.grpc_port(),
             config.grpc_api_path(),
         )

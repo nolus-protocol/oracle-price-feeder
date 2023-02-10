@@ -32,11 +32,12 @@ struct CoinDTO {
 #[must_use]
 #[serde(rename_all = "snake_case")]
 pub struct Node {
-    json_rpc_protocol: Protocol,
-    grpc_protocol: Protocol,
     #[serde(default)]
     http2_concurrency_limit: Option<usize>,
-    host: String,
+    json_rpc_protocol: Protocol,
+    grpc_protocol: Protocol,
+    json_rpc_host: String,
+    grpc_host: String,
     json_rpc_port: u16,
     #[serde(default)]
     json_rpc_api_path: Option<String>,
@@ -53,6 +54,10 @@ pub struct Node {
 }
 
 impl Node {
+    pub fn http2_concurrency_limit(&self) -> Option<usize> {
+        self.http2_concurrency_limit
+    }
+
     pub fn json_rpc_protocol(&self) -> Protocol {
         self.json_rpc_protocol
     }
@@ -61,12 +66,12 @@ impl Node {
         self.grpc_protocol
     }
 
-    pub fn http2_concurrency_limit(&self) -> Option<usize> {
-        self.http2_concurrency_limit
+    pub fn json_rpc_host(&self) -> &str {
+        &self.json_rpc_host
     }
 
-    pub fn host(&self) -> &str {
-        &self.host
+    pub fn grpc_host(&self) -> &str {
+        &self.grpc_host
     }
 
     pub fn json_rpc_port(&self) -> u16 {

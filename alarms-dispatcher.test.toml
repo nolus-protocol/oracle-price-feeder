@@ -3,7 +3,8 @@ poll_period_seconds = 60
 [node]
 json_rpc_protocol = "https"
 grpc_protocol = "https"
-host = "net-rila.nolus.io"
+json_rpc_host = "net-rila.nolus.io"
+grpc_host = "net-rila.nolus.io"
 json_rpc_port = 26657
 # json_rpc_api_path = "/json-rpc/api"
 grpc_port = 1318
