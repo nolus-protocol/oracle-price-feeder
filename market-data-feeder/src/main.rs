@@ -182,7 +182,7 @@ fn spawn_workers(
         .map(|provider_cfg| {
             let p_type = Type::from_str(&provider_cfg.main_type)?;
 
-            Factory::new_provider(&p_type, provider_cfg).map_err(Application::InstantiateProvider)
+            Factory::new_provider(&p_type, provider_cfg).map_err(error::Application::InstantiateProvider)
         })
         .collect::<AppResult<Vec<_>>>()?
         .into_iter()
