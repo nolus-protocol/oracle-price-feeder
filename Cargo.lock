@@ -43,6 +43,7 @@ name = "alarms-dispatcher"
 version = "0.1.0"
 dependencies = [
  "chain-comms",
+ "semver",
  "serde",
  "serde-json-wasm",
  "thiserror",
@@ -1127,6 +1128,7 @@ dependencies = [
  "prost",
  "prost-types",
  "reqwest",
+ "semver",
  "serde",
  "serde-json-wasm",
  "thiserror",
@@ -1766,6 +1768,10 @@ dependencies = [
  "core-foundation-sys",
  "libc",
 ]
+
+[[package]]
+name = "semver"
+version = "0.1.0"
 
 [[package]]
 name = "serde"

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "semver",
     "chain-comms",
     "market-data-feeder",
     "alarms-dispatcher",
@@ -12,6 +13,7 @@ edition = "2021"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+semver = { path = "./semver" }
 chain-comms = { path = "./chain-comms" }
 
 [profile.release]

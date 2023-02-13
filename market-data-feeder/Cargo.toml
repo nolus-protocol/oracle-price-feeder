@@ -9,6 +9,7 @@ path = "src/main.rs"
 name = "feeder"
 
 [dependencies]
+semver = { workspace = true }
 chain-comms = { workspace = true }
 
 futures = "0.3.26"

@@ -1,11 +1,23 @@
 use thiserror::Error as ThisError;
 
+use semver::SemVer;
+
 #[derive(Debug, ThisError)]
 pub enum Application {
     #[error("Couldn't register global default tracing dispatcher! Cause: {0}")]
     SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
+    #[error("Failed to serialize version query message as JSON! Cause: {0}")]
+    SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Failed to query contract's version! Cause: {0}")]
+    ContractVersionQuery(#[from] chain_comms::interact::error::WasmQuery),
+    #[error("Version of \"{contract}\" contract is not compatible! Minimum compatible version is {minimum_compatible}, but contract's actual version is {actual}!")]
+    IncompatibleContractVersion {
+        contract: &'static str,
+        minimum_compatible: SemVer,
+        actual: SemVer,
+    },
     #[error("Alarms dispatcher loop exited unexpectedly! Cause: {0}")]
     DispatchAlarms(#[from] DispatchAlarms),
 }

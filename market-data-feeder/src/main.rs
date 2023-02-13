@@ -10,15 +10,16 @@ use tracing::{error, info};
 use chain_comms::{
     build_tx::ContractTx,
     client::Client,
-    interact::{commit_tx_with_gas_estimation, CommitResponse},
+    interact::{commit_tx_with_gas_estimation, query_wasm, CommitResponse},
     log::{self, log_commit_response, setup_logging},
     rpc_setup::{prepare_rpc, RpcSetup},
 };
+use semver::SemVer;
 
 use self::{
     config::{Config, Providers},
-    error::{AppResult, Application},
-    messages::ExecuteMsg,
+    error::AppResult,
+    messages::{ExecuteMsg, QueryMsg},
     provider::{Factory, Provider, Type},
 };
 
@@ -28,6 +29,8 @@ pub mod messages;
 pub mod provider;
 
 pub mod tests;
+
+pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 2, 1);
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
@@ -49,12 +52,48 @@ async fn main() -> AppResult<()> {
         env!("BUILD_START_TIME_DATE", "No build time provided!")
     ));
 
+    let result: AppResult<()> = app_main().await;
+
+    if let Err(error) = &result {
+        error!("{error}");
+    }
+
+    result
+}
+
+async fn app_main() -> AppResult<()> {
     let RpcSetup {
         mut signer,
         config,
         client,
         ..
     } = prepare_rpc::<Config, _>("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
+
+    info!("Checking compatibility with contract version...");
+
+    {
+        let version: SemVer = query_wasm(
+            &client,
+            config.oracle_addr(),
+            &serde_json_wasm::to_vec(&QueryMsg::ContractVersion {})?,
+        )
+        .await?;
+
+        if !version.check_compatibility(COMPATIBLE_VERSION) {
+            error!(
+                compatible_minimum = %COMPATIBLE_VERSION,
+                actual = %version,
+                "Feeder version is incompatible with contract version!"
+            );
+
+            return Err(error::Application::IncompatibleContractVersion {
+                minimum_compatible: COMPATIBLE_VERSION,
+                actual: version,
+            });
+        }
+    }
+
+    info!("Contract is compatible with feeder version.");
 
     let client = Arc::new(client);
 

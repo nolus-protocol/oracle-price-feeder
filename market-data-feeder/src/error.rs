@@ -1,5 +1,7 @@
 use thiserror::Error as ThisError;
 
+use semver::SemVer;
+
 use crate::provider::{FeedProviderError, InvalidProviderType};
 
 #[derive(Debug, ThisError)]
@@ -8,6 +10,15 @@ pub enum Application {
     SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
+    #[error("Failed to serialize version query message as JSON! Cause: {0}")]
+    SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Failed to query contract's version! Cause: {0}")]
+    ContractVersionQuery(#[from] chain_comms::interact::error::WasmQuery),
+    #[error("Contract's version is not compatible! Minimum compatible version is {minimum_compatible}, but contract's actual version is {actual}!")]
+    IncompatibleContractVersion {
+        minimum_compatible: SemVer,
+        actual: SemVer,
+    },
     #[error("Configuration error has occurred! Cause: {0}")]
     InvalidProviderType(#[from] InvalidProviderType),
     #[error("Failed to instantiate provider! Cause: {0}")]

@@ -12,6 +12,7 @@ use chain_comms::{
     rpc_setup::{prepare_rpc, RpcSetup},
     signer::Signer,
 };
+use semver::SemVer;
 
 use self::{
     config::{Config, Contract},
@@ -21,6 +22,8 @@ use self::{
 pub mod config;
 pub mod error;
 pub mod messages;
+
+pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 2, 1);
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
@@ -40,10 +43,47 @@ async fn main() -> Result<(), error::Application> {
         env!("BUILD_START_TIME_DATE", "No build time provided!")
     ));
 
-    let result = dispatch_alarms(
-        prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?,
-    )
-    .await;
+    let result: AppResult<()> = app_main().await;
+
+    if let Err(error) = &result {
+        error!("{error}");
+    }
+
+    result
+}
+
+async fn app_main() -> Result<(), error::Application> {
+    let rpc_setup @ RpcSetup { ref client, ref config, .. } =
+        prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?;
+
+    info!("Checking compatibility with contract version...");
+
+    for (contract, name) in [(config.time_alarms(), "timealarms"), (config.market_price_oracle(), "oracle")] {
+        let version: SemVer = query_wasm(
+            &client,
+            contract.address(),
+            &serde_json_wasm::to_vec(&QueryMsg::ContractVersion {})?,
+        )
+        .await?;
+
+        if !version.check_compatibility(COMPATIBLE_VERSION) {
+            error!(
+                compatible_minimum = %COMPATIBLE_VERSION,
+                actual = %version,
+                r#"Dispatcher version is incompatible with "{name}" contract's version!"#,
+            );
+
+            return Err(error::Application::IncompatibleContractVersion {
+                contract: name,
+                minimum_compatible: COMPATIBLE_VERSION,
+                actual: version,
+            });
+        }
+    }
+
+    info!("Contract is compatible with feeder version.");
+
+    let result = dispatch_alarms(rpc_setup).await;
 
     if let Err(error) = &result {
         error!("{error}");
