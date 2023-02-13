@@ -16,6 +16,7 @@ use semver::SemVer;
 
 use self::{
     config::{Config, Contract},
+    error::AppResult,
     messages::{DispatchResponse, ExecuteMsg, QueryMsg, StatusResponse},
 };
 
@@ -30,7 +31,7 @@ pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
 #[tokio::main]
-async fn main() -> Result<(), error::Application> {
+async fn main() -> AppResult<()> {
     let log_writer = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
 
     let (log_writer, _guard) =
@@ -52,15 +53,15 @@ async fn main() -> Result<(), error::Application> {
     result
 }
 
-async fn app_main() -> Result<(), error::Application> {
-    let rpc_setup @ RpcSetup { ref client, ref config, .. } =
+async fn app_main() -> AppResult<()> {
+    let rpc_setup =
         prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
     info!("Checking compatibility with contract version...");
 
-    for (contract, name) in [(config.time_alarms(), "timealarms"), (config.market_price_oracle(), "oracle")] {
+    for (contract, name) in [(rpc_setup.config.time_alarms(), "timealarms"), (rpc_setup.config.market_price_oracle(), "oracle")] {
         let version: SemVer = query_wasm(
-            &client,
+            &rpc_setup.client,
             contract.address(),
             &serde_json_wasm::to_vec(&QueryMsg::ContractVersion {})?,
         )

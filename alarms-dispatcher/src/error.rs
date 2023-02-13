@@ -22,7 +22,7 @@ pub enum Application {
     DispatchAlarms(#[from] DispatchAlarms),
 }
 
-pub type Result<T> = std::result::Result<T, Application>;
+pub type AppResult<T> = Result<T, Application>;
 
 #[derive(Debug, ThisError)]
 pub enum DispatchAlarms {
