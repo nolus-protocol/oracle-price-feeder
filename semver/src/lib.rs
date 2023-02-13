@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
+use serde::{Serialize, Deserialize};
+
 pub type VersionSegment = u16;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
