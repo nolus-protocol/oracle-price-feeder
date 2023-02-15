@@ -19,6 +19,10 @@ pub enum WasmQuery {
 }
 
 #[derive(Debug, ThisError)]
+#[error("Failed to calculate and construct fee object! Cause: {0}")]
+pub struct FeeCalculation(#[from] cosmrs::ErrorReport);
+
+#[derive(Debug, ThisError)]
 pub enum SimulateTx {
     #[error("Failed committing and signing execution message! Cause: {0}")]
     Commit(#[from] crate::build_tx::error::Error),
@@ -30,10 +34,14 @@ pub enum SimulateTx {
     MissingSimulationGasInto,
     #[error("Simulation result's used gas exceeds gas limit! Simulation gas used: {used}.")]
     SimulationGasExceedsLimit { used: u64 },
+    #[error("Failed to calculate and construct fee object! Cause: {0}")]
+    FeeCalculation(#[from] FeeCalculation),
 }
 
 #[derive(Debug, ThisError)]
 pub enum CommitTx {
+    #[error("Failed to calculate and construct fee object! Cause: {0}")]
+    FeeCalculation(#[from] FeeCalculation),
     #[error("Failed committing and signing execution message! Cause: {0}")]
     Commit(#[from] crate::build_tx::error::Error),
     #[error("Failed to broadcast committed message! Cause: {0}")]

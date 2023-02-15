@@ -15,6 +15,7 @@ use cosmrs::{
     },
     tendermint::abci::Code,
     tx::Fee,
+    Coin,
 };
 use serde::de::DeserializeOwned;
 use tracing::{debug, error};
@@ -98,12 +99,7 @@ pub async fn simulate_tx(
     unsigned_tx: ContractTx,
 ) -> Result<GasInfo, error::SimulateTx> {
     let simulation_tx = unsigned_tx
-        .commit(
-            signer,
-            Fee::from_amount_and_gas(config.fee().clone(), gas_limit),
-            None,
-            None,
-        )?
+        .commit(signer, calculate_fee(config, gas_limit)?, None, None)?
         .to_bytes()?;
 
     let gas_info: GasInfo = client
@@ -142,12 +138,8 @@ pub async fn commit_tx(
         panic!()
     });
 
-    let signed_tx = unsigned_tx.commit(
-        signer,
-        Fee::from_amount_and_gas(node_config.fee().clone(), gas_limit),
-        None,
-        None,
-    )?;
+    let signed_tx =
+        unsigned_tx.commit(signer, calculate_fee(node_config, gas_limit)?, None, None)?;
 
     let tx_commit_response = client
         .with_json_rpc(|rpc| async move { signed_tx.broadcast_commit(&rpc).await })
@@ -193,12 +185,26 @@ pub async fn commit_tx_with_gas_estimation(
     };
 
     let adjusted_gas_limit: u64 = u128::from(tx_gas_limit)
-        .checked_mul(node_config.gas_adjustment_numerator().into())
-        .and_then(|result| result.checked_div(node_config.gas_adjustment_denominator().into()))
+        .checked_mul(node_config.gas_adjustment_numerator().get().into())
+        .and_then(|result| {
+            result.checked_div(node_config.gas_adjustment_denominator().get().into())
+        })
         .map(|result| u64::try_from(result).unwrap_or(u64::MAX))
         .unwrap_or(tx_gas_limit);
 
     commit_tx(signer, client, node_config, unsigned_tx, adjusted_gas_limit)
         .await
         .map_err(Into::into)
+}
+
+fn calculate_fee(config: &Node, gas_limit: u64) -> Result<Fee, error::FeeCalculation> {
+    Ok(Fee::from_amount_and_gas(
+        Coin::new(
+            u128::from(gas_limit)
+                .saturating_mul(config.gas_price_numerator().get().into())
+                .saturating_div(config.gas_price_denominator().get().into()),
+            config.fee_denom(),
+        )?,
+        gas_limit,
+    ))
 }

@@ -24,7 +24,7 @@ impl Client {
                 Channel::builder(Self::construct_grpc_url(config).try_into()?);
 
             if let Some(limit) = config.http2_concurrency_limit() {
-                channel_builder = channel_builder.concurrency_limit(limit);
+                channel_builder = channel_builder.concurrency_limit(limit.get());
             }
 
             channel_builder
@@ -56,7 +56,7 @@ impl Client {
         Self::construct_url(
             config.json_rpc_protocol(),
             config.json_rpc_host(),
-            config.json_rpc_port(),
+            config.json_rpc_port().get(),
             config.json_rpc_api_path(),
         )
     }
@@ -65,7 +65,7 @@ impl Client {
         Self::construct_url(
             config.grpc_protocol(),
             config.grpc_host(),
-            config.grpc_port(),
+            config.grpc_port().get(),
             config.grpc_api_path(),
         )
     }

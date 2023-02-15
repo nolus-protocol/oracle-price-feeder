@@ -1,8 +1,9 @@
-use std::path::Path;
-
-use cosmrs::{
-    proto::cosmos::base::v1beta1::Coin as CoinProto, tendermint::chain::Id as ChainId, Coin,
+use std::{
+    num::{NonZeroU16, NonZeroU64, NonZeroUsize},
+    path::Path,
 };
+
+use cosmrs::tendermint::chain::Id as ChainId;
 use serde::{
     de::{DeserializeOwned, Error as DeserializeError},
     Deserialize, Deserializer, Serialize,
@@ -33,28 +34,29 @@ struct CoinDTO {
 #[serde(rename_all = "snake_case")]
 pub struct Node {
     #[serde(default)]
-    http2_concurrency_limit: Option<usize>,
+    http2_concurrency_limit: Option<NonZeroUsize>,
     json_rpc_protocol: Protocol,
     grpc_protocol: Protocol,
     json_rpc_host: String,
     grpc_host: String,
-    json_rpc_port: u16,
+    json_rpc_port: NonZeroU16,
     #[serde(default)]
     json_rpc_api_path: Option<String>,
-    grpc_port: u16,
+    grpc_port: NonZeroU16,
     #[serde(default)]
     grpc_api_path: Option<String>,
     address_prefix: String,
     #[serde(deserialize_with = "deserialize_chain_id")]
     chain_id: ChainId,
-    #[serde(deserialize_with = "deserialize_coin")]
-    fee: Coin,
-    gas_adjustment_numerator: u64,
-    gas_adjustment_denominator: u64,
+    fee_denom: String,
+    gas_adjustment_numerator: NonZeroU64,
+    gas_adjustment_denominator: NonZeroU64,
+    gas_price_numerator: NonZeroU64,
+    gas_price_denominator: NonZeroU64,
 }
 
 impl Node {
-    pub fn http2_concurrency_limit(&self) -> Option<usize> {
+    pub fn http2_concurrency_limit(&self) -> Option<NonZeroUsize> {
         self.http2_concurrency_limit
     }
 
@@ -74,7 +76,7 @@ impl Node {
         &self.grpc_host
     }
 
-    pub fn json_rpc_port(&self) -> u16 {
+    pub fn json_rpc_port(&self) -> NonZeroU16 {
         self.json_rpc_port
     }
 
@@ -82,7 +84,7 @@ impl Node {
         self.json_rpc_api_path.as_deref()
     }
 
-    pub fn grpc_port(&self) -> u16 {
+    pub fn grpc_port(&self) -> NonZeroU16 {
         self.grpc_port
     }
 
@@ -98,16 +100,24 @@ impl Node {
         &self.chain_id
     }
 
-    pub fn fee(&self) -> &Coin {
-        &self.fee
+    pub fn fee_denom(&self) -> &str {
+        &self.fee_denom
     }
 
-    pub fn gas_adjustment_numerator(&self) -> u64 {
+    pub fn gas_adjustment_numerator(&self) -> NonZeroU64 {
         self.gas_adjustment_numerator
     }
 
-    pub fn gas_adjustment_denominator(&self) -> u64 {
+    pub fn gas_adjustment_denominator(&self) -> NonZeroU64 {
         self.gas_adjustment_denominator
+    }
+
+    pub fn gas_price_numerator(&self) -> NonZeroU64 {
+        self.gas_price_numerator
+    }
+
+    pub fn gas_price_denominator(&self) -> NonZeroU64 {
+        self.gas_price_denominator
     }
 }
 
@@ -124,19 +134,6 @@ where
     String::deserialize(deserializer)?
         .parse()
         .map_err(DeserializeError::custom)
-}
-
-fn deserialize_coin<'de, D>(deserializer: D) -> Result<Coin, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    <CoinDTO as Deserialize>::deserialize(deserializer)
-        .map(|coin| CoinProto {
-            denom: coin.denom,
-            amount: coin.amount,
-        })?
-        .try_into()
-        .map_err(D::Error::custom)
 }
 
 pub async fn read_config<C, P>(path: P) -> ModuleResult<C>

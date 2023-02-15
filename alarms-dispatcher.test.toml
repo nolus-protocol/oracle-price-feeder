@@ -11,9 +11,11 @@ grpc_port = 1318
 # grpc_api_path = "/grpc/api"
 address_prefix = "nolus"
 chain_id = "nolus-rila"
-fee = { amount = "1500", denom = "unls" }
 gas_adjustment_numerator = 1015
 gas_adjustment_denominator = 1000
+fee_denom = "unls"
+gas_price_numerator = 1
+gas_price_denominator = 390
 
 [time_alarms]
 address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
