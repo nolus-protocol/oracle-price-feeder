@@ -178,7 +178,7 @@ fn spawn_workers(
     let (sender, receiver) = unbounded_channel();
 
     providers
-        .into_iter()
+        .iter()
         .map(|provider_cfg| {
             let p_type = Type::from_str(&provider_cfg.main_type)?;
 

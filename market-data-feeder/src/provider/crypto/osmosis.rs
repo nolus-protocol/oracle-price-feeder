@@ -87,7 +87,7 @@ impl Client {
                 )?,
             }),
             Err(err) => {
-                eprintln!("{:?}", err);
+                eprintln!("{err:?}");
 
                 Err(FeedProviderError::InvalidProviderURL(url_str.to_string()))
             }

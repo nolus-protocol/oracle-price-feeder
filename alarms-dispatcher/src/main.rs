@@ -170,7 +170,7 @@ async fn dispatch_alarm<'r>(
                 alarm_type
             );
 
-            let max_gas_used: &mut GasUsed = &mut max_gas_used.get_or_insert(result.gas_used);
+            let max_gas_used: &mut GasUsed = max_gas_used.get_or_insert(result.gas_used);
 
             *max_gas_used = Ord::max(*max_gas_used, result.gas_used);
 
