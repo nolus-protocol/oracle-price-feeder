@@ -8,7 +8,8 @@ license.workspace = true
 
 [dependencies]
 cosmrs = { version = "0.11", default-features = false, features = ["rpc", "grpc", "bip32", "cosmwasm"] }
-prost = { version = "0.11.2", default-features = false, features = ["std"] }
+base64 = "0.21"
+prost = { version = "0.11.6", default-features = false, features = ["std"] }
 thiserror = "1"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "fs"] }
 toml = "0.7.1"

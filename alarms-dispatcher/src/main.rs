@@ -7,6 +7,7 @@ use chain_comms::{
     build_tx::ContractTx,
     client::Client,
     config::Node,
+    decode,
     interact::{commit_tx_with_gas_estimation, query_wasm},
     log::{self, log_commit_response, setup_logging},
     rpc_setup::{prepare_rpc, RpcSetup},
@@ -216,8 +217,9 @@ async fn commit_dispatch_tx(
     )
     .await?;
 
-    let response =
-        serde_json_wasm::from_slice::<DispatchResponse>(&tx_commit_response.deliver_tx.data);
+    let response = serde_json_wasm::from_slice::<DispatchResponse>(
+        decode::exec_tx_data(&tx_commit_response.deliver_tx)?.as_slice(),
+    );
 
     info_span!("Tx").in_scope(|| {
         if let Ok(response) = response.as_ref() {

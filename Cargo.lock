@@ -42,7 +42,10 @@ dependencies = [
 name = "alarms-dispatcher"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.0",
  "chain-comms",
+ "cosmrs",
+ "prost",
  "semver",
  "serde",
  "serde-json-wasm",
@@ -276,6 +279,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "chain-comms"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.0",
  "cosmrs",
  "prost",
  "serde",

@@ -50,6 +50,8 @@ pub enum CommitDispatchTx {
     SerializeDispatchMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to commit transaction! Cause: {0}")]
     CommitTx(#[from] chain_comms::interact::error::GasEstimatingTxCommit),
+    #[error("Failed to deserialize response data! Cause: {0}")]
+    DeserializeTxData(#[from] chain_comms::decode::error::Error),
     #[error("Failed to deserialize dispatch response! Cause: {0}")]
     DeserializeDispatchResponse(#[from] serde_json_wasm::de::Error),
 }

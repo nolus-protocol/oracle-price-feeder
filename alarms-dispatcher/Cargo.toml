@@ -10,12 +10,15 @@ license.workspace = true
 semver = { workspace = true }
 chain-comms = { workspace = true }
 
+base64 = "0.21"
+cosmrs = { version = "0.11", default-features = false, features = ["rpc", "grpc", "bip32", "cosmwasm"] }
+prost = "0.11.6"
+serde = { version = "1", features = ["derive"] }
+serde-json-wasm = "0.5"
 thiserror = "1"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "fs"] }
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
-serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "0.5"
 
 [build-dependencies]
 time = { version = "0.3.17", default-features = false, features = ["std", "formatting"] }

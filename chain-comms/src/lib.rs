@@ -2,6 +2,7 @@ pub mod account;
 pub mod build_tx;
 pub mod client;
 pub mod config;
+pub mod decode;
 pub mod interact;
 pub mod log;
 pub mod rpc_setup;
