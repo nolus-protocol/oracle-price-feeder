@@ -59,7 +59,10 @@ async fn app_main() -> AppResult<()> {
 
     info!("Checking compatibility with contract version...");
 
-    for (contract, name) in [(rpc_setup.config.time_alarms(), "timealarms"), (rpc_setup.config.market_price_oracle(), "oracle")] {
+    for (contract, name) in [
+        (rpc_setup.config.time_alarms(), "timealarms"),
+        (rpc_setup.config.market_price_oracle(), "oracle"),
+    ] {
         let version: SemVer = query_wasm(
             &rpc_setup.client,
             contract.address(),
