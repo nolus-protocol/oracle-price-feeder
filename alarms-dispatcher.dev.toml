@@ -21,9 +21,9 @@ gas_price_denominator = 390
 [time_alarms]
 address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
 max_alarms_group = 16
-gas_limit_per_alarm = 500_000
+gas_limit_per_alarm = 1_000_000
 
 [market_price_oracle]
 address = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
 max_alarms_group = 16
-gas_limit_per_alarm = 500_000
+gas_limit_per_alarm = 1_000_000
