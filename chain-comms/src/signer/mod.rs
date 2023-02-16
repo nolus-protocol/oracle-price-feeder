@@ -9,11 +9,14 @@ use cosmrs::{
 };
 use prost::Message;
 
-use self::error::Result;
+use crate::{client::Client, interact::query_account_data};
+
+use self::error::Result as ModuleResult;
 
 pub mod error;
 
 pub struct Signer {
+    needs_update: bool,
     address: String,
     key: SigningKey,
     chain_id: ChainId,
@@ -25,6 +28,7 @@ impl Signer {
     #[must_use]
     pub fn new(address: String, key: SigningKey, chain_id: ChainId, account: BaseAccount) -> Self {
         Self {
+            needs_update: false,
             address,
             key,
             chain_id,
@@ -36,7 +40,11 @@ impl Signer {
         &self.address
     }
 
-    pub fn sign(&self, body: Body, fee: Fee) -> Result<Raw> {
+    pub fn sign(&self, body: Body, fee: Fee) -> ModuleResult<Raw> {
+        if self.needs_update {
+            return Err(error::Error::AccountDataUpdateNeeded);
+        }
+
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(
@@ -67,12 +75,31 @@ impl Signer {
     }
 
     #[inline]
-    pub fn tx_confirmed(&mut self) {
+    pub async fn update_account(
+        &mut self,
+        client: &Client,
+    ) -> Result<(), crate::interact::error::AccountQuery> {
+        query_account_data(client, &self.address)
+            .await
+            .map(|account: BaseAccount| {
+                self.needs_update = false;
+
+                self.account = account;
+            })
+    }
+
+    #[inline]
+    pub const fn needs_update(&self) -> bool {
+        self.needs_update
+    }
+
+    #[inline]
+    pub(crate) fn tx_confirmed(&mut self) {
         self.account.sequence += 1;
     }
 
     #[inline]
-    pub fn update_account(&mut self, account: BaseAccount) {
-        self.account = account;
+    pub(crate) fn set_needs_update(&mut self) {
+        self.needs_update = true;
     }
 }

@@ -1,12 +1,14 @@
 use std::path::Path;
 
+use cosmrs::{crypto::secp256k1::SigningKey, proto::cosmos::auth::v1beta1::BaseAccount};
 use serde::de::DeserializeOwned;
 use tracing::info;
 
 use crate::{
-    account::{account_data, account_id},
+    account::account_id,
     client::Client,
     config::{read_config, Node},
+    interact::query_account_data,
     signer::Signer,
     signing_key::signing_key,
 };
@@ -30,7 +32,7 @@ where
     C: DeserializeOwned + AsRef<Node>,
     P: AsRef<Path>,
 {
-    let signing_key = signing_key(key_derivation_path, "").await?;
+    let signing_key: SigningKey = signing_key(key_derivation_path, "").await?;
 
     info!("Successfully derived private key.");
 
@@ -38,19 +40,19 @@ where
 
     info!("Successfully read configuration file.");
 
-    let client = Client::new(config.as_ref()).await?;
+    let client: Client = Client::new(config.as_ref()).await?;
 
     info!("Fetching account data from network...");
 
-    let account_id = account_id(config.as_ref(), &signing_key)?;
+    let address: String = account_id(config.as_ref(), &signing_key)?.to_string();
 
-    let account_data = account_data(&client, account_id.clone()).await?;
+    let account_data: BaseAccount = query_account_data(&client, &address).await?;
 
     info!("Successfully fetched account data from network.");
 
     Ok(RpcSetup {
         signer: Signer::new(
-            account_id.to_string(),
+            address,
             signing_key,
             config.as_ref().chain_id().clone(),
             account_data,

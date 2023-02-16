@@ -11,7 +11,7 @@ pub enum Error {
     #[error("Failed to resolve account ID! Cause: {0}")]
     AccountId(#[from] crate::account::error::AccountId),
     #[error("Failed to resolve account state data! Cause: {0}")]
-    AccountData(#[from] crate::account::error::AccountData),
+    AccountQuery(#[from] crate::interact::error::AccountQuery),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,5 +1,3 @@
-use std::num::NonZeroU32;
-
 use cosmrs::{
     proto::{
         cosmos::{
@@ -13,7 +11,6 @@ use cosmrs::{
             query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
         },
     },
-    tendermint::abci::Code,
     tx::Fee,
     Coin,
 };
@@ -132,12 +129,6 @@ pub async fn commit_tx(
     unsigned_tx: ContractTx,
     gas_limit: u64,
 ) -> Result<CommitResponse, error::CommitTx> {
-    const ERROR_CODE: Code = Code::Err(if let Some(n) = NonZeroU32::new(13) {
-        n
-    } else {
-        panic!()
-    });
-
     let signed_tx =
         unsigned_tx.commit(signer, calculate_fee(node_config, gas_limit)?, None, None)?;
 
@@ -145,11 +136,10 @@ pub async fn commit_tx(
         .with_json_rpc(|rpc| async move { signed_tx.broadcast_commit(&rpc).await })
         .await?;
 
-    if !(tx_commit_response.deliver_tx.code == ERROR_CODE
-        && tx_commit_response.deliver_tx.gas_used == 0
-        && tx_commit_response.deliver_tx.gas_wanted == 0)
-    {
+    if tx_commit_response.check_tx.code.is_ok() && tx_commit_response.deliver_tx.code.is_ok() {
         signer.tx_confirmed();
+    } else {
+        signer.set_needs_update();
     }
 
     Ok(tx_commit_response)
