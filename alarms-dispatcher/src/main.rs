@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::time::sleep;
-use tracing::{debug, error, info, info_span};
+use tracing::{debug, error, info, info_span, span::EnteredSpan};
 
 use chain_comms::{
     build_tx::ContractTx,
@@ -101,50 +101,133 @@ async fn app_main() -> AppResult<()> {
 
 async fn dispatch_alarms(
     RpcSetup {
-        mut signer,
-        config,
-        client,
+        ref mut signer,
+        ref config,
+        ref client,
         ..
     }: RpcSetup<Config>,
 ) -> Result<(), error::DispatchAlarms> {
-    let poll_period = Duration::from_secs(config.poll_period_seconds());
+    let poll_period: Duration = Duration::from_secs(config.poll_period_seconds());
 
-    let query = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
+    let query: Vec<u8> = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
     let mut fallback_gas_limit: u64 = 0;
 
-    loop {
-        for (contract, type_name, to_error) in [
-            (
-                config.market_price_oracle(),
-                "market price",
-                error::DispatchAlarms::DispatchPriceAlarm
-                    as fn(error::DispatchAlarm) -> error::DispatchAlarms,
-            ),
-            (
-                config.time_alarms(),
-                "time",
-                error::DispatchAlarms::DispatchTimeAlarm
-                    as fn(error::DispatchAlarm) -> error::DispatchAlarms,
-            ),
-        ] {
-            fallback_gas_limit = dispatch_alarm(
-                &mut signer,
-                &client,
-                config.node(),
-                contract,
-                &query,
-                type_name,
-                fallback_gas_limit,
-            )
-            .await
-            .map_err(to_error)?
-            .0
-            .max(fallback_gas_limit);
+    let contracts: [(
+        &Contract,
+        &str,
+        fn(error::DispatchAlarm) -> error::DispatchAlarms,
+    ); 2] = [
+        (
+            config.market_price_oracle(),
+            "market price",
+            error::DispatchAlarms::DispatchPriceAlarm
+                as fn(error::DispatchAlarm) -> error::DispatchAlarms,
+        ),
+        (
+            config.time_alarms(),
+            "time",
+            error::DispatchAlarms::DispatchTimeAlarm
+                as fn(error::DispatchAlarm) -> error::DispatchAlarms,
+        ),
+    ];
+
+    'dispatcher_loop: loop {
+        if !signer.needs_update() {
+            'for_contracts: for contract in contracts {
+                fallback_gas_limit = if let Ok(fallback_gas_limit) = handle_alarms_dispatch(
+                    signer,
+                    config,
+                    client,
+                    contract,
+                    &query,
+                    fallback_gas_limit,
+                )
+                .await
+                {
+                    fallback_gas_limit
+                } else {
+                    break 'for_contracts;
+                }
+            }
+        } else {
+            let _span: EnteredSpan = info_span!("recover-after-error").entered();
+
+            info!("Trying to update local copy of account data...");
+
+            if recover_after_error(_span, signer, client).await {
+                continue 'dispatcher_loop;
+            }
         }
 
         sleep(poll_period).await;
     }
+}
+
+async fn handle_alarms_dispatch<'r>(
+    signer: &mut Signer,
+    config: &Config,
+    client: &Client,
+    (contract, alarm_type_name, to_error): (
+        &'r Contract,
+        &'static str,
+        fn(error::DispatchAlarm) -> error::DispatchAlarms,
+    ),
+    query: &'r [u8],
+    fallback_gas_limit: u64,
+) -> Result<u64, ()> {
+    let result: Result<GasUsed, error::DispatchAlarms> = dispatch_alarm(
+        signer,
+        client,
+        config.node(),
+        contract,
+        query,
+        alarm_type_name,
+        fallback_gas_limit,
+    )
+    .await
+    .map_err(to_error);
+
+    Ok(match result {
+        Ok(gas_used) => gas_used.0.max(fallback_gas_limit),
+        Err(error) => {
+            let _span: EnteredSpan = info_span!("dispatch-error").entered();
+
+            error!("{error}");
+
+            if signer.needs_update() {
+                info!("After-error recovery needed.");
+
+                info!(
+                    "Trying to update local copy of account data without interrupting workflow..."
+                );
+
+                if !recover_after_error(_span, signer, client).await {
+                    return Err(());
+                }
+            } else {
+                drop(_span);
+            }
+
+            fallback_gas_limit
+        }
+    })
+}
+
+async fn recover_after_error(_span: EnteredSpan, signer: &mut Signer, client: &Client) -> bool {
+    if let Err(error) = signer.update_account(&client).await {
+        error!("{error}");
+
+        return false;
+    }
+
+    info!("Successfully updated local copy of account data.");
+
+    info!("Continuing normal workflow...");
+
+    drop(_span);
+
+    true
 }
 
 async fn dispatch_alarm<'r>(
@@ -222,14 +305,18 @@ async fn commit_dispatch_tx(
     );
 
     info_span!("Tx").in_scope(|| {
-        if let Ok(response) = response.as_ref() {
-            info!(
-                "Dispatched {} alarms in total.",
-                response.dispatched_alarms()
-            );
-        } else {
-            error!("Failed to deserialize response data!");
-            debug!(data = %String::from_utf8_lossy(&tx_commit_response.deliver_tx.data));
+        if tx_commit_response.check_tx.code.is_ok() && tx_commit_response.deliver_tx.code.is_ok() {
+            if let Ok(response) = response.as_ref() {
+                info!(
+                    "Dispatched {} alarms in total.",
+                    response.dispatched_alarms()
+                );
+            } else {
+                error!(
+                    data = %String::from_utf8_lossy(&tx_commit_response.deliver_tx.data),
+                    "Failed to deserialize response data!"
+                );
+            }
         }
 
         log_commit_response(&tx_commit_response);

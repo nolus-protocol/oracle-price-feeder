@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, io, str::FromStr, sync::Arc, time::Duration};
 
 use tokio::{
+    select,
     sync::mpsc::{unbounded_channel, UnboundedReceiver},
     task::JoinSet,
     time::{interval, sleep, timeout, Instant},
 };
-use tracing::{error, info};
+use tracing::{error, info, info_span, span::EnteredSpan};
 
 use chain_comms::{
     build_tx::ContractTx,
@@ -13,6 +14,7 @@ use chain_comms::{
     interact::{commit_tx_with_gas_estimation, query_wasm, CommitResponse},
     log::{self, log_commit_response, setup_logging},
     rpc_setup::{prepare_rpc, RpcSetup},
+    signer::Signer,
 };
 use semver::SemVer;
 
@@ -69,6 +71,118 @@ async fn app_main() -> AppResult<()> {
         ..
     } = prepare_rpc::<Config, _>("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
+    check_compatibility(&config, &client).await?;
+
+    let client = Arc::new(client);
+
+    info!("Starting workers...");
+
+    let tick_time = Duration::from_secs(config.tick_time());
+
+    let (mut set, mut receiver) =
+        spawn_workers(&client, config.providers(), config.oracle_addr(), tick_time)?;
+
+    info!("Workers started. Entering broadcasting loop...");
+
+    let mut fallback_gas_limit: u64 = 0;
+
+    'feeder_loop: loop {
+        let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
+
+        let channel_closed: bool = timeout(tick_time, async {
+            while let Some((id, instant, data)) = receiver.recv().await {
+                if Instant::now().duration_since(instant) < tick_time {
+                    messages.insert(id, Vec::from(data));
+                }
+            }
+
+            true
+        })
+        .await
+        .unwrap_or(false);
+
+        if messages.is_empty() {
+            continue;
+        }
+
+        let mut is_retry: bool = false;
+
+        let mut tx: Option<ContractTx> = Some(messages.into_values().fold(
+            ContractTx::new(config.oracle_addr().to_string()),
+            |tx: ContractTx, msg: Vec<u8>| tx.add_message(msg, Vec::new()),
+        ));
+
+        let first_try_timestamp: Instant = Instant::now();
+
+        while let Some(tx) = if is_retry {
+            if first_try_timestamp.elapsed() < tick_time {
+                tx.take()
+            } else {
+                None
+            }
+        } else {
+            is_retry = true;
+
+            tx.clone()
+        } {
+            let result: Result<
+                CommitResponse,
+                chain_comms::interact::error::GasEstimatingTxCommit,
+            > = commit_tx_with_gas_estimation(
+                &mut signer,
+                &client,
+                config.as_ref(),
+                config.gas_limit(),
+                tx,
+                fallback_gas_limit,
+            )
+            .await;
+
+            match result {
+                Ok(response) => {
+                    let mut channel_closed: bool = channel_closed;
+
+                    log_commit_response(&response);
+
+                    fallback_gas_limit =
+                        if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
+                            response
+                                .deliver_tx
+                                .gas_used
+                                .unsigned_abs()
+                                .max(fallback_gas_limit)
+                        } else {
+                            if signer.needs_update() {
+                                channel_closed = channel_closed
+                                    || recover_after_error(
+                                        &mut signer,
+                                        client.as_ref(),
+                                        tick_time,
+                                        &mut receiver,
+                                    )
+                                    .await;
+                            }
+
+                            fallback_gas_limit
+                        };
+
+                    if channel_closed {
+                        break 'feeder_loop;
+                    }
+                }
+                Err(error) => error!("Failed to feed data into oracle! Cause: {error}"),
+            }
+        }
+    }
+
+    drop(receiver);
+
+    while set.join_next().await.is_some() {}
+
+    Ok(())
+}
+
+async fn check_compatibility(config: &Config, client: &Client) -> AppResult<()> {
     info!("Checking compatibility with contract version...");
 
     {
@@ -95,71 +209,51 @@ async fn app_main() -> AppResult<()> {
 
     info!("Contract is compatible with feeder version.");
 
-    let client = Arc::new(client);
+    Ok(())
+}
 
-    info!("Starting workers...");
+async fn recover_after_error(
+    signer: &mut Signer,
+    client: &Client,
+    tick_time: Duration,
+    receiver: &mut UnboundedReceiver<(usize, Instant, String)>,
+) -> bool {
+    let mut channel_closed: bool = false;
 
-    let tick_time = Duration::from_secs(config.tick_time());
+    let _span: EnteredSpan = info_span!("recover-after-error").entered();
 
-    let (mut set, mut receiver) =
-        spawn_workers(&client, config.providers(), config.oracle_addr(), tick_time)?;
+    info!("After-error recovery needed!");
 
-    info!("Workers started. Entering broadcasting loop...");
+    'recovery_loop: while signer.needs_update() {
+        info!("Trying to update local copy of account data...");
 
-    let mut fallback_gas_limit: u64 = 0;
+        let result: Result<(), chain_comms::interact::error::AccountQuery> = select!(
+            update_result = signer.update_account(&client) => update_result,
+            () = async {
+                while let Some(_) = receiver.recv().await {}
 
-    loop {
-        let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
+                channel_closed = true;
 
-        let channel_closed = timeout(tick_time, async {
-            while let Some((id, instant, data)) = receiver.recv().await {
-                if Instant::now().duration_since(instant) < tick_time {
-                    messages.insert(id, Vec::from(data));
-                }
-            }
-
-            true
-        })
-        .await
-        .unwrap_or(false);
-
-        if messages.is_empty() {
-            continue;
-        }
-
-        let tx = messages.into_values().fold(
-            ContractTx::new(config.oracle_addr().to_string()),
-            |tx, msg| tx.add_message(msg, Vec::new()),
+                std::future::pending().await
+            } => unreachable!(),
         );
 
-        let response: CommitResponse = commit_tx_with_gas_estimation(
-            &mut signer,
-            &client,
-            config.as_ref(),
-            config.gas_limit(),
-            tx,
-            fallback_gas_limit,
-        )
-        .await?;
+        if let Err(error) = result {
+            error!("Failed to update local copy of account data! Cause: {error}");
 
-        fallback_gas_limit = response
-            .deliver_tx
-            .gas_used
-            .unsigned_abs()
-            .max(fallback_gas_limit);
-
-        log_commit_response(&response);
-
-        if channel_closed {
-            drop(receiver);
-
-            break;
+            sleep(tick_time).await;
+        } else {
+            break 'recovery_loop;
         }
     }
 
-    while set.join_next().await.is_some() {}
+    info!("Successfully updated local copy of account data.");
 
-    Ok(())
+    info!("Continuing workflow.");
+
+    drop(_span);
+
+    channel_closed
 }
 
 type SpawnWorkersResult = AppResult<(
