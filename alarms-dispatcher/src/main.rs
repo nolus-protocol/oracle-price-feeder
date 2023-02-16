@@ -55,7 +55,7 @@ async fn main() -> AppResult<()> {
 }
 
 async fn app_main() -> AppResult<()> {
-    let rpc_setup =
+    let rpc_setup: RpcSetup<Config> =
         prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
     info!("Checking compatibility with contract version...");
@@ -111,7 +111,7 @@ async fn dispatch_alarms(
 
     let query: Vec<u8> = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
-    let mut fallback_gas_limit: u64 = 0;
+    let mut fallback_gas_limit: Option<u64> = None;
 
     let contracts: [(
         &Contract,
@@ -135,18 +135,16 @@ async fn dispatch_alarms(
     'dispatcher_loop: loop {
         if !signer.needs_update() {
             'for_contracts: for contract in contracts {
-                fallback_gas_limit = if let Ok(fallback_gas_limit) = handle_alarms_dispatch(
+                if handle_alarms_dispatch(
                     signer,
                     config,
                     client,
                     contract,
                     &query,
-                    fallback_gas_limit,
+                    &mut fallback_gas_limit,
                 )
-                .await
+                    .await.is_err()
                 {
-                    fallback_gas_limit
-                } else {
                     break 'for_contracts;
                 }
             }
@@ -174,8 +172,8 @@ async fn handle_alarms_dispatch<'r>(
         fn(error::DispatchAlarm) -> error::DispatchAlarms,
     ),
     query: &'r [u8],
-    fallback_gas_limit: u64,
-) -> Result<u64, ()> {
+    fallback_gas_limit: &mut Option<u64>,
+) -> Result<(), ()> {
     let result: Result<GasUsed, error::DispatchAlarms> = dispatch_alarm(
         signer,
         client,
@@ -183,13 +181,17 @@ async fn handle_alarms_dispatch<'r>(
         contract,
         query,
         alarm_type_name,
-        fallback_gas_limit,
+        *fallback_gas_limit,
     )
-    .await
+        .await
     .map_err(to_error);
 
-    Ok(match result {
-        Ok(gas_used) => gas_used.0.max(fallback_gas_limit),
+    match result {
+        Ok(gas_used) => {
+            let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(gas_used.0);
+
+            *fallback_gas_limit = gas_used.0.max(*fallback_gas_limit);
+        },
         Err(error) => {
             let _span: EnteredSpan = info_span!("dispatch-error").entered();
 
@@ -208,10 +210,10 @@ async fn handle_alarms_dispatch<'r>(
             } else {
                 drop(_span);
             }
-
-            fallback_gas_limit
         }
-    })
+    }
+
+    Ok(())
 }
 
 async fn recover_after_error(_span: EnteredSpan, signer: &mut Signer, client: &Client) -> bool {
@@ -237,7 +239,7 @@ async fn dispatch_alarm<'r>(
     contract: &'r Contract,
     query: &'r [u8],
     alarm_type: &'static str,
-    fallback_gas_limit: u64,
+    fallback_gas_limit: Option<u64>,
 ) -> Result<GasUsed, error::DispatchAlarm> {
     let mut max_gas_used: Option<GasUsed> = None;
 
@@ -279,7 +281,7 @@ async fn commit_dispatch_tx(
     client: &Client,
     config: &Node,
     contract: &Contract,
-    fallback_gas_limit: u64,
+    fallback_gas_limit: Option<u64>,
 ) -> Result<CommitResult, error::CommitDispatchTx> {
     let unsigned_tx = ContractTx::new(contract.address().into()).add_message(
         serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {

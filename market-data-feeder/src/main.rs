@@ -84,7 +84,7 @@ async fn app_main() -> AppResult<()> {
 
     info!("Workers started. Entering broadcasting loop...");
 
-    let mut fallback_gas_limit: u64 = 0;
+    let mut fallback_gas_limit: Option<u64> = None;
 
     'feeder_loop: loop {
         let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
@@ -144,27 +144,24 @@ async fn app_main() -> AppResult<()> {
 
                     log_commit_response(&response);
 
-                    fallback_gas_limit =
-                        if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
-                            response
-                                .deliver_tx
-                                .gas_used
-                                .unsigned_abs()
-                                .max(fallback_gas_limit)
-                        } else {
-                            if signer.needs_update() {
-                                channel_closed = channel_closed
-                                    || recover_after_error(
-                                        &mut signer,
-                                        client.as_ref(),
-                                        tick_time,
-                                        &mut receiver,
-                                    )
-                                    .await;
-                            }
+                    if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
+                        let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
 
-                            fallback_gas_limit
-                        };
+                        let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(used_gas);
+
+                        *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
+                    } else {
+                        if signer.needs_update() {
+                            channel_closed = channel_closed
+                                || recover_after_error(
+                                    &mut signer,
+                                    client.as_ref(),
+                                    tick_time,
+                                    &mut receiver,
+                                )
+                                .await;
+                        }
+                    }
 
                     if channel_closed {
                         break 'feeder_loop;
