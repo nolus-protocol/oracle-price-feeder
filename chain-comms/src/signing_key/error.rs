@@ -4,6 +4,8 @@ use thiserror::Error as ThisError;
 pub enum Error {
     #[error("Couldn't read secret mnemonic from the standard input! Cause: {0}")]
     ReadingMnemonic(#[from] tokio::io::Error),
+    #[error("Couldn't read secret mnemonic from environment variable because it can't be encoded as valid UTF-8!")]
+    NonUnicodeMnemonic,
     #[error("Invalid mnemonic passed or is not in English! Cause: {0}")]
     ParsingMnemonic(cosmrs::bip32::Error),
     #[error("Couldn't parse derivation path! Cause: {0}")]

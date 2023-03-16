@@ -1,3 +1,5 @@
+use std::env::{var, VarError};
+
 use cosmrs::{
     bip32::{Language, Mnemonic},
     crypto::secp256k1::SigningKey,
@@ -9,14 +11,22 @@ use self::error::{Error, Result};
 pub mod error;
 
 pub async fn signing_key(derivation_path: &str, password: &str) -> Result<SigningKey> {
-    println!("Enter dispatcher's account secret: ");
+    let secret: String = match var("SIGNING_KEY_MNEMONIC") {
+        Ok(secret) => secret,
+        Err(VarError::NotPresent) => {
+            println!("Enter dispatcher's account secret: ");
 
-    let mut secret = String::new();
+            let mut secret = String::new();
 
-    // Returns number of read bytes, which is meaningless for current case.
-    let _ = BufReader::new(tokio::io::stdin())
-        .read_line(&mut secret)
-        .await?;
+            // Returns number of read bytes, which is meaningless for current case.
+            let _ = BufReader::new(tokio::io::stdin())
+                .read_line(&mut secret)
+                .await?;
+
+            secret
+        }
+        Err(VarError::NotUnicode(_)) => return Err(Error::NonUnicodeMnemonic),
+    };
 
     SigningKey::derive_from_path(
         Mnemonic::new(secret.trim(), Language::English)
