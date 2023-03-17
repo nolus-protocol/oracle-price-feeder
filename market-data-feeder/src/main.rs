@@ -147,7 +147,8 @@ async fn app_main() -> AppResult<()> {
                     if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
                         let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
 
-                        let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(used_gas);
+                        let fallback_gas_limit: &mut u64 =
+                            fallback_gas_limit.get_or_insert(used_gas);
 
                         *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
                     } else if signer.needs_update() {

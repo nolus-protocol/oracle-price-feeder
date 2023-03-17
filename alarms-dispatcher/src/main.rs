@@ -145,7 +145,8 @@ async fn dispatch_alarms(
                     &query,
                     &mut fallback_gas_limit,
                 )
-                    .await.is_err()
+                .await
+                .is_err()
                 {
                     break 'for_contracts;
                 }
@@ -185,7 +186,7 @@ async fn handle_alarms_dispatch<'r>(
         alarm_type_name,
         *fallback_gas_limit,
     )
-        .await
+    .await
     .map_err(to_error);
 
     match result {
@@ -193,7 +194,7 @@ async fn handle_alarms_dispatch<'r>(
             let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(gas_used.0);
 
             *fallback_gas_limit = gas_used.0.max(*fallback_gas_limit);
-        },
+        }
         Err(error) => {
             let _span: EnteredSpan = info_span!("dispatch-error").entered();
 
