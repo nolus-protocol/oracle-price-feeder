@@ -116,9 +116,9 @@ The command to do so is:
 
 ```shell
 docker build --rm -f Compile.Dockerfile -t compile-bots . && \
-  docker run -v "$(pwd):/code/" -v "$(pwd)/artifacts/:/artifacts/" \
+  docker run --rm -v "$(pwd):/code/" -v "$(pwd)/artifacts/:/artifacts/" \
     -v market_data_feeder_cache:/code/target/ -v cargo_cache:/usr/local/cargo/ \
-    --rm compile-bots --build-arg net_name=${NET_NAME:-main}
+    compile-bots
 ```
 
 ## Building service's image
@@ -131,20 +131,20 @@ has to be rebuilt as it's part of the image.*
 Before running the command, if you are targeting the test-net, then run:
 
 ```shell
-NET_NAME="test"
+CONFIG_NAME="test"
 ```
 
 The command to do so is the following:
 
 * Feeder
   ```shell
-  docker build --rm --build-arg net_name=${NET_NAME:-main} \
+  docker build --rm --build-arg net_name=${CONFIG_NAME:-main} \
     -f Feeder.Dockerfile -t market-data-feeder ./artifacts/
   ```
 
 * Dispatcher
   ```shell
-  docker build --rm --build-arg net_name=${NET_NAME:-main} \
+  docker build --rm --build-arg net_name=${CONFIG_NAME:-main} \
     -f Dispatcher.Dockerfile -t alarms-dispatcher ./artifacts/
   ```
 
