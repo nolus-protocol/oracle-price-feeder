@@ -9,6 +9,9 @@
       <sourceFolder url="file://$MODULE_DIR$/semver/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/artifacts" />
+      <excludeFolder url="file://$MODULE_DIR$/dispatcher-logs" />
+      <excludeFolder url="file://$MODULE_DIR$/feeder-logs" />
+      <excludeFolder url="file://$MODULE_DIR$/images" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
