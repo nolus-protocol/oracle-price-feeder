@@ -87,3 +87,6 @@ target/
 ### Application Logs
 dispatcher-logs/
 feeder-logs/
+
+### Docker images
+images/

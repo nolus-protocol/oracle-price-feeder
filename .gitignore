@@ -96,6 +96,16 @@ target/
 ### Build artifacts
 artifacts/
 
+### Configurations
+configurations/*
+!configurations/alarms-dispatcher.dev.toml
+!configurations/alarms-dispatcher.test.toml
+!configurations/market-data-feeder.dev.toml
+!configurations/market-data-feeder.test.toml
+
 ### Application Logs
 dispatcher-logs/
 feeder-logs/
+
+### Docker images
+images/
