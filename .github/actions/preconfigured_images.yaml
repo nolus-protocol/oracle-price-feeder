@@ -1,0 +1,43 @@
+name: "Build preconfigured Docker images"
+description: "Action for building preconfigured Docker images for direct use."
+author: "The Dev Nolus Team <dev@nolus.io>"
+
+inputs:
+  config:
+    description: "Determines the configuration to be used, targeting specific network, node and/or other other specific settings."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: "Prepare images directory"
+      shell: "sh"
+      run: "mkdir -p ./images/"
+    - name: "Build alarms dispatcher image"
+      shell: "sh"
+      run: |
+        docker build --rm --build-arg "config_name=${{ inputs.config }}" \
+          -f Dispatcher.Dockerfile -t nolus-dispatcher-bot-dev ./artifacts/
+    - name: "Save alarms dispatcher image"
+      shell: "sh"
+      run: |
+        docker save "nolus-dispatcher-bot-${{ inputs.config }}" > "./images/nolus-dispatcher-bot-${{ inputs.config }}.tar"
+    - name: "Archive alarms dispatcher Docker image artifact"
+      uses: "actions/upload-artifact@v3"
+      with:
+        name: "nolus-dispatcher-bot-${{ inputs.config }}.tar"
+        path: "images/nolus-dispatcher-bot-${{ inputs.config }}.tar"
+    - name: "Build feeder image"
+      shell: "sh"
+      run: |
+        docker build --rm --build-arg "config_name=${{ inputs.config }}" \
+          -f Feeder.Dockerfile -t nolus-feeder-bot-dev ./artifacts/
+    - name: "Save feeder image"
+      shell: "sh"
+      run: |
+        docker save "nolus-feeder-bot-${{ inputs.config }}" > "./images/nolus-feeder-bot-${{ inputs.config }}.tar"
+    - name: "Archive feeder Docker image artifact"
+      uses: "actions/upload-artifact@v3"
+      with:
+        name: "nolus-feeder-bot-${{ inputs.config }}.tar"
+        path: "images/nolus-feeder-bot-${{ inputs.config }}.tar"

@@ -1,0 +1,92 @@
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+    tags:
+      - '*'
+    paths-ignore:
+      - "README.md"
+  pull_request:
+    branches:
+      - "main"
+    paths-ignore:
+      - "README.md"
+jobs:
+  check_formatting:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@v1"
+      - uses: "Nolus-Protocol/rust-ci-actions/check_formatting@v1"
+  check_codebase:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@v1"
+      - uses: "Nolus-Protocol/rust-ci-actions/check_codebase@v1"
+  audit_dependencies:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@v1"
+      - uses: "Nolus-Protocol/rust-ci-actions/audit_dependencies@v1"
+  linting:
+    runs-on: ubuntu-latest
+    needs:
+      - "check_formatting"
+      - "check_codebase"
+      - "audit_dependencies"
+    steps:
+      - run: "cargo clippy -- -F unsafe_code -D warnings"
+  code_coverage:
+    runs-on: "ubuntu-latest"
+    needs:
+      - "linting"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@v1"
+      - uses: "Nolus-Protocol/rust-ci-actions/code_coverage@v1"
+  test_release_profile:
+    runs-on: "ubuntu-latest"
+    needs:
+      - "linting"
+    steps:
+      - uses: "actions/checkout@v3"
+      - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@v1"
+      - name: "Run tests in release profile"
+        shell: "sh"
+        run: "cargo test --release"
+  build:
+    runs-on: ubuntu-latest
+    needs:
+      - "code_coverage"
+      - "test_release_profile"
+    steps:
+      - uses: "actions/checkout@v3"
+      - name: "Build compiling image"
+        shell: "sh"
+        run: "docker build --rm -f Compile.Dockerfile -t compile ."
+      - name: "Compile binaries"
+        shell: "sh"
+        run: |
+          docker run -v "$(pwd):/code/" -v "$(pwd)/artifacts/:/artifacts/" \
+            --name compile compile
+      - name: "Archive Alpine Linux feeder binary artifact"
+        uses: "actions/upload-artifact@v3"
+        with:
+          name: "alpine-linux-feeder"
+          path: "artifacts/feeder"
+      - name: "Archive Alpine Linux alarms dispatcher binary artifact"
+        uses: "actions/upload-artifact@v3"
+        with:
+          name: "alpine-linux-alarms-dispatcher"
+          path: "artifacts/alarms-dispatcher"
+      - name: "Build pre-configured Docker images for dev-net"
+        uses: "./.github/actions/preconfigured_images"
+        with:
+          config: "dev"
+      - name: "Build pre-configured Docker images for test-net"
+        uses: "./.github/actions/preconfigured_images"
+        with:
+          config: "test"
