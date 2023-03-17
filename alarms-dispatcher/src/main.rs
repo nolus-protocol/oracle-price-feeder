@@ -107,17 +107,19 @@ async fn dispatch_alarms(
         ..
     }: RpcSetup<Config>,
 ) -> Result<(), error::DispatchAlarms> {
+    type Contracts<'r> = [(
+        &'r Contract,
+        &'static str,
+        fn(error::DispatchAlarm) -> error::DispatchAlarms,
+    ); 2];
+
     let poll_period: Duration = Duration::from_secs(config.poll_period_seconds());
 
     let query: Vec<u8> = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
     let mut fallback_gas_limit: Option<u64> = None;
 
-    let contracts: [(
-        &Contract,
-        &str,
-        fn(error::DispatchAlarm) -> error::DispatchAlarms,
-    ); 2] = [
+    let contracts: Contracts<'_> = [
         (
             config.market_price_oracle(),
             "market price",
@@ -217,7 +219,7 @@ async fn handle_alarms_dispatch<'r>(
 }
 
 async fn recover_after_error(_span: EnteredSpan, signer: &mut Signer, client: &Client) -> bool {
-    if let Err(error) = signer.update_account(&client).await {
+    if let Err(error) = signer.update_account(client).await {
         error!("{error}");
 
         return false;

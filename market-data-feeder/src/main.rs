@@ -150,17 +150,15 @@ async fn app_main() -> AppResult<()> {
                         let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(used_gas);
 
                         *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
-                    } else {
-                        if signer.needs_update() {
-                            channel_closed = channel_closed
-                                || recover_after_error(
-                                    &mut signer,
-                                    client.as_ref(),
-                                    tick_time,
-                                    &mut receiver,
-                                )
-                                .await;
-                        }
+                    } else if signer.needs_update() {
+                        channel_closed = channel_closed
+                            || recover_after_error(
+                                &mut signer,
+                                client.as_ref(),
+                                tick_time,
+                                &mut receiver,
+                            )
+                            .await;
                     }
 
                     if channel_closed {
@@ -184,7 +182,7 @@ async fn check_compatibility(config: &Config, client: &Client) -> AppResult<()> 
 
     {
         let version: SemVer = query_wasm(
-            &client,
+            client,
             config.oracle_addr(),
             &serde_json_wasm::to_vec(&QueryMsg::ContractVersion {})?,
         )
@@ -225,9 +223,9 @@ async fn recover_after_error(
         info!("Trying to update local copy of account data...");
 
         let result: Result<(), chain_comms::interact::error::AccountQuery> = select!(
-            update_result = signer.update_account(&client) => update_result,
+            update_result = signer.update_account(client) => update_result,
             () = async {
-                while let Some(_) = receiver.recv().await {}
+                while receiver.recv().await.is_some() {}
 
                 channel_closed = true;
 
