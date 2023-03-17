@@ -112,19 +112,13 @@ with the environment variable `MARKET_DATA_FEEDER_DEBUG` to one of the following
 First you the project has to be compiled.
 This has to be done whenever the codebase is changed.
 
-Before running the command, if you are targeting the test-net, then run:
-
-```shell
-NET_NAME="test"
-```
-
 The command to do so is:
 
 ```shell
-docker build --rm -f Compile.Dockerfile -t compile-market-data-feeder . && \
-  docker run -v $(pwd):/code/ -v $(pwd)/artifacts/:/artifacts/ \
+docker build --rm -f Compile.Dockerfile -t compile-bots . && \
+  docker run -v "$(pwd):/code/" -v "$(pwd)/artifacts/:/artifacts/" \
     -v market_data_feeder_cache:/code/target/ -v cargo_cache:/usr/local/cargo/ \
-    --rm compile-market-data-feeder --build-arg net_name=${NET_NAME:-main}
+    --rm compile-bots --build-arg net_name=${NET_NAME:-main}
 ```
 
 ## Building service's image
@@ -134,25 +128,59 @@ Before deploying a new version the service's image has to be rebuilt.
 *N.B.: Whenever the configuration file is changed, the image, again,
 has to be rebuilt as it's part of the image.*
 
-The command to do so is the following:
+Before running the command, if you are targeting the test-net, then run:
 
 ```shell
-docker build --rm -f Feeder.Dockerfile -t market-data-feeder .
+NET_NAME="test"
 ```
+
+The command to do so is the following:
+
+* Feeder
+  ```shell
+  docker build --rm --build-arg net_name=${NET_NAME:-main} \
+    -f Feeder.Dockerfile -t market-data-feeder ./artifacts/
+  ```
+
+* Dispatcher
+  ```shell
+  docker build --rm --build-arg net_name=${NET_NAME:-main} \
+    -f Dispatcher.Dockerfile -t alarms-dispatcher ./artifacts/
+  ```
 
 ## Running service
 
 Running the service is done through the command below, which requires you to
-pass it a registered key's mnemonic used.
+pass it the mnemonic of the key that will be used.
 
-```shell
-echo $MNEMONIC | docker run -i -a stdin --add-host \
-  host.docker.internal:host-gateway market-data-feeder
-```
+* Feeder; one of the following options:
+  * ```shell
+    echo $MNEMONIC | docker run -i -a stdin --add-host \
+      host.docker.internal:host-gateway market-data-feeder
+    ```
 
-**OR**
+  * ```shell
+    cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+      host.docker.internal:host-gateway market-data-feeder
+    ```
 
-```shell
-cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
-  host.docker.internal:host-gateway market-data-feeder
-```
+  * ```shell
+    docker run -i -a stdin --add-host --env "$MNEMONIC"
+      host.docker.internal:host-gateway market-data-feeder
+    ```
+
+* Dispatcher; one of the following options:
+  * ```shell
+    echo $MNEMONIC | docker run -i -a stdin --add-host \
+    host.docker.internal:host-gateway alarms-dispatcher
+    ```
+
+  * ```shell
+    cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+      host.docker.internal:host-gateway alarms-dispatcher
+    ```
+
+  * ```shell
+    docker run -i -a stdin --add-host --env "$MNEMONIC"
+      host.docker.internal:host-gateway alarms-dispatcher
+    ```
