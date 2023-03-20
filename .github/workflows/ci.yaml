@@ -90,6 +90,6 @@ jobs:
         with:
           config: "dev"
       - name: "Build pre-configured Docker images for test-net"
-        uses: "./.github/actions/preconfigured_images"
+        uses: "./.github/actions/preconfigured_images.yaml"
         with:
           config: "test"
