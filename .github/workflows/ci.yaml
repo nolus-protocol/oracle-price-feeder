@@ -1,3 +1,5 @@
+name: "Price Feeder & Alarms Dispatcher CI"
+
 on:
   workflow_dispatch:
   push:
@@ -38,6 +40,7 @@ jobs:
       - "check_codebase"
       - "audit_dependencies"
     steps:
+      - uses: "actions/checkout@v3"
       - run: "cargo clippy -- -F unsafe_code -D warnings"
   code_coverage:
     runs-on: "ubuntu-latest"
