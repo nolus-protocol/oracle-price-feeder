@@ -25,7 +25,8 @@ pub mod config;
 pub mod error;
 pub mod messages;
 
-pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 3, 0);
+pub const ORACLE_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 3, 0);
+pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 2, 3);
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
@@ -60,9 +61,9 @@ async fn app_main() -> AppResult<()> {
 
     info!("Checking compatibility with contract version...");
 
-    for (contract, name) in [
-        (rpc_setup.config.time_alarms(), "timealarms"),
-        (rpc_setup.config.market_price_oracle(), "oracle"),
+    for (contract, name, compatible_version) in [
+        (rpc_setup.config.time_alarms(), "timealarms", TIME_ALARMS_COMPATIBLE_VERSION),
+        (rpc_setup.config.market_price_oracle(), "oracle", ORACLE_COMPATIBLE_VERSION),
     ] {
         let version: SemVer = query_wasm(
             &rpc_setup.client,
@@ -71,16 +72,16 @@ async fn app_main() -> AppResult<()> {
         )
         .await?;
 
-        if !version.check_compatibility(COMPATIBLE_VERSION) {
+        if !version.check_compatibility(compatible_version) {
             error!(
-                compatible_minimum = %COMPATIBLE_VERSION,
+                compatible_minimum = %compatible_version,
                 actual = %version,
                 r#"Dispatcher version is incompatible with "{name}" contract's version!"#,
             );
 
             return Err(error::Application::IncompatibleContractVersion {
                 contract: name,
-                minimum_compatible: COMPATIBLE_VERSION,
+                minimum_compatible: compatible_version,
                 actual: version,
             });
         }
