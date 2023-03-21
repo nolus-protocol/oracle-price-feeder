@@ -21,9 +21,14 @@ impl SemVer {
     }
 
     pub const fn check_compatibility(&self, expected: Self) -> bool {
-        self.major == expected.major
-            && ((self.minor == expected.minor && self.patch >= expected.patch)
-                || (self.major != 0 && self.minor > expected.minor))
+        self.major == expected.major && (
+            (self.major == 0 && self.minor == expected.minor && self.patch >= expected.patch) || (
+                self.major != 0 && (
+                    self.minor > expected.minor ||
+                    (self.minor == expected.minor && self.patch >= expected.patch)
+                )
+            )
+        )
     }
 }
 
