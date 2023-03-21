@@ -6,6 +6,15 @@ inputs:
   config:
     description: "Determines the configuration to be used, targeting specific network, node and/or other other specific settings."
     required: true
+  github_token:
+    description: "Docker login secret."
+    required: true
+  docker_registry:
+    description: "Docker registry used to tag the image."
+    required: true
+  docker_repository:
+    description: "Docker repository/namespace used to tag the image."
+    required: true
 
 runs:
   using: composite
@@ -41,3 +50,17 @@ runs:
       with:
         name: "nolus-feeder-bot-${{ inputs.config }}.tar"
         path: "images/nolus-feeder-bot-${{ inputs.config }}.tar"
+    - name: "Docker login Nolus-Protocol"
+      shell: "sh"
+      run: |
+        echo "${{ inputs.github_token }}" | docker login ${{ inputs.docker_registry }} -u $ --password-stdin
+    - name: "Push dispatcher image to github registry"
+      shell: "sh"
+      run: |
+        docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}
+        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}
+    - name: "Push feeder image to github registry"
+      shell: "sh"
+      run: |
+        docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}
+        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}
