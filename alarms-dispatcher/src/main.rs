@@ -25,7 +25,7 @@ pub mod config;
 pub mod error;
 pub mod messages;
 
-pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 2, 1);
+pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 3, 0);
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
