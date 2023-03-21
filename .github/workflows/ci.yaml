@@ -89,7 +89,13 @@ jobs:
         uses: "./.github/actions/preconfigured_images"
         with:
           config: "dev"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_registry: "ghcr.io"
+          docker_repository: "nolus-protocol"
       - name: "Build pre-configured Docker images for test-net"
         uses: "./.github/actions/preconfigured_images"
         with:
           config: "test"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          docker_registry: "ghcr.io"
+          docker_repository: "nolus-protocol"
