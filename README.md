@@ -138,13 +138,13 @@ The command to do so is the following:
 
 * Feeder
   ```shell
-  docker build --rm --build-arg net_name=${CONFIG_NAME:-main} \
+  docker build --rm --build-arg config_name=${CONFIG_NAME:-main} \
     -f Feeder.Dockerfile -t market-data-feeder ./artifacts/
   ```
 
 * Dispatcher
   ```shell
-  docker build --rm --build-arg net_name=${CONFIG_NAME:-main} \
+  docker build --rm --build-arg config_name=${CONFIG_NAME:-main} \
     -f Dispatcher.Dockerfile -t alarms-dispatcher ./artifacts/
   ```
 
