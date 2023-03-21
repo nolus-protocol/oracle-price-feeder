@@ -29,6 +29,6 @@ impl SemVer {
 
 impl Display for SemVer {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        f.write_fmt(format_args!("{}.{}.{}", self.major, self.major, self.patch))
+        f.write_fmt(format_args!("{}.{}.{}", self.major, self.minor, self.patch))
     }
 }
