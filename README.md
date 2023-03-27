@@ -2,15 +2,23 @@
 
 <br /><p align="center"><img alt="Market Data Feeder" src="docs/price-feeder-logo.svg" width="100"/></p><br />
 
-Market Data feeder is an off-chain service that collects prices from configured price providers and push them to the
-Oracle contract
-Currently only the Osmosis client is implemented
-The Osmosis client reads prices from the Osmosis pools: https://lcd.osmosis.zone/gamm/v1beta1/pools
+Market Data feeder is an off-chain service that collects prices from configured
+price providers and pushes them to the Oracle contract.
+
+Currently only the Osmosis client is implemented.
+<br />
+It reads prices from the Osmosis pools: https://lcd.osmosis.zone/gamm/v1beta1/pools
 
 ## Prerequisites
 
-To connect to the oracle smart contract, gRPC port on the network should be enabled
-To enable it edit `./networks/nolus/local-validator-1/config/app.toml` file and in the `grpc` section set `enable` to `true`
+To connect to the oracle smart contract, the gRPC port on the network should be
+enabled.
+<br />
+To enable it edit the following file:
+<br />
+`./networks/nolus/local-validator-1/config/app.toml`
+
+In it, go to the `grpc` section and set `enable` to `true`.
 
 ```shell
 [grpc]
@@ -21,73 +29,84 @@ enable = true
 
 ## Setup
 
-* Add new key to be used as Feeder:
+1. Add new key to be used as Feeder:
 
-```shell
-nolusd keys add wallet
+   ```shell
+   nolusd keys add wallet
+   ```
 
------------- Example Output-----------------
-- name: wallet
-  type: local
-  address: nolus1um993zvsdp8upa5qvtspu0jdy66eahlcghm0w6
-  pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A0MFMuJSqWpofT3GIQchGyL9bADlC5GEWu3QJHGL/XHZ"}'
-  mnemonic: "<MNEMONIC PHRASE>"
-```
+   The output will look like this:
+   ```yaml
+   - name: wallet
+     type: local
+     address: nolus1um993zvsdp8upa5qvtspu0jdy66eahlcghm0w6
+     pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A0MFMuJSqWpofT3GIQchGyL9bADlC5GEWu3QJHGL/XHZ"}'
+     mnemonic: "<MNEMONIC PHRASE>"
+   ```
 
-Store the mnemonic phrase as it will be needed to start the service
+   Store the mnemonic phrase as it will be needed to start the service.
 
-* Set some environment variables
+2. Set some environment variables
 
-```shell
-export CHAIN_ID="nolus-local"
-export TXFLAG="--chain-id ${CHAIN_ID} --gas auto --gas-adjustment 1.3 --fees 15000unls"
-```
+   ```shell
+   export CHAIN_ID="nolus-local"
+   export TXFLAG="--chain-id ${CHAIN_ID} --gas auto --gas-adjustment 1.3 --fees 15000unls"
+   ```
 
-* Register feeder address. Only oracle contract owner can register new feeder address. All contracts are deployed from
-  wasm_admin
+3. Register feeder address. Only oracle contract owner can register new feeder
+  address. All contracts are deployed from wasm_admin.
 
-```shell
-WALLET_ADDR=$(nolusd keys show -a wallet)
-REGISTER='{"register_feeder":{"feeder_address":"'$WALLET_ADDR'"}}'
-nolusd tx wasm execute $CONTRACT "$REGISTER" --amount 100unls --from wasm_admin $TXFLAG -y
-```
+   ```shell
+   WALLET_ADDR=$(nolusd keys show -a wallet)
+   REGISTER='{"register_feeder":{"feeder_address":"'"$WALLET_ADDR"'"}}'
+   nolusd tx wasm execute $CONTRACT "$REGISTER" --amount 100unls \
+       --from wasm_admin $TXFLAG -y
+   ```
 
-* Send some money to feeder account
+4. Send some money to feeder account
 
-```shell
-nolusd tx bank send $(nolusd keys show -a reserve) $(nolusd keys show -a wallet) 1000000unls --chain-id nolus-local --keyring-backend test --fees 500unls
-```
+   ```shell
+   nolusd tx bank send $(nolusd keys show -a reserve) \
+       $(nolusd keys show -a wallet) 1000000unls --chain-id nolus-local \
+       --keyring-backend test --fees 500unls
+   ```
 
-* Build feeder service binary
+5. Build feeder service binary
 
-  ```shell
-  cargo build --release
-  ```
+    ```shell
+    cargo build --release
+    ```
 
-* Configuration
-  At the root of the repository there are two files: `market-data-feeder.main.toml` and `market-data-feeder.test.toml`.
-  Depending on whether you want to run the feeder against the main-net or the test-net, rename the corresponding file to `market-data-feeder.toml`.
+6. Configure service
 
-  Editing the `market-data-feeder.toml` file:
+   At the root of the repository there is a directory called `configurations`.
+   <br />
+   In there are two files: `market-data-feeder.main.toml` and
+    `market-data-feeder.test.toml`.
+   <br />
+   Depending on whether you want to run the feeder on the main-net or the
+   test-net, rename the corresponding file to `market-data-feeder.toml`.
+   <br />
+   Editing the `market-data-feeder.toml` file:
 
-| Key            | Value                    | Default | Description                                                                                                                                       |
-|----------------|--------------------------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------|
-| [`continuous`] | true or false            | true    | if false the service will push a price only once and exit                                                                                         |
-| [`tick_time`]  | < time in seconds >      | 60      | push price on every X seconds                                                                                                                     |
-| [`providers`]  |                          |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
-| main_type      | crypto                   |         | currently only crypto provider is implemented - Osmosis                                                                                           |
-| name           | osmosis                  |         | crypto provider type                                                                                                                              |
-| base_address   | < URL >                  |         | Provider API address                                                                                                                              |
-| [`oracle`]     |                          |         | Oracle contract configuration                                                                                                                     |
-| contract_addrs | < oracle address >       |         | Oracle contract address                                                                                                                           |
-| host_url       | < network node address > |         | Network address of node. Defaults to "http://localhost" for local node and "http://host.docker.internal" when ran from Docker and uses local node |
-| grpc_port      |                          | 26615   | gRPC port. Use port set in configuration of the node under `grpc` section                                                                         |
-| rpc_port       |                          | 26612   | JSON-RPC port. Use port set in configuration of the node under `rpc` section                                                                      |
-| prefix         | nolus                    |         | Nolus prefix                                                                                                                                      |
-| chain_id       |                          |         | The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0                                              |
-| fee_denom      | unls                     |         | Network denom                                                                                                                                     |
-| funds_amount   |                          |         | Amount to be used for transactions                                                                                                                |
-| gas_limit      |                          |         | Gas limit (Example: 500_000)                                                                                                                      |
+   |      Key       |            Value             | Default | Description                                                                                                                                       |
+   |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
+   | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
+   | [`tick_time`]  |   &lt;time in seconds&gt;    |   60    | push price on every X seconds                                                                                                                     |
+   | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
+   |   main_type    |            crypto            |         | currently, the only crypto provider that is implemented - Osmosis                                                                                 |
+   |      name      |           osmosis            |         | crypto provider type                                                                                                                              |
+   |  base_address  |         &lt;URL&gt;          |         | Provider API address                                                                                                                              |
+   |   [`oracle`]   |                              |         | Oracle contract configuration                                                                                                                     |
+   | contract_addrs |    &lt;oracle address&gt;    |         | Oracle contract address                                                                                                                           |
+   |    host_url    | &lt;network node address&gt; |         | Network address of node. Defaults to "http://localhost" for local node and "http://host.docker.internal" when ran from Docker and uses local node |
+   |   grpc_port    |                              |  26615  | gRPC port. Use port set in configuration of the node under `grpc` section                                                                         |
+   |    rpc_port    |                              |  26612  | JSON-RPC port. Use port set in configuration of the node under `rpc` section                                                                      |
+   |     prefix     |            nolus             |         | Nolus prefix                                                                                                                                      |
+   |    chain_id    |                              |         | The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0                                              |
+   |   fee_denom    |             unls             |         | Network denom                                                                                                                                     |
+   |  funds_amount  |                              |         | Amount to be used for transactions                                                                                                                |
+   |   gas_limit    |                              |         | Gas limit (Example: 500_000)                                                                                                                      |
 
 ## Start feeder service
 
@@ -100,7 +119,7 @@ From the same directory where `market-data-feeder.toml` is located
 # Diagnostics on release builds
 
 To enable diagnostics by logging debug information, the service needs to be run
-with the environment variable `MARKET_DATA_FEEDER_DEBUG` to one of the following:
+with the environment variable `DEBUG_LOGGING` to one of the following:
 * `1` (one)
 * `y` (lowercase 'y')
 * `Y` (uppercase 'y')
@@ -109,7 +128,7 @@ with the environment variable `MARKET_DATA_FEEDER_DEBUG` to one of the following
 
 ## Building binary
 
-First you the project has to be compiled.
+First the project has to be compiled.
 This has to be done whenever the codebase is changed.
 
 The command to do so is:
@@ -125,8 +144,8 @@ docker build --rm -f Compile.Dockerfile -t compile-bots . && \
 
 Before deploying a new version the service's image has to be rebuilt.
 
-*N.B.: Whenever the configuration file is changed, the image, again,
-has to be rebuilt as it's part of the image.*
+*N.B.: Whenever the configuration file is changed, the image has to be rebuilt
+as it's part of the image.*
 
 Before running the command, if you are targeting the test-net, then run:
 
@@ -151,9 +170,9 @@ The command to do so is the following:
 ## Running service
 
 Running the service is done through the command below, which requires you to
-pass it the mnemonic of the key that will be used.
+pass the mnemonic of the key that will be used.
 
-* Feeder; one of the following options:
+* Feeder - one of the following options:
   * ```shell
     echo $MNEMONIC | docker run -i -a stdin --add-host \
       host.docker.internal:host-gateway market-data-feeder
@@ -169,7 +188,7 @@ pass it the mnemonic of the key that will be used.
       host.docker.internal:host-gateway market-data-feeder
     ```
 
-* Dispatcher; one of the following options:
+* Dispatcher - one of the following options:
   * ```shell
     echo $MNEMONIC | docker run -i -a stdin --add-host \
     host.docker.internal:host-gateway alarms-dispatcher
