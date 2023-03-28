@@ -6,9 +6,7 @@ on:
     branches:
       - "main"
     tags:
-      - '*'
-    paths-ignore:
-      - "README.md"
+      - v*.*.*
   pull_request:
     branches:
       - "main"
@@ -90,16 +88,20 @@ jobs:
           name: "alpine-linux-alarms-dispatcher"
           path: "artifacts/alarms-dispatcher"
       - name: "Build pre-configured Docker images for dev-net"
+        if: github.ref_type == 'tag'
         uses: "./.github/actions/preconfigured_images"
         with:
           config: "dev"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_registry: "ghcr.io"
           docker_repository: "nolus-protocol"
+          docker_tag: ${{ github.ref_name }}
       - name: "Build pre-configured Docker images for test-net"
+        if: github.ref_type == 'tag'
         uses: "./.github/actions/preconfigured_images"
         with:
           config: "test"
           github_token: ${{ secrets.GITHUB_TOKEN }}
           docker_registry: "ghcr.io"
           docker_repository: "nolus-protocol"
+          docker_tag: ${{ github.ref_name }}
