@@ -15,6 +15,9 @@ inputs:
   docker_repository:
     description: "Docker repository/namespace used to tag the image."
     required: true
+  docker_tag:
+    description: "Dockage image version tag."
+    required: true
 
 runs:
   using: composite
@@ -57,10 +60,10 @@ runs:
     - name: "Push dispatcher image to github registry"
       shell: "sh"
       run: |
-        docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}
-        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}
+        docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
+        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
     - name: "Push feeder image to github registry"
       shell: "sh"
       run: |
-        docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}
-        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}
+        docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
+        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
