@@ -60,10 +60,18 @@ runs:
     - name: "Push dispatcher image to github registry"
       shell: "sh"
       run: |
+        # push version
         docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
         docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
+        # push latest
+        docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:latest
+        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:latest
     - name: "Push feeder image to github registry"
       shell: "sh"
       run: |
+        # push version
         docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
         docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
+        # push latest
+        docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:latest
+        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:latest
