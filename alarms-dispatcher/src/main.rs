@@ -314,9 +314,18 @@ async fn commit_dispatch_tx(
     )
     .await?;
 
-    let response = serde_json_wasm::from_slice::<DispatchResponse>(
-        decode::exec_tx_data(&tx_commit_response.deliver_tx)?.as_slice(),
-    );
+    let raw_response: Vec<u8> = decode::exec_tx_data(&tx_commit_response.deliver_tx)?;
+
+    let response: Result<DispatchResponse, serde_json_wasm::de::Error> =
+        serde_json_wasm::from_slice::<DispatchResponse>(&raw_response);
+
+    let response: Result<DispatchResponse, error::CommitDispatchTx> =
+        response.map_err(|error: serde_json_wasm::de::Error| {
+            error::CommitDispatchTx::DeserializeDispatchResponse(
+                error,
+                String::from_utf8_lossy(&raw_response).into(),
+            )
+        });
 
     info_span!("Tx").in_scope(|| {
         if tx_commit_response.check_tx.code.is_ok() && tx_commit_response.deliver_tx.code.is_ok() {
@@ -326,10 +335,7 @@ async fn commit_dispatch_tx(
                     response.dispatched_alarms()
                 );
             } else {
-                error!(
-                    data = %String::from_utf8_lossy(&tx_commit_response.deliver_tx.data),
-                    "Failed to deserialize response data!"
-                );
+                error!("Transaction result couldn't be interpreted!");
             }
         }
 

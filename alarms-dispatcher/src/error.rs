@@ -52,6 +52,6 @@ pub enum CommitDispatchTx {
     CommitTx(#[from] chain_comms::interact::error::GasEstimatingTxCommit),
     #[error("Failed to deserialize response data! Cause: {0}")]
     DeserializeTxData(#[from] chain_comms::decode::error::Error),
-    #[error("Failed to deserialize dispatch response! Cause: {0}")]
-    DeserializeDispatchResponse(#[from] serde_json_wasm::de::Error),
+    #[error(r#"Failed to deserialize dispatch response! Cause: {0}; Data: "{1}""#)]
+    DeserializeDispatchResponse(serde_json_wasm::de::Error, String),
 }
