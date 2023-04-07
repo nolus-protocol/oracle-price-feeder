@@ -32,7 +32,7 @@ pub mod provider;
 
 pub mod tests;
 
-pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 3, 0);
+pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 3);
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
