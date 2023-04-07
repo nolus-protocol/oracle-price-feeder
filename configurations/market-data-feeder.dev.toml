@@ -3,7 +3,7 @@ title = "Market Data Feeder Configuration"
 continuous = false
 tick_time = 60
 oracle_addr = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
-gas_limit = 525_000
+gas_limit = 550_000
 
 [[providers]]
 main_type = "crypto"
@@ -34,7 +34,7 @@ grpc_port = 26620
 # grpc_api_path = "/grpc/api"
 address_prefix = "nolus"
 chain_id = "nolus-dev-v0-1-42"
-gas_adjustment_numerator = 1025
+gas_adjustment_numerator = 1045
 gas_adjustment_denominator = 1000
 fee_denom = "unls"
 gas_price_numerator = 1
