@@ -11,7 +11,6 @@ semver = { workspace = true }
 chain-comms = { workspace = true }
 
 base64 = "0.21"
-cosmrs = { version = "0.11", default-features = false, features = ["rpc", "grpc", "bip32", "cosmwasm"] }
 prost = "0.11.6"
 serde = { version = "1", features = ["derive"] }
 serde-json-wasm = "0.5"
