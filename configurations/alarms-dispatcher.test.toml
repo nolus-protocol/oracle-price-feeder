@@ -11,8 +11,8 @@ grpc_port = 1318
 # grpc_api_path = "/grpc/api"
 address_prefix = "nolus"
 chain_id = "nolus-rila"
-gas_adjustment_numerator = 2
-gas_adjustment_denominator = 1
+gas_adjustment_numerator = 1025
+gas_adjustment_denominator = 1000
 fee_denom = "unls"
 gas_price_numerator = 1
 gas_price_denominator = 390
@@ -20,7 +20,7 @@ gas_price_denominator = 390
 [time_alarms]
 address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
 max_alarms_group = 16
-gas_limit_per_alarm = 5_000_000
+gas_limit_per_alarm = 175_000
 
 [market_price_oracle]
 address = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
