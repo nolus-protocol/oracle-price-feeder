@@ -8,7 +8,7 @@ gas_limit = 550_000
 [[providers]]
 main_type = "crypto"
 name = "osmosis"
-base_address = "https://lcd-test.osmosis.zone/osmosis/gamm/v1beta1/"
+base_address = "https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/"
 currencies = [
     ["OSMO", "uosmo"],
     ["ATOM", "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"],
