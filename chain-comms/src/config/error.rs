@@ -8,4 +8,8 @@ pub enum Error {
     Parse(#[from] toml::de::Error),
 }
 
+#[derive(Debug, ThisError)]
+#[error(r#"Unknown protocol: "{0}"!"#)]
+pub struct InvalidProtocol(pub(super) String);
+
 pub type Result<T> = std::result::Result<T, Error>;
