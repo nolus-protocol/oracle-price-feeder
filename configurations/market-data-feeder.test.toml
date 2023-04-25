@@ -1,5 +1,3 @@
-title = "Market Data Feeder Configuration"
-
 continuous = false
 tick_time = 60
 oracle_addr = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
@@ -8,7 +6,6 @@ gas_limit = 1_975_000
 [[providers]]
 main_type = "crypto"
 name = "osmosis"
-base_address = "https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/"
 currencies = [
     ["OSMO", "uosmo"],
     ["ATOM", "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2"],
@@ -23,14 +20,6 @@ currencies = [
 ]
 
 [node]
-json_rpc_protocol = "https"
-grpc_protocol = "https"
-json_rpc_host = "rila-net.nolus.io"
-grpc_host = "rila-net.nolus.io"
-json_rpc_port = 26557
-# json_rpc_api_path = "/json-rpc/api"
-grpc_port = 1318
-# grpc_api_path = "/grpc/api"
 address_prefix = "nolus"
 chain_id = "nolus-rila"
 gas_adjustment_numerator = 11025
