@@ -96,12 +96,8 @@ enable = true
    | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
    |   main_type    |            crypto            |         | currently, the only crypto provider that is implemented - Osmosis                                                                                 |
    |      name      |           osmosis            |         | crypto provider type                                                                                                                              |
-   |  base_address  |         &lt;URL&gt;          |         | Provider API address                                                                                                                              |
    |   [`oracle`]   |                              |         | Oracle contract configuration                                                                                                                     |
    | contract_addrs |    &lt;oracle address&gt;    |         | Oracle contract address                                                                                                                           |
-   |    host_url    | &lt;network node address&gt; |         | Network address of node. Defaults to "http://localhost" for local node and "http://host.docker.internal" when ran from Docker and uses local node |
-   |   grpc_port    |                              |  26615  | gRPC port. Use port set in configuration of the node under `grpc` section                                                                         |
-   |    rpc_port    |                              |  26612  | JSON-RPC port. Use port set in configuration of the node under `rpc` section                                                                      |
    |     prefix     |            nolus             |         | Nolus prefix                                                                                                                                      |
    |    chain_id    |                              |         | The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0                                              |
    |   fee_denom    |             unls             |         | Network denom                                                                                                                                     |
@@ -173,34 +169,58 @@ The command to do so is the following:
 Running the service is done through the command below, which requires you to
 pass the mnemonic of the key that will be used.
 
+*Note: Host addresses, ports and other configurations might change
+over time. These are provided as a guide.*
+
 * Feeder - one of the following options:
     * ```shell
-    echo $MNEMONIC | docker run -i -a stdin --add-host \
+      echo $MNEMONIC | docker run -i -a stdin --add-host \
+      --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
+      --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
+      --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
       host.docker.internal:host-gateway market-data-feeder
-    ```
+      ```
 
     * ```shell
-    cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+      cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+      --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
+      --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
+      --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
       host.docker.internal:host-gateway market-data-feeder
-    ```
+      ```
 
     * ```shell
-    docker run -i -a stdin --add-host --env "$MNEMONIC"
-      host.docker.internal:host-gateway market-data-feeder
-    ```
+      docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
+        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
+        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
+        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+        --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
+        host.docker.internal:host-gateway market-data-feeder
+      ```
 
 * Dispatcher - one of the following options:
     * ```shell
-    echo $MNEMONIC | docker run -i -a stdin --add-host \
-    host.docker.internal:host-gateway alarms-dispatcher
-    ```
+      echo $MNEMONIC | docker run -i -a stdin --add-host \
+        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
+        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
+        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+        host.docker.internal:host-gateway alarms-dispatcher
+      ```
 
     * ```shell
-    cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
-      host.docker.internal:host-gateway alarms-dispatcher
-    ```
+      cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
+        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
+        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+        host.docker.internal:host-gateway alarms-dispatcher
+      ```
 
     * ```shell
-    docker run -i -a stdin --add-host --env "$MNEMONIC"
-      host.docker.internal:host-gateway alarms-dispatcher
-    ```
+      docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
+        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
+        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
+        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+        host.docker.internal:host-gateway alarms-dispatcher
+      ```
