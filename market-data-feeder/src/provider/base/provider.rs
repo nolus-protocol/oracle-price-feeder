@@ -46,14 +46,19 @@ pub struct Factory;
 impl Factory {
     pub fn new_provider(
         s: &Type,
-        cfg: &config::Providers,
+        cfg: &config::Provider,
     ) -> Result<Box<dyn Provider + Send + 'static>, FeedProviderError> {
         match s {
             Type::Crypto => {
-                let provider_type = CryptoType::from_str(&cfg.name)
-                    .map_err(|_| FeedProviderError::UnsupportedProviderType(cfg.name.clone()))?;
+                let provider_type = CryptoType::from_str(&cfg.api_info.name).map_err(|_| {
+                    FeedProviderError::UnsupportedProviderType(cfg.api_info.name.clone())
+                })?;
 
-                CryptoFactory::new_provider(&provider_type, &cfg.base_address, &cfg.currencies)
+                CryptoFactory::new_provider(
+                    &provider_type,
+                    &cfg.api_info.base_address,
+                    &cfg.currencies,
+                )
             }
         }
     }
@@ -63,8 +68,9 @@ impl Factory {
 mod tests {
     use std::{collections::BTreeMap, str::FromStr};
 
+    use crate::config::ApiInfo;
     use crate::{
-        config::Providers,
+        config::Provider,
         provider::{Factory, Type},
     };
 
@@ -80,10 +86,12 @@ mod tests {
 
         Factory::new_provider(
             &Type::Crypto,
-            &Providers {
+            &Provider {
                 main_type: "crypto".to_string(),
-                name: "osmosis".to_string(),
-                base_address: TEST_OSMOSIS_URL.to_string(),
+                api_info: ApiInfo {
+                    name: "osmosis".to_string(),
+                    base_address: TEST_OSMOSIS_URL.to_string(),
+                },
                 currencies: BTreeMap::from([
                     ("OSMO".into(), "OSMO".into()),
                     (

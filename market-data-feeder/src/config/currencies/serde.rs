@@ -1,20 +1,8 @@
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::BTreeMap;
 
-use crate::config::{Symbol, Ticker};
+use serde::{Deserialize, Deserializer};
 
-pub(in super::super) fn serialize<S>(
-    currencies: &BTreeMap<Ticker, Symbol>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    currencies
-        .iter()
-        .collect::<Vec<(&Ticker, &Symbol)>>()
-        .serialize(serializer)
-}
+use crate::config::{Symbol, Ticker};
 
 pub(in super::super) fn deserialize<'de, D>(
     deserializer: D,

@@ -19,7 +19,7 @@ use chain_comms::{
 use semver::SemVer;
 
 use self::{
-    config::{Config, Providers},
+    config::{Config, Provider as ProviderConfig},
     error::AppResult,
     messages::{ExecuteMsg, QueryMsg},
     provider::{Factory, Provider, Type},
@@ -259,7 +259,7 @@ type SpawnWorkersResult = AppResult<(
 
 fn spawn_workers(
     client: &Arc<Client>,
-    providers: &[Providers],
+    providers: &[ProviderConfig],
     oracle_addr: &str,
     tick_time: Duration,
 ) -> SpawnWorkersResult {
