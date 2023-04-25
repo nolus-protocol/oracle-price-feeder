@@ -4,6 +4,7 @@ use chain_comms::config::Node;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[must_use]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct Contract {
     address: String,
     max_alarms_group: u32,
@@ -24,7 +25,7 @@ impl Contract {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[must_use]
 pub struct Config {
     poll_period_seconds: u64,
