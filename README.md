@@ -104,6 +104,75 @@ enable = true
    |  funds_amount  |                              |         | Amount to be used for transactions                                                                                                                |
    |   gas_limit    |                              |         | Gas limit (Example: 500_000)                                                                                                                      |
 
+7. Environment variables configuration
+
+   There are also environment variables which are used for configuring the services.
+
+   They are as follows:
+   * For feeder & dispatcher:
+      * `DEBUG_LOGGING`
+
+         Turns on debug logging when running a release build.
+
+         Possible values:
+         * 1
+         * y
+         * Y
+      * `JSON_RPC_PROTO`
+
+         JSON-RPC endpoint's accepted protocol.
+
+         Current configuration:
+         * For dev-net: `https`
+         * For test-net: `https`
+      * `JSON_RPC_HOST`
+
+         JSON-RPC endpoint's domain URL.
+
+         Current configuration:
+         * For dev-net: `dev-net.nolus.io`
+         * For test-net: `rila-net.nolus.io`
+      * `JSON_RPC_PORT`
+
+         JSON-RPC endpoint's listening port.
+
+         Current configuration:
+         * For dev-net: `26612`
+         * For test-net: `26657`
+      * `GRPC_PROTO`
+
+         gRPC endpoint's accepted protocol.
+
+         Possible values are:
+         * `http`
+         * `https`
+
+         Current configuration:
+         * For dev-net: `https`
+         * For test-net: `https`
+      * `GRPC_HOST`
+
+         gRPC endpoint's domain URL.
+
+         Current configuration:
+         * For dev-net: `dev-net.nolus.io`
+         * For test-net: `rila-net.nolus.io`
+      * `GRPC_PORT`
+
+         gRPC endpoint's listening port.
+
+         Current configuration:
+         * For dev-net: `26615`
+         * For test-net: `1318`
+   * For feeder:
+     * `PROVIDER_OSMOSIS_BASE_ADDRESS`
+
+       Osmosis' GAMM module API endpoint's URL.
+
+       Current configuration:
+       * For dev-net: `https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/`
+       * For test-net: `https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/`
+
 ## Start feeder service
 
 From the same directory where `market-data-feeder.toml` is located
