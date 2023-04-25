@@ -17,7 +17,10 @@ fn setup_env() {
     set_var("GRPC_HOST", "rila-net.nolus.io");
     set_var("JSON_RPC_PORT", "26657");
     set_var("GRPC_PORT", "1318");
-    set_var("PROVIDER_OSMOSIS_BASE_ADDRESS", "https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/");
+    set_var(
+        "PROVIDER_OSMOSIS_BASE_ADDRESS",
+        "https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/",
+    );
 }
 
 #[actix_rt::test]
