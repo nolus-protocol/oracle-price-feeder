@@ -1,3 +1,5 @@
+use std::env::set_var;
+
 use chain_comms::{
     client::Client,
     config::Node,
@@ -8,18 +10,32 @@ use crate::messages::{QueryMsg, SupportedCurrencyPairsResponse};
 
 use super::{NODE_CONFIG, ORACLE_ADDRESS};
 
+fn setup_env() {
+    set_var("JSON_RPC_PROTO", "https");
+    set_var("GRPC_PROTO", "https");
+    set_var("JSON_RPC_HOST", "rila-net.nolus.io");
+    set_var("GRPC_HOST", "rila-net.nolus.io");
+    set_var("JSON_RPC_PORT", "26657");
+    set_var("GRPC_PORT", "1318");
+    set_var("PROVIDER_OSMOSIS_BASE_ADDRESS", "https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/");
+}
+
 #[actix_rt::test]
 async fn get_account_data_example() {
+    setup_env();
+
     let config = toml::from_str::<Node>(NODE_CONFIG).unwrap();
     let client = Client::new(&config).await.unwrap();
 
     let account = query_account_data(&client, ORACLE_ADDRESS).await.unwrap();
-    assert_eq!(account.account_number, 15);
+    assert_eq!(account.account_number, 20);
     assert_eq!(account.address, ToOwned::to_owned(ORACLE_ADDRESS));
 }
 
 #[actix_rt::test]
 async fn get_supported_denom_pairs() {
+    setup_env();
+
     let config = toml::from_str::<Node>(NODE_CONFIG).unwrap();
     let client = Client::new(&config).await.unwrap();
 
@@ -35,6 +51,8 @@ async fn get_supported_denom_pairs() {
 
 #[actix_rt::test]
 async fn get_account_data_example_dev() {
+    setup_env();
+
     // https://github.com/hyperium/tonic/issues/240
     // https://github.com/hyperium/tonic/issues/643
 
@@ -43,7 +61,7 @@ async fn get_account_data_example_dev() {
     let client = Client::new(&config).await.unwrap();
 
     let account = query_account_data(&client, ORACLE_ADDRESS).await.unwrap();
-    assert_eq!(account.account_number, 15);
+    assert_eq!(account.account_number, 20);
 }
 
 // // TODO: move to integration test = > start network with docker and exec transaction there
