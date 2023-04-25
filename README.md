@@ -54,7 +54,7 @@ enable = true
    ```
 
 3. Register feeder address. Only oracle contract owner can register new feeder
-  address. All contracts are deployed from wasm_admin.
+   address. All contracts are deployed from wasm_admin.
 
    ```shell
    WALLET_ADDR=$(nolusd keys show -a wallet)
@@ -82,7 +82,7 @@ enable = true
    At the root of the repository there is a directory called `configurations`.
    <br />
    In there are two files: `market-data-feeder.main.toml` and
-    `market-data-feeder.test.toml`.
+   `market-data-feeder.test.toml`.
    <br />
    Depending on whether you want to run the feeder on the main-net or the
    test-net, rename the corresponding file to `market-data-feeder.toml`.
@@ -90,7 +90,7 @@ enable = true
    Editing the `market-data-feeder.toml` file:
 
    |      Key       |            Value             | Default | Description                                                                                                                                       |
-   |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
+      |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
    | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
    | [`tick_time`]  |   &lt;time in seconds&gt;    |   60    | push price on every X seconds                                                                                                                     |
    | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
@@ -120,6 +120,7 @@ From the same directory where `market-data-feeder.toml` is located
 
 To enable diagnostics by logging debug information, the service needs to be run
 with the environment variable `DEBUG_LOGGING` to one of the following:
+
 * `1` (one)
 * `y` (lowercase 'y')
 * `Y` (uppercase 'y')
@@ -173,33 +174,33 @@ Running the service is done through the command below, which requires you to
 pass the mnemonic of the key that will be used.
 
 * Feeder - one of the following options:
-  * ```shell
+    * ```shell
     echo $MNEMONIC | docker run -i -a stdin --add-host \
       host.docker.internal:host-gateway market-data-feeder
     ```
 
-  * ```shell
+    * ```shell
     cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
       host.docker.internal:host-gateway market-data-feeder
     ```
 
-  * ```shell
+    * ```shell
     docker run -i -a stdin --add-host --env "$MNEMONIC"
       host.docker.internal:host-gateway market-data-feeder
     ```
 
 * Dispatcher - one of the following options:
-  * ```shell
+    * ```shell
     echo $MNEMONIC | docker run -i -a stdin --add-host \
     host.docker.internal:host-gateway alarms-dispatcher
     ```
 
-  * ```shell
+    * ```shell
     cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
       host.docker.internal:host-gateway alarms-dispatcher
     ```
 
-  * ```shell
+    * ```shell
     docker run -i -a stdin --add-host --env "$MNEMONIC"
       host.docker.internal:host-gateway alarms-dispatcher
     ```

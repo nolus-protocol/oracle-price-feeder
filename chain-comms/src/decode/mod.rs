@@ -3,9 +3,10 @@ use base64::{
     engine::{GeneralPurpose, GeneralPurposeConfig},
     Engine,
 };
+
 // TODO use this version when errors in wasmd are corrected
-// use cosmrs::cosmwasm::MsgExecuteContractResponse;
-// use cosmrs::tx::Msg as _;
+//  use cosmrs::cosmwasm::MsgExecuteContractResponse;
+//  use cosmrs::tx::Msg as _;
 use cosmrs::{proto::prost::Message, tendermint::abci::response::DeliverTx, Any};
 
 pub mod error;

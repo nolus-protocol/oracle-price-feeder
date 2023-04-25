@@ -2,6 +2,8 @@
 //!
 //! Requires Docker.
 
+use std::{panic, str};
+
 use cosmrs::{
     bank::MsgSend,
     Coin,
@@ -9,25 +11,18 @@ use cosmrs::{
     rpc,
     tx::{self, AccountNumber, Fee, Msg, SignDoc, SignerInfo},
 };
-use std::{panic, str};
 
-/// Chain ID to use for tests
-const CHAIN_ID: &str = "cosmrs-test";
+/// Chain ID to use for tests const CHAIN_ID: &str = "cosmrs-test";
 
-/// RPC port
-const RPC_PORT: u16 = 26657;
+/// RPC port const RPC_PORT: u16 = 26657;
 
-/// Expected account number
-const ACCOUNT_NUMBER: AccountNumber = 1;
+/// Expected account number const ACCOUNT_NUMBER: AccountNumber = 1;
 
-/// Bech32 prefix for an account
-const ACCOUNT_PREFIX: &str = "cosmos";
+/// Bech32 prefix for an account const ACCOUNT_PREFIX: &str = "cosmos";
 
-/// Denom name
-const DENOM: &str = "samoleans";
+/// Denom name const DENOM: &str = "samoleans";
 
-/// Example memo
-const MEMO: &str = "test memo";
+/// Example memo const MEMO: &str = "test memo";
 
 #[test]
 fn msg_send() {
@@ -36,10 +31,7 @@ fn msg_send() {
     let sender_account_id = sender_public_key.account_id(ACCOUNT_PREFIX).unwrap();
 
     let recipient_private_key = secp256k1::SigningKey::random();
-    let recipient_account_id = recipient_private_key
-        .public_key()
-        .account_id(ACCOUNT_PREFIX)
-        .unwrap();
+    let recipient_account_id = recipient_private_key.public_key().account_id(ACCOUNT_PREFIX).unwrap();
 
     let amount = Coin {
         amount: 1u8.into(),
@@ -50,9 +42,7 @@ fn msg_send() {
         from_address: sender_account_id.clone(),
         to_address: recipient_account_id,
         amount: vec![amount.clone()],
-    }
-    .to_any()
-    .unwrap();
+    }.to_any().unwrap();
 
     let chain_id = CHAIN_ID.parse().unwrap();
     let sequence_number = 0;
@@ -61,8 +51,7 @@ fn msg_send() {
     let timeout_height = 9001u16;
 
     let tx_body = tx::Body::new(vec![msg_send], MEMO, timeout_height);
-    let auth_info =
-        SignerInfo::single_direct(Some(sender_public_key), sequence_number).auth_info(fee);
+    let auth_info = SignerInfo::single_direct(Some(sender_public_key), sequence_number).auth_info(fee);
     let sign_doc = SignDoc::new(&tx_body, &auth_info, &chain_id, ACCOUNT_NUMBER).unwrap();
     let tx_raw = sign_doc.sign(&sender_private_key).unwrap();
 
@@ -98,10 +87,6 @@ fn msg_send() {
     });
 }
 
-/// Initialize Tokio runtime
-fn init_tokio_runtime() -> tokio::runtime::Runtime {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap()
+/// Initialize Tokio runtime fn init_tokio_runtime() -> tokio::runtime::Runtime {
+    tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()
 }
