@@ -88,7 +88,7 @@ jobs:
           name: "alpine-linux-alarms-dispatcher"
           path: "artifacts/alarms-dispatcher"
       - name: "Build pre-configured Docker images for dev-net"
-        if: github.ref_type == 'tag'
+        if: github.ref_type == 'tag' || ${{ github.event_name }} == 'workflow_dispatch'
         uses: "./.github/actions/preconfigured_images"
         with:
           config: "dev"
