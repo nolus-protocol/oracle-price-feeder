@@ -11,12 +11,8 @@ use crate::messages::{QueryMsg, SupportedCurrencyPairsResponse};
 use super::{NODE_CONFIG, ORACLE_ADDRESS};
 
 fn setup_env() {
-    set_var("JSON_RPC_PROTO", "https");
-    set_var("GRPC_PROTO", "https");
-    set_var("JSON_RPC_HOST", "rila-net.nolus.io");
-    set_var("GRPC_HOST", "rila-net.nolus.io");
-    set_var("JSON_RPC_PORT", "26657");
-    set_var("GRPC_PORT", "1318");
+    set_var("JSON_RPC_URL", "https://dev-net.nolus.io:26612");
+    set_var("GRPC_URL", "https://dev-net.nolus.io:26615");
     set_var(
         "PROVIDER_OSMOSIS_BASE_ADDRESS",
         "https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/",
