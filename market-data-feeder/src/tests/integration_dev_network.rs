@@ -27,7 +27,7 @@ async fn get_account_data_example() {
     let client = Client::new(&config).await.unwrap();
 
     let account = query_account_data(&client, ORACLE_ADDRESS).await.unwrap();
-    assert_eq!(account.account_number, 20);
+    assert_eq!(account.account_number, 15);
     assert_eq!(account.address, ToOwned::to_owned(ORACLE_ADDRESS));
 }
 
@@ -60,7 +60,7 @@ async fn get_account_data_example_dev() {
     let client = Client::new(&config).await.unwrap();
 
     let account = query_account_data(&client, ORACLE_ADDRESS).await.unwrap();
-    assert_eq!(account.account_number, 20);
+    assert_eq!(account.account_number, 15);
 }
 
 // // TODO: move to integration test = > start network with docker and exec transaction there
