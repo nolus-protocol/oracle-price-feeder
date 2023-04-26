@@ -3,7 +3,7 @@ use std::future::Future;
 use cosmrs::rpc::HttpClient as TendermintRpcClient;
 use tonic::transport::Channel;
 
-use crate::config::{Node, Protocol};
+use crate::config::Node;
 
 use self::error::Result;
 
@@ -17,11 +17,10 @@ pub struct Client {
 
 impl Client {
     pub async fn new(config: &Node) -> Result<Self> {
-        let json_rpc = TendermintRpcClient::new(Self::construct_json_rpc_url(config).as_str())?;
+        let json_rpc = TendermintRpcClient::new(config.json_rpc_url())?;
 
         let grpc = {
-            let mut channel_builder =
-                Channel::builder(Self::construct_grpc_url(config).try_into()?);
+            let mut channel_builder = Channel::builder(config.grpc_url().try_into()?);
 
             if let Some(limit) = config.http2_concurrency_limit() {
                 channel_builder = channel_builder.concurrency_limit(limit.get());
@@ -50,44 +49,5 @@ impl Client {
         R: Future,
     {
         f(self.grpc.clone()).await
-    }
-
-    fn construct_json_rpc_url(config: &Node) -> String {
-        Self::construct_url(
-            config.json_rpc_protocol(),
-            config.json_rpc_host(),
-            config.json_rpc_port().get(),
-            config.json_rpc_api_path(),
-        )
-    }
-
-    fn construct_grpc_url(config: &Node) -> String {
-        Self::construct_url(
-            config.grpc_protocol(),
-            config.grpc_host(),
-            config.grpc_port().get(),
-            config.grpc_api_path(),
-        )
-    }
-
-    fn construct_url(protocol: Protocol, host: &str, port: u16, path: Option<&str>) -> String {
-        format!(
-            "http{}://{}:{}/{}",
-            match protocol {
-                Protocol::Http => "",
-                Protocol::Https => "s",
-            },
-            host,
-            port,
-            if let Some(path) = path {
-                if let Some("/") = path.get(..1) {
-                    &path[1..]
-                } else {
-                    path
-                }
-            } else {
-                ""
-            },
-        )
     }
 }

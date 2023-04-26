@@ -1,7 +1,7 @@
 use std::{
     env::{var, VarError},
     error::Error as StdError,
-    num::{NonZeroU16, NonZeroU64, NonZeroUsize},
+    num::{NonZeroU64, NonZeroUsize},
     path::Path,
     str::FromStr,
 };
@@ -13,31 +13,9 @@ use serde::{
 };
 use tokio::fs::read_to_string;
 
-use self::error::{InvalidProtocol, Result as ModuleResult};
+use self::error::Result as ModuleResult;
 
 pub mod error;
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-#[must_use]
-#[serde(rename_all = "snake_case")]
-pub enum Protocol {
-    Http,
-    Https,
-}
-
-impl FromStr for Protocol {
-    type Err = InvalidProtocol;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let protocol: String = s.to_ascii_lowercase();
-
-        match protocol.as_str() {
-            "http" => Ok(Self::Http),
-            "https" => Ok(Self::Https),
-            _ => Err(InvalidProtocol(protocol)),
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -61,36 +39,12 @@ impl Node {
         self.file.http2_concurrency_limit
     }
 
-    pub fn json_rpc_protocol(&self) -> Protocol {
-        self.environment.json_rpc_protocol
+    pub fn json_rpc_url(&self) -> &str {
+        &self.environment.json_rpc_url
     }
 
-    pub fn grpc_protocol(&self) -> Protocol {
-        self.environment.grpc_protocol
-    }
-
-    pub fn json_rpc_host(&self) -> &str {
-        &self.environment.json_rpc_host
-    }
-
-    pub fn grpc_host(&self) -> &str {
-        &self.environment.grpc_host
-    }
-
-    pub fn json_rpc_port(&self) -> NonZeroU16 {
-        self.environment.json_rpc_port
-    }
-
-    pub fn json_rpc_api_path(&self) -> Option<&str> {
-        self.environment.json_rpc_api_path.as_deref()
-    }
-
-    pub fn grpc_port(&self) -> NonZeroU16 {
-        self.environment.grpc_port
-    }
-
-    pub fn grpc_api_path(&self) -> Option<&str> {
-        self.environment.grpc_api_path.as_deref()
+    pub fn grpc_url(&self) -> &str {
+        &self.environment.grpc_url
     }
 
     pub fn address_prefix(&self) -> &str {
@@ -164,14 +118,8 @@ struct File {
 #[derive(Debug, Clone)]
 #[must_use]
 struct Environment {
-    json_rpc_protocol: Protocol,
-    grpc_protocol: Protocol,
-    json_rpc_host: String,
-    grpc_host: String,
-    json_rpc_port: NonZeroU16,
-    grpc_port: NonZeroU16,
-    json_rpc_api_path: Option<String>,
-    grpc_api_path: Option<String>,
+    json_rpc_url: String,
+    grpc_url: String,
 }
 
 impl<'de> Deserialize<'de> for Environment {
@@ -179,25 +127,12 @@ impl<'de> Deserialize<'de> for Environment {
     where
         D: Deserializer<'de>,
     {
-        let json_rpc_protocol: Protocol = read_from_env::<'de, _, D>("JSON_RPC_PROTO")?;
-        let grpc_protocol: Protocol = read_from_env::<'de, _, D>("GRPC_PROTO")?;
-        let json_rpc_host: String = read_from_env::<'de, _, D>("JSON_RPC_HOST")?;
-        let grpc_host: String = read_from_env::<'de, _, D>("GRPC_HOST")?;
-        let json_rpc_port: NonZeroU16 = read_from_env::<'de, _, D>("JSON_RPC_PORT")?;
-        let grpc_port: NonZeroU16 = read_from_env::<'de, _, D>("GRPC_PORT")?;
-        let json_rpc_api_path: Option<String> =
-            maybe_read_from_env::<'de, _, D>("JSON_RPC_API_PATH")?;
-        let grpc_api_path: Option<String> = maybe_read_from_env::<'de, _, D>("GRPC_API_PATH")?;
+        let json_rpc_url: String = read_from_env::<'de, _, D>("JSON_RPC_URL")?;
+        let grpc_url: String = read_from_env::<'de, _, D>("GRPC_URL")?;
 
         Ok(Self {
-            json_rpc_protocol,
-            grpc_protocol,
-            json_rpc_host,
-            grpc_host,
-            json_rpc_port,
-            grpc_port,
-            json_rpc_api_path,
-            grpc_api_path,
+            json_rpc_url,
+            grpc_url,
         })
     }
 }
