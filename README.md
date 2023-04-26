@@ -121,17 +121,9 @@ enable = true
       * `JSON_RPC_URL`
 
          JSON-RPC endpoint's URL.
-
-         Current configuration:
-         * For dev-net: `https://dev-net.nolus.io:26612`
-         * For test-net: `https://rila-net.nolus.io:26657`
       * `GRPC_URL`
 
          gRPC endpoint's URL.
-
-         Current configuration:
-         * For dev-net: `https://dev-net.nolus.io:26615`
-         * For test-net: `https://rila-net.nolus.io:1318`
    * For feeder:
      * `PROVIDER_OSMOSIS_BASE_ADDRESS`
 
