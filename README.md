@@ -118,52 +118,20 @@ enable = true
          * 1
          * y
          * Y
-      * `JSON_RPC_PROTO`
+      * `JSON_RPC_URL`
 
-         JSON-RPC endpoint's accepted protocol.
-
-         Current configuration:
-         * For dev-net: `https`
-         * For test-net: `https`
-      * `JSON_RPC_HOST`
-
-         JSON-RPC endpoint's domain URL.
+         JSON-RPC endpoint's URL.
 
          Current configuration:
-         * For dev-net: `dev-net.nolus.io`
-         * For test-net: `rila-net.nolus.io`
-      * `JSON_RPC_PORT`
+         * For dev-net: `https://dev-net.nolus.io:26612`
+         * For test-net: `https://rila-net.nolus.io:26657`
+      * `GRPC_URL`
 
-         JSON-RPC endpoint's listening port.
-
-         Current configuration:
-         * For dev-net: `26612`
-         * For test-net: `26657`
-      * `GRPC_PROTO`
-
-         gRPC endpoint's accepted protocol.
-
-         Possible values are:
-         * `http`
-         * `https`
+         gRPC endpoint's URL.
 
          Current configuration:
-         * For dev-net: `https`
-         * For test-net: `https`
-      * `GRPC_HOST`
-
-         gRPC endpoint's domain URL.
-
-         Current configuration:
-         * For dev-net: `dev-net.nolus.io`
-         * For test-net: `rila-net.nolus.io`
-      * `GRPC_PORT`
-
-         gRPC endpoint's listening port.
-
-         Current configuration:
-         * For dev-net: `26615`
-         * For test-net: `1318`
+         * For dev-net: `https://dev-net.nolus.io:26615`
+         * For test-net: `https://rila-net.nolus.io:1318`
    * For feeder:
      * `PROVIDER_OSMOSIS_BASE_ADDRESS`
 
@@ -244,52 +212,46 @@ over time. These are provided as a guide.*
 * Feeder - one of the following options:
     * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host \
-      --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
-      --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
-      --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
       host.docker.internal:host-gateway market-data-feeder
       ```
 
     * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
-      --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
-      --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
-      --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
       host.docker.internal:host-gateway market-data-feeder
       ```
 
     * ```shell
       docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
-        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
-        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
-        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
-        --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
+      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
+      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
         host.docker.internal:host-gateway market-data-feeder
       ```
 
 * Dispatcher - one of the following options:
     * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host \
-        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
-        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
-        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
         host.docker.internal:host-gateway alarms-dispatcher
       ```
 
     * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
-        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
-        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
-        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
         host.docker.internal:host-gateway alarms-dispatcher
       ```
 
     * ```shell
       docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
-        --env 'GRPC_HOST=rila-net.nolus.io' --env 'GRPC_PORT=1318' \
-        --env 'GRPC_PROTO=https' --env 'JSON_RPC_HOST=rila-net.nolus.io' \
-        --env 'JSON_RPC_PORT=26657' --env 'JSON_RPC_PROTO=https' \
+      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
         host.docker.internal:host-gateway alarms-dispatcher
       ```
