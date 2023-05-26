@@ -21,7 +21,7 @@ currencies = [
 
 [node]
 address_prefix = "nolus"
-chain_id = "nolus-dev-v0-1-42"
+chain_id = "vitosha-1"
 gas_adjustment_numerator = 107
 gas_adjustment_denominator = 100
 fee_denom = "unls"
