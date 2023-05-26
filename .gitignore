@@ -100,8 +100,10 @@ artifacts/
 configurations/*
 !configurations/alarms-dispatcher.dev.toml
 !configurations/alarms-dispatcher.test.toml
+!configurations/alarms-dispatcher.main.toml
 !configurations/market-data-feeder.dev.toml
 !configurations/market-data-feeder.test.toml
+!configurations/market-data-feeder.main.toml
 
 ### Application Logs
 dispatcher-logs/
