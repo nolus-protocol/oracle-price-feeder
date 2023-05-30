@@ -7,7 +7,7 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cosmrs = { version = "0.13", default-features = false, features = ["rpc", "grpc", "bip32", "cosmwasm"] }
+cosmrs = { version = "0.14", default-features = false, features = ["rpc", "grpc", "bip32", "cosmwasm"] }
 base64 = "0.21"
 http = { version = "0.2.9", default-features = false }
 prost = { version = "0.11.6", default-features = false, features = ["std"] }
