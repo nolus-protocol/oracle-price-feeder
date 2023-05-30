@@ -17,7 +17,13 @@ pub struct Client {
 
 impl Client {
     pub async fn new(config: &Node) -> Result<Self> {
-        let json_rpc = TendermintRpcClient::new(config.json_rpc_url())?;
+        let json_rpc = {
+            let mut json_rpc = TendermintRpcClient::new(config.json_rpc_url())?;
+
+            json_rpc.set_origin_header(true);
+
+            json_rpc
+        };
 
         let grpc = {
             let mut channel_builder = Channel::builder(config.grpc_url().try_into()?);
