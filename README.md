@@ -1,22 +1,24 @@
-# Market Data Feeder
+# Market Data Feeder && Alarms Dispatcher
 
 <br /><p align="center"><img alt="Market Data Feeder" src="docs/price-feeder-logo.svg" width="100"/></p><br />
 
-Market Data feeder is an off-chain service that collects prices from configured
+**Market Data Feeder** is an off-chain service that collects prices from configured
 price providers and pushes them to the Oracle contract.
 
 Currently only the Osmosis client is implemented.
-<br />
-It reads prices from the Osmosis pools: https://lcd.osmosis.zone/gamm/v1beta1/pools
+
+It reads prices from the Osmosis pools: `https://lcd.osmosis.zone/gamm/v1beta1/pools`
+
+**Alarms Dispatcher** is а service that takes care of alarms in the system.
 
 ## Prerequisites
 
 To connect to the oracle smart contract, the gRPC port on the network should be
 enabled.
-<br />
+
 To enable it edit the following file:
-<br />
-`./networks/nolus/local-validator-1/config/app.toml`
+
+`./nolus-core/networks/nolus/local-validator-1/config/app.toml`
 
 In it, go to the `grpc` section and set `enable` to `true`.
 
@@ -29,15 +31,25 @@ enable = true
 
 ## Setup
 
-1. Add new key to be used as Feeder:
+### Set some environment variables
 
    ```shell
-   nolusd keys add wallet
+   export CHAIN_ID="nolus-Env-vXXX-XXX"
+   export TXFLAG="--chain-id ${CHAIN_ID} --gas auto --gas-adjustment 1.3 --fees 15000unls"
+   ```
+
+   *Note: The CHAIN_ID can be found in the produced after network initiliazation 'networks' directory (`./nolus-core/networks/nolus/local-validator-1/genesis.json`).
+
+### Add new key to be used as Feeder
+
+   ```shell
+   nolusd keys add feeder
    ```
 
    The output will look like this:
+
    ```yaml
-   - name: wallet
+   - name: feeder
      type: local
      address: nolus1um993zvsdp8upa5qvtspu0jdy66eahlcghm0w6
      pubkey: '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A0MFMuJSqWpofT3GIQchGyL9bADlC5GEWu3QJHGL/XHZ"}'
@@ -46,51 +58,57 @@ enable = true
 
    Store the mnemonic phrase as it will be needed to start the service.
 
-2. Set some environment variables
+### Add new key to be used as Dispatcher
 
-   ```shell
-   export CHAIN_ID="nolus-local"
-   export TXFLAG="--chain-id ${CHAIN_ID} --gas auto --gas-adjustment 1.3 --fees 15000unls"
-   ```
+  ```shell
+  nolusd keys add dispatcher
+  ```
 
-3. Register feeder address. Only oracle contract owner can register new feeder
-   address. All contracts are deployed from wasm_admin.
+  Store the mnemonic phrase as it will be needed to start the service.
 
-   ```shell
-   WALLET_ADDR=$(nolusd keys show -a wallet)
-   REGISTER='{"register_feeder":{"feeder_address":"'"$WALLET_ADDR"'"}}'
-   nolusd tx wasm execute $CONTRACT "$REGISTER" --amount 100unls \
-       --from wasm_admin $TXFLAG -y
-   ```
+### Register feeder address
 
-4. Send some money to feeder account
+  ```shell
+   nolusd tx gov submit-proposal sudo-contract nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4 \
+   '{"register_feeder":{"feeder_address":"nolus1um993zvsdp8upa5qvtspu0jdy66eahlcghm0w6"}}' \
+   --title "Register feeder" --description "Register feeder" --deposit 10000000unls --fees 900unls --gas auto --gas-adjustment 1.1 --from reserve
+  ```
 
-   ```shell
-   nolusd tx bank send $(nolusd keys show -a reserve) \
-       $(nolusd keys show -a wallet) 1000000unls --chain-id nolus-local \
-       --keyring-backend test --fees 500unls
-   ```
+* **nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4** - Leaser contract
+* **nolus1um993zvsdp8upa5qvtspu0jdy66eahlcghm0w6** - Feeder address
 
-5. Build feeder service binary
+### Send some money to feeder account
 
-    ```shell
-    cargo build --release
-    ```
+  ```shell
+  nolusd tx bank send reserve $(nolusd keys show -a feeder) 1000000unls --fees 500unls
+  ```
 
-6. Configure service
+### Send some money to dispatcher account
 
-   At the root of the repository there is a directory called `configurations`.
-   <br />
-   In there are two files: `market-data-feeder.main.toml` and
-   `market-data-feeder.test.toml`.
-   <br />
-   Depending on whether you want to run the feeder on the main-net or the
-   test-net, rename the corresponding file to `market-data-feeder.toml`.
-   <br />
-   Editing the `market-data-feeder.toml` file:
+  ```shell
+  nolusd tx bank send reserve $(nolusd keys show -a dispatcher) 1000000unls --fees 500unls
+  ```
+
+### Build services
+
+  ```shell
+  cargo build --release
+  ```
+
+### Configure service
+
+  At the root of the repository there is a directory called `configurations`.
+
+  In there are several files: `market-data-feeder.main.toml`,
+  `market-data-feeder.test.toml`, `market-data-feeder.dev.toml`, `alarms-dispatcher.main.toml` ...
+
+  Depending on whether you want to run the feeder on the main-net, dev-net or the
+  test-net, rename the corresponding file to `market-data-feeder.toml`/`alarms-dispatcher.toml`.
+
+* Editing the `market-data-feeder.toml` file:
 
    |      Key       |            Value             | Default | Description                                                                                                                                       |
-      |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
+  |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
    | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
    | [`tick_time`]  |   &lt;time in seconds&gt;    |   60    | push price on every X seconds                                                                                                                     |
    | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
@@ -104,53 +122,59 @@ enable = true
    |  funds_amount  |                              |         | Amount to be used for transactions                                                                                                                |
    |   gas_limit    |                              |         | Gas limit (Example: 500_000)                                                                                                                      |
 
-7. Environment variables configuration
+* Editing the `alarms-dispatcher.toml` file:
+  * chain_id - The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0
+
+### Environment variables configuration
 
    There are also environment variables which are used for configuring the services.
 
    They are as follows:
-   * For feeder & dispatcher:
-      * `DEBUG_LOGGING`
 
-         Turns on debug logging when running a release build.
+* For feeder & dispatcher:
+  * `DEBUG_LOGGING`
+    Turns on debug logging when running a release build.
+    Possible values:
+    * 1
+    * y
+    * Y
 
-         Possible values:
-         * 1
-         * y
-         * Y
-      * `JSON_RPC_URL`
+  * `JSON_RPC_URL`
+    JSON-RPC endpoint's URL.
 
-         JSON-RPC endpoint's URL.
-      * `GRPC_URL`
+  * `GRPC_URL`
+    gRPC endpoint's URL.
 
-         gRPC endpoint's URL.
-   * For feeder:
-     * `PROVIDER_OSMOSIS_BASE_ADDRESS`
+* For feeder:
+  * `PROVIDER_OSMOSIS_BASE_ADDRESS`
+    Osmosis' GAMM module API endpoint's URL.
+    Current configuration:
+    * For dev-net: `https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/`
+    * For test-net: `https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/`
 
-       Osmosis' GAMM module API endpoint's URL.
+For local network:
 
-       Current configuration:
-       * For dev-net: `https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/`
-       * For test-net: `https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/`
+```shell
+export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ; export PROVIDER_OSMOSIS_BASE_ADDRESS="https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/"
+```
 
 ## Start feeder service
 
-From the same directory where `market-data-feeder.toml` is located
+From the same directory where `market-data-feeder.toml` is located:
 
 ```shell
 ./target/release/feeder
 ```
 
-# Diagnostics on release builds
+## Start dispatcher service
 
-To enable diagnostics by logging debug information, the service needs to be run
-with the environment variable `DEBUG_LOGGING` to one of the following:
+From the same directory where `alarms-dispatcher.toml` is located:
 
-* `1` (one)
-* `y` (lowercase 'y')
-* `Y` (uppercase 'y')
+```shell
+./target/release/alarms-dispatcher
+```
 
-# Running in Docker
+## Running in Docker
 
 ## Building binary
 
@@ -182,12 +206,14 @@ CONFIG_NAME="test"
 The command to do so is the following:
 
 * Feeder
+
   ```shell
   docker build --rm --build-arg config_name=${CONFIG_NAME:-main} \
     -f Feeder.Dockerfile -t market-data-feeder ./artifacts/
   ```
 
 * Dispatcher
+
   ```shell
   docker build --rm --build-arg config_name=${CONFIG_NAME:-main} \
     -f Dispatcher.Dockerfile -t alarms-dispatcher ./artifacts/
@@ -202,48 +228,50 @@ pass the mnemonic of the key that will be used.
 over time. These are provided as a guide.*
 
 * Feeder - one of the following options:
-    * ```shell
+
+  * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host \
-      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
-      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
+      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
+      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
       host.docker.internal:host-gateway market-data-feeder
-      ```
+    ```
 
-    * ```shell
+  * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
-      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
-      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
+      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
+      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
       host.docker.internal:host-gateway market-data-feeder
-      ```
+    ```
 
-    * ```shell
+  * ```shell
       docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
-      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
-      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/'
-        host.docker.internal:host-gateway market-data-feeder
-      ```
+      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
+      --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
+      host.docker.internal:host-gateway market-data-feeder
+    ```
 
 * Dispatcher - one of the following options:
-    * ```shell
+
+  * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host \
-      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
-      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-        host.docker.internal:host-gateway alarms-dispatcher
-      ```
+      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
+      host.docker.internal:host-gateway alarms-dispatcher
+    ```
 
-    * ```shell
+  * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
-      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
-      --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-        host.docker.internal:host-gateway alarms-dispatcher
-      ```
+      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
+      host.docker.internal:host-gateway alarms-dispatcher
+    ```
 
-    * ```shell
+  * ```shell
       docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
       --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
       --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-        host.docker.internal:host-gateway alarms-dispatcher
-      ```
+      host.docker.internal:host-gateway alarms-dispatcher
+    ```
