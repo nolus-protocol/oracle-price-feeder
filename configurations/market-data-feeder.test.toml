@@ -3,6 +3,15 @@ tick_time = 60
 oracle_addr = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
 gas_limit = 1_975_000
 
+[node]
+address_prefix = "nolus"
+chain_id = "rila-1"
+gas_adjustment_numerator = 11025
+gas_adjustment_denominator = 10000
+fee_denom = "unls"
+gas_price_numerator = 1
+gas_price_denominator = 390
+
 [[providers]]
 main_type = "crypto"
 name = "osmosis"
@@ -18,12 +27,3 @@ currencies = [
     ["WBTC", "ibc/BDA12A41BCF2DFB005A0794876E0E71D9538E0A7EB9607F600435EDDE5393EC4"],
     ["JUNO", "ibc/46B44899322F3CD854D2D46DEEF881958467CDD4B3B10086DA49296BBED94BED"],
 ]
-
-[node]
-address_prefix = "nolus"
-chain_id = "nolus-rila"
-gas_adjustment_numerator = 11025
-gas_adjustment_denominator = 10000
-fee_denom = "unls"
-gas_price_numerator = 1
-gas_price_denominator = 390
