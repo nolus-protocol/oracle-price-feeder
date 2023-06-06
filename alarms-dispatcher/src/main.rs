@@ -25,8 +25,8 @@ pub mod config;
 pub mod error;
 pub mod messages;
 
-pub const ORACLE_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 3);
-pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 0);
+pub const ORACLE_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
+pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 1);
 
 pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
 
