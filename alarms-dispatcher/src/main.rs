@@ -144,9 +144,11 @@ async fn dispatch_alarms(
     ];
 
     'dispatcher_loop: loop {
-        if !signer.needs_update() {
-            'for_contracts: for contract in contracts {
-                if handle_alarms_dispatch(
+        for contract in contracts {
+            let mut is_retry: bool = false;
+
+            'dispatch_alarm: loop {
+                match handle_alarms_dispatch(
                     signer,
                     config,
                     client,
@@ -155,23 +157,30 @@ async fn dispatch_alarms(
                     &mut fallback_gas_limit,
                 )
                 .await
-                .is_err()
                 {
-                    break 'for_contracts;
+                    DispatchResult::Success => break 'dispatch_alarm,
+                    DispatchResult::DispatchFailed => {
+                        if is_retry {
+                            break 'dispatch_alarm;
+                        } else {
+                            is_retry = true;
+                        }
+                    }
+                    DispatchResult::RecoveryFailed => {
+                        break 'dispatcher_loop Err(error::DispatchAlarms::RecoveryError)
+                    }
                 }
-            }
-        } else {
-            let _span: EnteredSpan = info_span!("recover-after-error").entered();
-
-            info!("Trying to update local copy of account data...");
-
-            if recover_after_error(_span, signer, client).await {
-                continue 'dispatcher_loop;
             }
         }
 
         sleep(poll_period).await;
     }
+}
+
+enum DispatchResult {
+    Success,
+    DispatchFailed,
+    RecoveryFailed,
 }
 
 async fn handle_alarms_dispatch<'r>(
@@ -185,7 +194,7 @@ async fn handle_alarms_dispatch<'r>(
     ),
     query: &'r [u8],
     fallback_gas_limit: &mut Option<u64>,
-) -> Result<(), ()> {
+) -> DispatchResult {
     let result: Result<GasUsed, error::DispatchAlarms> = dispatch_alarm(
         signer,
         client,
@@ -203,6 +212,8 @@ async fn handle_alarms_dispatch<'r>(
             let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(gas_used.0);
 
             *fallback_gas_limit = gas_used.0.max(*fallback_gas_limit);
+
+            DispatchResult::Success
         }
         Err(error) => {
             let _span: EnteredSpan = info_span!("dispatch-error").entered();
@@ -217,15 +228,13 @@ async fn handle_alarms_dispatch<'r>(
                 );
 
                 if !recover_after_error(_span, signer, client).await {
-                    return Err(());
+                    return DispatchResult::RecoveryFailed;
                 }
-            } else {
-                drop(_span);
             }
+
+            DispatchResult::DispatchFailed
         }
     }
-
-    Ok(())
 }
 
 async fn recover_after_error(_span: EnteredSpan, signer: &mut Signer, client: &Client) -> bool {

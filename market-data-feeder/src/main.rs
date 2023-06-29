@@ -100,7 +100,11 @@ async fn app_main() -> AppResult<()> {
         .unwrap_or(false);
 
         if messages.is_empty() {
-            continue;
+            if channel_closed {
+                break 'feeder_loop;
+            } else {
+                continue 'feeder_loop;
+            }
         }
 
         let mut is_retry: bool = false;
@@ -138,42 +142,28 @@ async fn app_main() -> AppResult<()> {
 
             match result {
                 Ok(response) => {
-                    let mut channel_closed: bool = channel_closed;
-
                     log_commit_response(&response);
 
-                    let delivered: bool =
-                        if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
-                            let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
+                    if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
+                        let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
 
-                            let fallback_gas_limit: &mut u64 =
-                                fallback_gas_limit.get_or_insert(used_gas);
+                        let fallback_gas_limit: &mut u64 =
+                            fallback_gas_limit.get_or_insert(used_gas);
 
-                            *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
+                        *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
 
-                            false
-                        } else if signer.needs_update() {
-                            channel_closed = channel_closed
-                                || recover_after_error(
-                                    &mut signer,
-                                    client.as_ref(),
-                                    tick_time,
-                                    &mut receiver,
-                                )
-                                .await;
-
-                            true
-                        } else {
-                            false
-                        };
-
-                    if channel_closed {
-                        break 'feeder_loop;
-                    } else if delivered {
                         continue 'feeder_loop;
                     }
                 }
                 Err(error) => error!("Failed to feed data into oracle! Cause: {error}"),
+            }
+
+            if signer.needs_update() {
+                if !recover_after_error(&mut signer, client.as_ref(), tick_time, &mut receiver)
+                    .await
+                {
+                    break 'feeder_loop;
+                }
             }
         }
     }
@@ -215,6 +205,7 @@ async fn check_compatibility(config: &Config, client: &Client) -> AppResult<()> 
     Ok(())
 }
 
+#[must_use]
 async fn recover_after_error(
     signer: &mut Signer,
     client: &Client,

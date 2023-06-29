@@ -32,6 +32,8 @@ pub enum DispatchAlarms {
     DispatchTimeAlarm(DispatchAlarm),
     #[error("Failed to dispatch price alarm! Cause: {0}")]
     DispatchPriceAlarm(DispatchAlarm),
+    #[error("Failed to recover after error occurred!")]
+    RecoveryError,
 }
 
 #[derive(Debug, ThisError)]
