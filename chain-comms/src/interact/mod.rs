@@ -11,10 +11,15 @@ use cosmrs::{
             query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
         },
     },
-    tx::Fee,
+    rpc::{
+        error::{Error as RpcError, ErrorDetail as RpcErrorDetail},
+        HttpClient as RpcHttpClient,
+    },
+    tx::{Fee, Raw as RawTx},
     Coin,
 };
 use serde::de::DeserializeOwned;
+use tonic::transport::Channel as TonicChannel;
 use tracing::{debug, error};
 
 use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
@@ -95,12 +100,12 @@ pub async fn simulate_tx(
     gas_limit: u64,
     unsigned_tx: ContractTx,
 ) -> Result<GasInfo, error::SimulateTx> {
-    let simulation_tx = unsigned_tx
+    let simulation_tx: Vec<u8> = unsigned_tx
         .commit(signer, calculate_fee(config, gas_limit)?, None, None)?
         .to_bytes()?;
 
     let gas_info: GasInfo = client
-        .with_grpc(move |channel| async move {
+        .with_grpc(move |channel: TonicChannel| async move {
             ServiceClient::new(channel)
                 .simulate(SimulateRequest {
                     tx_bytes: simulation_tx,
@@ -129,18 +134,28 @@ pub async fn commit_tx(
     unsigned_tx: ContractTx,
     gas_limit: u64,
 ) -> Result<CommitResponse, error::CommitTx> {
-    let signed_tx =
+    let signed_tx: RawTx =
         unsigned_tx.commit(signer, calculate_fee(node_config, gas_limit)?, None, None)?;
 
-    let tx_commit_response = client
-        .with_json_rpc(|rpc| async move { signed_tx.broadcast_commit(&rpc).await })
-        .await?;
+    let tx_commit_response: CommitResponse = match client
+        .with_json_rpc(|rpc: RpcHttpClient| async move { signed_tx.broadcast_commit(&rpc).await })
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            (if let Some(RpcError(RpcErrorDetail::Response(_), _)) =
+                error.downcast_ref::<RpcError>()
+            {
+                Signer::tx_confirmed
+            } else {
+                Signer::set_needs_update
+            })(signer);
 
-    if tx_commit_response.check_tx.code.is_ok() && tx_commit_response.deliver_tx.code.is_ok() {
-        signer.tx_confirmed();
-    } else {
-        signer.set_needs_update();
-    }
+            return Err(error.into());
+        }
+    };
+
+    signer.tx_confirmed();
 
     Ok(tx_commit_response)
 }
@@ -178,7 +193,7 @@ pub async fn commit_tx_with_gas_estimation(
 
     let adjusted_gas_limit: u64 = u128::from(tx_gas_limit)
         .checked_mul(node_config.gas_adjustment_numerator().get().into())
-        .and_then(|result| {
+        .and_then(|result: u128| {
             result.checked_div(node_config.gas_adjustment_denominator().get().into())
         })
         .map(|result| u64::try_from(result).unwrap_or(u64::MAX))
