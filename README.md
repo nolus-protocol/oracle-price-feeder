@@ -158,7 +158,7 @@ For local network:
 export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ; export PROVIDER_OSMOSIS_BASE_ADDRESS="https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/"
 ```
 
-## Start feeder service
+### Start feeder service
 
 From the same directory where `market-data-feeder.toml` is located:
 
@@ -166,7 +166,7 @@ From the same directory where `market-data-feeder.toml` is located:
 ./target/release/feeder
 ```
 
-## Start dispatcher service
+### Start dispatcher service
 
 From the same directory where `alarms-dispatcher.toml` is located:
 
@@ -176,7 +176,7 @@ From the same directory where `alarms-dispatcher.toml` is located:
 
 ## Running in Docker
 
-## Building binary
+### Building binary
 
 First the project has to be compiled.
 This has to be done whenever the codebase is changed.
@@ -190,7 +190,7 @@ docker build --rm -f Compile.Dockerfile -t compile-bots . && \
     compile-bots
 ```
 
-## Building service's image
+### Building service's image
 
 Before deploying a new version the service's image has to be rebuilt.
 
@@ -219,7 +219,7 @@ The command to do so is the following:
     -f Dispatcher.Dockerfile -t alarms-dispatcher ./artifacts/
   ```
 
-## Running service
+### Running service
 
 Running the service is done through the command below, which requires you to
 pass the mnemonic of the key that will be used.
