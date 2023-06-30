@@ -108,7 +108,7 @@ enable = true
 * Editing the `market-data-feeder.toml` file:
 
    |      Key       |            Value             | Default | Description                                                                                                                                       |
-  |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
+   |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
    | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
    | [`tick_time`]  |   &lt;time in seconds&gt;    |   60    | push price on every X seconds                                                                                                                     |
    | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
