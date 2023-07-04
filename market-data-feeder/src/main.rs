@@ -158,12 +158,11 @@ async fn app_main() -> AppResult<()> {
                 Err(error) => error!("Failed to feed data into oracle! Cause: {error}"),
             }
 
-            if signer.needs_update() {
-                if !recover_after_error(&mut signer, client.as_ref(), tick_time, &mut receiver)
+            if signer.needs_update()
+                && !recover_after_error(&mut signer, client.as_ref(), tick_time, &mut receiver)
                     .await
-                {
-                    break 'feeder_loop;
-                }
+            {
+                break 'feeder_loop;
             }
         }
     }
