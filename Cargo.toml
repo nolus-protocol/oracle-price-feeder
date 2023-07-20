@@ -17,7 +17,7 @@ semver = { path = "./semver" }
 chain-comms = { path = "./chain-comms" }
 
 [patch.crates-io]
-cosmrs = { git = "https://github.com/cosmos/cosmos-rust.git", rev = "aef5c708e6dddeec4ad1ba2672c7874a40b9bfc1" }
+cosmrs = { git = "https://github.com/cosmos/cosmos-rust.git" }
 tendermint = { git = "https://github.com/nolus-protocol/tendermint-rs.git" }
 tendermint-rpc = { git = "https://github.com/nolus-protocol/tendermint-rs.git" }
 
