@@ -2,7 +2,10 @@ use std::{collections::BTreeMap, io, str::FromStr, sync::Arc, time::Duration};
 
 use tokio::{
     select,
-    sync::mpsc::{unbounded_channel, UnboundedReceiver},
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver},
+        watch,
+    },
     task::JoinSet,
     time::{interval, sleep, timeout, Instant},
 };
@@ -77,8 +80,18 @@ async fn app_main() -> AppResult<()> {
 
     let tick_time = Duration::from_secs(config.tick_time());
 
-    let (mut set, mut receiver) =
-        spawn_workers(&client, config.providers(), config.oracle_addr(), tick_time)?;
+    let (recovery_mode_sender, recovery_mode_receiver): (
+        watch::Sender<bool>,
+        watch::Receiver<bool>,
+    ) = watch::channel(false);
+
+    let (mut set, mut receiver) = spawn_workers(
+        &client,
+        config.providers(),
+        config.oracle_addr(),
+        tick_time,
+        recovery_mode_receiver,
+    )?;
 
     info!("Workers started. Entering broadcasting loop...");
 
@@ -158,11 +171,41 @@ async fn app_main() -> AppResult<()> {
                 Err(error) => error!("Failed to feed data into oracle! Cause: {error}"),
             }
 
-            if signer.needs_update()
-                && !recover_after_error(&mut signer, client.as_ref(), tick_time, &mut receiver)
+            if signer.needs_update() {
+                let set_in_recovery = |in_recovery: bool| {
+                    let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
+
+                    if is_error {
+                        error!("Recovery mode state watch closed! Exiting broadcasting loop...");
+                    }
+
+                    is_error
+                };
+
+                let recovered: bool =
+                    recover_after_error(&mut signer, client.as_ref(), tick_time, &mut receiver)
+                        .await;
+
+                if !recovered {
+                    if set_in_recovery(true) {
+                        break 'feeder_loop;
+                    }
+
+                    while !recover_after_error(
+                        &mut signer,
+                        client.as_ref(),
+                        tick_time,
+                        &mut receiver,
+                    )
                     .await
-            {
-                break 'feeder_loop;
+                    {
+                        sleep(Duration::from_secs(15)).await;
+                    }
+
+                    if set_in_recovery(false) {
+                        break 'feeder_loop;
+                    }
+                }
             }
         }
     }
@@ -259,6 +302,7 @@ fn spawn_workers(
     providers: &[ProviderConfig],
     oracle_addr: &str,
     tick_time: Duration,
+    recovery_mode: watch::Receiver<bool>,
 ) -> SpawnWorkersResult {
     let mut set = JoinSet::new();
 
@@ -289,6 +333,7 @@ fn spawn_workers(
                 move |instant, data| sender.send((monotonic_id, instant, data)).map_err(|_| ()),
                 provider_name,
                 tick_time,
+                recovery_mode.clone(),
             ));
         });
 
@@ -302,6 +347,7 @@ async fn provider_main_loop<SenderFn>(
     sender: SenderFn,
     provider_name: String,
     tick_time: Duration,
+    mut recovery_mode: watch::Receiver<bool>,
 ) -> Result<(), error::Worker>
 where
     SenderFn: Fn(Instant, String) -> Result<(), ()>,
@@ -312,8 +358,21 @@ where
 
     let mut seq_error_counter = 0_u8;
 
-    loop {
-        interval.tick().await;
+    'worker_loop: loop {
+        if select! {
+            _ = interval.tick() => false,
+            Ok(()) = recovery_mode.changed() => {
+                *recovery_mode.borrow()
+            }
+        } {
+            while *recovery_mode.borrow() {
+                if recovery_mode.changed().await.is_err() {
+                    error!("Recovery mode state watch closed! Exiting worker loop...");
+
+                    break 'worker_loop Err(error::Worker::RecoveryModeWatchClosed);
+                }
+            }
+        }
 
         let spot_prices_future = provider.get_spot_prices(&client, &oracle_addr);
 
@@ -330,7 +389,7 @@ where
                         "Communication channel has been closed! Exiting worker task..."
                     );
 
-                    return Ok(());
+                    break 'worker_loop Ok(());
                 }
             }
             Err(error) => {

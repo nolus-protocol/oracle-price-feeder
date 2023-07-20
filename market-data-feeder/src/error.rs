@@ -33,6 +33,8 @@ pub enum Application {
 pub enum Worker {
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Recovery mode state watch closed!")]
+    RecoveryModeWatchClosed,
 }
 
 pub type AppResult<T> = Result<T, Application>;
