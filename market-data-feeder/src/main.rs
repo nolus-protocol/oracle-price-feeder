@@ -171,45 +171,11 @@ async fn app_main() -> AppResult<()> {
                 Err(error) => {
                     error!("Failed to feed data into oracle! Cause: {error}");
 
-                    if signer.needs_update() {
-                        let set_in_recovery = |in_recovery: bool| {
-                            let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
-
-                            if is_error {
-                                error!("Recovery mode state watch closed! Exiting broadcasting loop...");
-                            }
-
-                            is_error
-                        };
-
-                        let recovered: bool = recover_after_error(
-                            &mut signer,
-                            client.as_ref(),
-                            tick_time,
-                            &mut receiver,
-                        )
-                        .await;
-
-                        if !recovered {
-                            if set_in_recovery(true) {
-                                break 'feeder_loop;
-                            }
-
-                            while !recover_after_error(
-                                &mut signer,
-                                client.as_ref(),
-                                tick_time,
-                                &mut receiver,
-                            )
-                            .await
-                            {
-                                sleep(Duration::from_secs(15)).await;
-                            }
-
-                            if set_in_recovery(false) {
-                                break 'feeder_loop;
-                            }
-                        }
+                    if recovery_loop(&mut signer, &recovery_mode_sender, &client)
+                        .await
+                        .is_error()
+                    {
+                        break 'feeder_loop;
                     }
                 }
             }
@@ -221,6 +187,62 @@ async fn app_main() -> AppResult<()> {
     while set.join_next().await.is_some() {}
 
     Ok(())
+}
+
+enum RecoveryStatus {
+    Success,
+    Error,
+}
+
+impl RecoveryStatus {
+    const fn is_error(&self) -> bool {
+        matches!(self, Self::Error)
+    }
+}
+
+async fn recovery_loop(
+    signer: &mut Signer,
+    recovery_mode_sender: &watch::Sender<bool>,
+    client: &Arc<Client>,
+) -> RecoveryStatus {
+    let span: EnteredSpan = info_span!("recover-after-error").entered();
+
+    info!("After-error recovery needed!");
+
+    if signer.needs_update() {
+        let set_in_recovery = |in_recovery: bool| {
+            let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
+
+            if is_error {
+                error!("Recovery mode state watch closed! Exiting broadcasting loop...");
+            }
+
+            is_error
+        };
+
+        let recovered: RecoveryStatus = recover_after_error(signer, client.as_ref()).await;
+
+        if recovered.is_error() {
+            if set_in_recovery(true) {
+                return RecoveryStatus::Error;
+            }
+
+            while recover_after_error(signer, client.as_ref())
+                .await
+                .is_error()
+            {
+                sleep(Duration::from_secs(15)).await;
+            }
+
+            if set_in_recovery(false) {
+                return RecoveryStatus::Error;
+            }
+        }
+    }
+
+    drop(span);
+
+    RecoveryStatus::Success
 }
 
 async fn check_compatibility(config: &Config, client: &Client) -> AppResult<()> {
@@ -254,48 +276,18 @@ async fn check_compatibility(config: &Config, client: &Client) -> AppResult<()> 
 }
 
 #[must_use]
-async fn recover_after_error(
-    signer: &mut Signer,
-    client: &Client,
-    tick_time: Duration,
-    receiver: &mut UnboundedReceiver<(usize, Instant, String)>,
-) -> bool {
-    let mut channel_closed: bool = false;
+async fn recover_after_error(signer: &mut Signer, client: &Client) -> RecoveryStatus {
+    if let Err(error) = signer.update_account(client).await {
+        error!("{error}");
 
-    let _span: EnteredSpan = info_span!("recover-after-error").entered();
-
-    info!("After-error recovery needed!");
-
-    'recovery_loop: while signer.needs_update() {
-        info!("Trying to update local copy of account data...");
-
-        let result: Result<(), chain_comms::interact::error::AccountQuery> = select!(
-            update_result = signer.update_account(client) => update_result,
-            () = async {
-                while receiver.recv().await.is_some() {}
-
-                channel_closed = true;
-
-                std::future::pending().await
-            } => unreachable!(),
-        );
-
-        if let Err(error) = result {
-            error!("Failed to update local copy of account data! Cause: {error}");
-
-            sleep(tick_time).await;
-        } else {
-            break 'recovery_loop;
-        }
+        return RecoveryStatus::Error;
     }
 
     info!("Successfully updated local copy of account data.");
 
-    info!("Continuing workflow.");
+    info!("Continuing normal workflow...");
 
-    drop(_span);
-
-    channel_closed
+    RecoveryStatus::Success
 }
 
 type SpawnWorkersResult = AppResult<(
