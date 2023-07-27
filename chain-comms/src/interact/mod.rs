@@ -11,10 +11,7 @@ use cosmrs::{
             query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
         },
     },
-    rpc::{
-        error::{Error as RpcError, ErrorDetail as RpcErrorDetail},
-        HttpClient as RpcHttpClient,
-    },
+    rpc::HttpClient as RpcHttpClient,
     tx::{Fee, Raw as RawTx},
     Coin,
 };
@@ -143,13 +140,7 @@ pub async fn commit_tx(
     {
         Ok(response) => response,
         Err(error) => {
-            (if let Some(RpcError(RpcErrorDetail::Response(_), _)) =
-                error.downcast_ref::<RpcError>()
-            {
-                Signer::tx_confirmed
-            } else {
-                Signer::set_needs_update
-            })(signer);
+            signer.set_needs_update();
 
             return Err(error.into());
         }

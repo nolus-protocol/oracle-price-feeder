@@ -168,42 +168,48 @@ async fn app_main() -> AppResult<()> {
                         continue 'feeder_loop;
                     }
                 }
-                Err(error) => error!("Failed to feed data into oracle! Cause: {error}"),
-            }
+                Err(error) => {
+                    error!("Failed to feed data into oracle! Cause: {error}");
 
-            if signer.needs_update() {
-                let set_in_recovery = |in_recovery: bool| {
-                    let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
+                    if signer.needs_update() {
+                        let set_in_recovery = |in_recovery: bool| {
+                            let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
 
-                    if is_error {
-                        error!("Recovery mode state watch closed! Exiting broadcasting loop...");
-                    }
+                            if is_error {
+                                error!("Recovery mode state watch closed! Exiting broadcasting loop...");
+                            }
 
-                    is_error
-                };
+                            is_error
+                        };
 
-                let recovered: bool =
-                    recover_after_error(&mut signer, client.as_ref(), tick_time, &mut receiver)
+                        let recovered: bool = recover_after_error(
+                            &mut signer,
+                            client.as_ref(),
+                            tick_time,
+                            &mut receiver,
+                        )
                         .await;
 
-                if !recovered {
-                    if set_in_recovery(true) {
-                        break 'feeder_loop;
-                    }
+                        if !recovered {
+                            if set_in_recovery(true) {
+                                break 'feeder_loop;
+                            }
 
-                    while !recover_after_error(
-                        &mut signer,
-                        client.as_ref(),
-                        tick_time,
-                        &mut receiver,
-                    )
-                    .await
-                    {
-                        sleep(Duration::from_secs(15)).await;
-                    }
+                            while !recover_after_error(
+                                &mut signer,
+                                client.as_ref(),
+                                tick_time,
+                                &mut receiver,
+                            )
+                            .await
+                            {
+                                sleep(Duration::from_secs(15)).await;
+                            }
 
-                    if set_in_recovery(false) {
-                        break 'feeder_loop;
+                            if set_in_recovery(false) {
+                                break 'feeder_loop;
+                            }
+                        }
                     }
                 }
             }

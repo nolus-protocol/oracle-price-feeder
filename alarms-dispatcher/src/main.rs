@@ -143,7 +143,7 @@ async fn dispatch_alarms(
         ),
     ];
 
-    'dispatcher_loop: loop {
+    loop {
         for contract in contracts {
             let mut is_retry: bool = false;
 
@@ -166,9 +166,6 @@ async fn dispatch_alarms(
                             is_retry = true;
                         }
                     }
-                    DispatchResult::RecoveryFailed => {
-                        break 'dispatcher_loop Err(error::DispatchAlarms::RecoveryError)
-                    }
                 }
             }
         }
@@ -180,7 +177,6 @@ async fn dispatch_alarms(
 enum DispatchResult {
     Success,
     DispatchFailed,
-    RecoveryFailed,
 }
 
 async fn handle_alarms_dispatch<'r>(
@@ -216,28 +212,28 @@ async fn handle_alarms_dispatch<'r>(
             DispatchResult::Success
         }
         Err(error) => {
-            let _span: EnteredSpan = info_span!("dispatch-error").entered();
+            let span: EnteredSpan = info_span!("dispatch-error").entered();
 
             error!("{error}");
 
             if signer.needs_update() {
-                info!("After-error recovery needed.");
+                let recovered: bool = recover_after_error(signer, client).await;
 
-                info!(
-                    "Trying to update local copy of account data without interrupting workflow..."
-                );
-
-                if !recover_after_error(_span, signer, client).await {
-                    return DispatchResult::RecoveryFailed;
+                if !recovered {
+                    while !recover_after_error(signer, client).await {
+                        sleep(Duration::from_secs(15)).await;
+                    }
                 }
             }
+
+            drop(span);
 
             DispatchResult::DispatchFailed
         }
     }
 }
 
-async fn recover_after_error(_span: EnteredSpan, signer: &mut Signer, client: &Client) -> bool {
+async fn recover_after_error(signer: &mut Signer, client: &Client) -> bool {
     if let Err(error) = signer.update_account(client).await {
         error!("{error}");
 
@@ -247,8 +243,6 @@ async fn recover_after_error(_span: EnteredSpan, signer: &mut Signer, client: &C
     info!("Successfully updated local copy of account data.");
 
     info!("Continuing normal workflow...");
-
-    drop(_span);
 
     true
 }
