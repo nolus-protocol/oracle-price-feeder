@@ -14,9 +14,9 @@ dependencies = [
 
 [[package]]
 name = "actix-rt"
-version = "2.8.0"
+version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15265b6b8e2347670eb363c47fc8c75208b4a4994b27192f345fcbe707804f3e"
+checksum = "28f32d40287d3f402ae0028a9d54bef51af15c8769492826a69d28f81893151d"
 dependencies = [
  "actix-macros",
  "futures-core",
@@ -51,7 +51,7 @@ dependencies = [
 name = "alarms-dispatcher"
 version = "0.1.0"
 dependencies = [
- "base64 0.21.2",
+ "base64 0.21.3",
  "chain-comms",
  "prost",
  "semver 0.1.0",
@@ -204,9 +204,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.21.2"
+version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
+checksum = "414dcefbc63d77c526a76b3afcf6fbb9b5e2791c19c3aa2297733208750c6e53"
 
 [[package]]
 name = "base64ct"
@@ -305,7 +305,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "chain-comms"
 version = "0.1.0"
 dependencies = [
- "base64 0.21.2",
+ "base64 0.21.3",
  "cosmrs",
  "http",
  "prost",
@@ -353,7 +353,7 @@ checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
 [[package]]
 name = "cosmos-sdk-proto"
 version = "0.19.0"
-source = "git+https://github.com/cosmos/cosmos-rust.git#aef5c708e6dddeec4ad1ba2672c7874a40b9bfc1"
+source = "git+https://github.com/nolus-protocol/cosmos-rust.git#08dc9290a78aef09253b9504a4a3b6fc4cf70791"
 dependencies = [
  "prost",
  "prost-types",
@@ -364,7 +364,7 @@ dependencies = [
 [[package]]
 name = "cosmrs"
 version = "0.14.0"
-source = "git+https://github.com/cosmos/cosmos-rust.git#aef5c708e6dddeec4ad1ba2672c7874a40b9bfc1"
+source = "git+https://github.com/nolus-protocol/cosmos-rust.git#08dc9290a78aef09253b9504a4a3b6fc4cf70791"
 dependencies = [
  "bip32",
  "cosmos-sdk-proto",
@@ -376,7 +376,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle-encoding",
- "tendermint",
+ "tendermint 0.32.2",
  "tendermint-rpc",
  "thiserror",
 ]
@@ -582,9 +582,9 @@ dependencies = [
 
 [[package]]
 name = "encoding_rs"
-version = "0.8.32"
+version = "0.8.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "071a31f4ee85403370b58aca746f01041ede6f0da2730960ad001edc2b71b394"
+checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
 dependencies = [
  "cfg-if",
 ]
@@ -1405,9 +1405,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.12"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cc1b0bf1727a77a54b6654e7b5f1af8604923edc8b81885f8ec92f9e3f0a05"
+checksum = "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
 
 [[package]]
 name = "pin-utils"
@@ -1563,9 +1563,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.9.3"
+version = "1.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81bc1d4caf89fac26a70747fe603c130093b53c773888797a6329091246d651a"
+checksum = "12de2eff854e5fa4b1295edd650e227e9d8fb0c9e90b12e7f36d6a6811791a29"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -1575,9 +1575,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.3.6"
+version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fed1ceff11a1dddaee50c9dc8e4938bd106e9d89ae372f192311e7da498e3b69"
+checksum = "49530408a136e16e5b486e883fbb6ba058e8e4e8ae6621a77b048b314336e629"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -1586,17 +1586,17 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5ea92a5b6195c6ef2a0295ea818b312502c6fc94dde986c5553242e18fd4ce2"
+checksum = "dbb5fb1acd8a1a18b3dd5be62d25485eb770e05afb408a9627d14d451bae12da"
 
 [[package]]
 name = "reqwest"
-version = "0.11.19"
+version = "0.11.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20b9b67e2ca7dd9e9f9285b759de30ff538aab981abaaf7bc9bd90b84a0126c3"
+checksum = "3e9ad3fe7488d7e34558a2033d45a0c90b72d97b4f80705666fea71472e2e6a1"
 dependencies = [
- "base64 0.21.2",
+ "base64 0.21.3",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -1730,7 +1730,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d3987094b1d07b653b7dfdc3f70ce9a1da9c51ac18c1b06b662e4f9a0e9f4b2"
 dependencies = [
- "base64 0.21.2",
+ "base64 0.21.3",
 ]
 
 [[package]]
@@ -1851,9 +1851,9 @@ checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
 
 [[package]]
 name = "serde"
-version = "1.0.185"
+version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
+checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
 dependencies = [
  "serde_derive",
 ]
@@ -1878,9 +1878,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.185"
+version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
+checksum = "4eca7ac642d82aa35b60049a6eccb4be6be75e599bd2e9adb5f875a737654af2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2106,8 +2106,9 @@ checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
 
 [[package]]
 name = "tendermint"
-version = "0.32.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git#5aad967aaf55562efa3be6d1ee0d6cba88a04146"
+version = "0.32.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f0a7d05cf78524782337f8edd55cbc578d159a16ad4affe2135c92f7dbac7f0"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -2129,39 +2130,50 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.32.0",
+ "tendermint-proto 0.32.2",
+ "time",
+ "zeroize",
+]
+
+[[package]]
+name = "tendermint"
+version = "0.33.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git#64c6032448409f6a829bda2caeb04d7e768d0ae3"
+dependencies = [
+ "bytes",
+ "digest 0.10.7",
+ "ed25519",
+ "ed25519-consensus",
+ "flex-error",
+ "futures",
+ "num-traits",
+ "once_cell",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.10.7",
+ "signature",
+ "subtle",
+ "subtle-encoding",
+ "tendermint-proto 0.33.0",
  "time",
  "zeroize",
 ]
 
 [[package]]
 name = "tendermint-config"
-version = "0.32.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git#5aad967aaf55562efa3be6d1ee0d6cba88a04146"
+version = "0.33.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git#64c6032448409f6a829bda2caeb04d7e768d0ae3"
 dependencies = [
  "flex-error",
  "serde",
  "serde_json",
- "tendermint",
+ "tendermint 0.33.0",
  "toml 0.5.11",
  "url",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.32.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git#5aad967aaf55562efa3be6d1ee0d6cba88a04146"
-dependencies = [
- "bytes",
- "flex-error",
- "num-derive",
- "num-traits",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
- "time",
 ]
 
 [[package]]
@@ -2183,9 +2195,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tendermint-proto"
+version = "0.33.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git#64c6032448409f6a829bda2caeb04d7e768d0ae3"
+dependencies = [
+ "bytes",
+ "flex-error",
+ "num-derive",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "subtle-encoding",
+ "time",
+]
+
+[[package]]
 name = "tendermint-rpc"
-version = "0.32.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git#5aad967aaf55562efa3be6d1ee0d6cba88a04146"
+version = "0.33.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git#64c6032448409f6a829bda2caeb04d7e768d0ae3"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2204,9 +2233,9 @@ dependencies = [
  "serde_json",
  "subtle",
  "subtle-encoding",
- "tendermint",
+ "tendermint 0.33.0",
  "tendermint-config",
- "tendermint-proto 0.32.0",
+ "tendermint-proto 0.33.0",
  "thiserror",
  "time",
  "tokio",
@@ -2248,9 +2277,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.27"
+version = "0.3.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bb39ee79a6d8de55f48f2293a830e040392f1c5f16e336bdd1788cd0aadce07"
+checksum = "17f6bb557fd245c28e6411aa56b6403c689ad95061f50e4be16c274e70a17e48"
 dependencies = [
  "deranged",
  "itoa",
@@ -2267,9 +2296,9 @@ checksum = "7300fbefb4dadc1af235a9cef3737cea692a9d97e1b9cbcd4ebdae6f8868e6fb"
 
 [[package]]
 name = "time-macros"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "733d258752e9303d392b94b75230d07b0b9c489350c69b851fc6c065fde3e8f9"
+checksum = "1a942f44339478ef67935ab2bbaec2fb0322496cf3cbe84b261e06ac3814c572"
 dependencies = [
  "time-core",
 ]
@@ -2427,7 +2456,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "axum",
- "base64 0.21.2",
+ "base64 0.21.3",
  "bytes",
  "flate2",
  "futures-core",
@@ -2858,9 +2887,9 @@ checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
 
 [[package]]
 name = "winnow"
-version = "0.5.14"
+version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d09770118a7eb1ccaf4a594a221334119a44a814fcb0d31c5b85e83e97227a97"
+checksum = "7c2e3184b9c4e92ad5167ca73039d0c42476302ab603e2fec4487511f38ccefc"
 dependencies = [
  "memchr",
 ]
@@ -2883,7 +2912,7 @@ checksum = "c6f71803d3a1c80377a06221e0530be02035d5b3e854af56c6ece7ac20ac441d"
 dependencies = [
  "assert-json-diff",
  "async-trait",
- "base64 0.21.2",
+ "base64 0.21.3",
  "deadpool",
  "futures",
  "futures-timer",
