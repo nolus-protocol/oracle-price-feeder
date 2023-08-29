@@ -3,13 +3,17 @@ use std::{collections::BTreeMap, io, str::FromStr, sync::Arc, time::Duration};
 use tokio::{
     select,
     sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver},
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         watch,
     },
     task::JoinSet,
     time::{interval, sleep, timeout, Instant},
 };
 use tracing::{error, info, info_span, span::EnteredSpan};
+use tracing_appender::{
+    non_blocking::{NonBlocking, WorkerGuard},
+    rolling::RollingFileAppender,
+};
 
 use chain_comms::{
     build_tx::ContractTx,
@@ -45,9 +49,9 @@ pub const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    let log_writer = tracing_appender::rolling::hourly("./feeder-logs", "log");
+    let log_writer: RollingFileAppender = tracing_appender::rolling::hourly("./feeder-logs", "log");
 
-    let (log_writer, _guard) =
+    let (log_writer, _guard): (NonBlocking, WorkerGuard) =
         tracing_appender::non_blocking(log::CombinedWriter::new(io::stdout(), log_writer));
 
     setup_logging(log_writer)?;
@@ -76,18 +80,21 @@ async fn app_main() -> AppResult<()> {
 
     check_compatibility(&config, &client).await?;
 
-    let client = Arc::new(client);
+    let client: Arc<Client> = Arc::new(client);
 
     info!("Starting workers...");
 
-    let tick_time = Duration::from_secs(config.tick_time());
+    let tick_time: Duration = Duration::from_secs(config.tick_time());
 
     let (recovery_mode_sender, recovery_mode_receiver): (
         watch::Sender<bool>,
         watch::Receiver<bool>,
     ) = watch::channel(false);
 
-    let (mut set, mut receiver) = spawn_workers(
+    let (mut set, mut receiver): (
+        JoinSet<Result<(), error::Worker>>,
+        UnboundedReceiver<(usize, Instant, String)>,
+    ) = spawn_workers(
         &client,
         config.providers(),
         config.oracle_addr(),
@@ -306,14 +313,17 @@ fn spawn_workers(
     tick_time: Duration,
     recovery_mode: watch::Receiver<bool>,
 ) -> SpawnWorkersResult {
-    let mut set = JoinSet::new();
+    let mut set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
 
-    let (sender, receiver) = unbounded_channel();
+    let (sender, receiver): (
+        UnboundedSender<(usize, Instant, String)>,
+        UnboundedReceiver<(usize, Instant, String)>,
+    ) = unbounded_channel();
 
     providers
         .iter()
-        .map(|provider_cfg| {
-            let p_type = Type::from_str(&provider_cfg.main_type)?;
+        .map(|provider_cfg: &ProviderConfig| {
+            let p_type: Type = Type::from_str(&provider_cfg.main_type)?;
 
             Factory::new_provider(&p_type, provider_cfg)
                 .map_err(error::Application::InstantiateProvider)
@@ -322,9 +332,9 @@ fn spawn_workers(
         .into_iter()
         .enumerate()
         .for_each(|(monotonic_id, provider)| {
-            let client = client.clone();
+            let client: Arc<Client> = client.clone();
 
-            let sender = sender.clone();
+            let sender: UnboundedSender<(usize, Instant, String)> = sender.clone();
 
             let provider_name = format!("Provider #{}/\"{}\"", monotonic_id, provider.name());
 
@@ -332,7 +342,9 @@ fn spawn_workers(
                 provider,
                 client,
                 oracle_addr.into(),
-                move |instant, data| sender.send((monotonic_id, instant, data)).map_err(|_| ()),
+                move |instant: Instant, data: String| {
+                    sender.send((monotonic_id, instant, data)).map_err(|_| ())
+                },
                 provider_name,
                 tick_time,
                 recovery_mode.clone(),
@@ -354,11 +366,11 @@ async fn provider_main_loop<SenderFn>(
 where
     SenderFn: Fn(Instant, String) -> Result<(), ()>,
 {
-    let provider = { provider };
+    let provider: Box<dyn Provider + Send> = { provider };
 
-    let mut interval = interval(tick_time);
+    let mut interval: tokio::time::Interval = interval(tick_time);
 
-    let mut seq_error_counter = 0_u8;
+    let mut seq_error_counter: u8 = 0;
 
     'worker_loop: loop {
         if select! {
@@ -382,7 +394,7 @@ where
             Ok(prices) => {
                 seq_error_counter = 0;
 
-                let price_feed_json =
+                let price_feed_json: String =
                     serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?;
 
                 if sender(Instant::now(), price_feed_json).is_err() {

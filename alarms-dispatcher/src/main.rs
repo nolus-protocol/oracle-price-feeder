@@ -8,7 +8,7 @@ use chain_comms::{
     client::Client,
     config::Node,
     decode,
-    interact::{commit_tx_with_gas_estimation, query_wasm},
+    interact::{commit_tx_with_gas_estimation, query_wasm, CommitResponse},
     log::{self, log_commit_response, setup_logging},
     rpc_setup::{prepare_rpc, RpcSetup},
     signer::Signer,
@@ -305,7 +305,7 @@ async fn commit_dispatch_tx(
         Vec::new(),
     );
 
-    let tx_commit_response = commit_tx_with_gas_estimation(
+    let tx_commit_response: CommitResponse = commit_tx_with_gas_estimation(
         signer,
         client,
         config,
