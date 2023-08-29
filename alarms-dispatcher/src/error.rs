@@ -56,4 +56,6 @@ pub enum CommitDispatchTx {
     DeserializeTxData(#[from] chain_comms::decode::error::Error),
     #[error(r#"Failed to deserialize dispatch response! Cause: {0}; Data: "{1}""#)]
     DeserializeDispatchResponse(serde_json_wasm::de::Error, String),
+    #[error(r#"Transaction failed! Cause: {0}"#)]
+    TxFailed(String),
 }

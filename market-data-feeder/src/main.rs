@@ -14,7 +14,9 @@ use tracing::{error, info, info_span, span::EnteredSpan};
 use chain_comms::{
     build_tx::ContractTx,
     client::Client,
-    interact::{commit_tx_with_gas_estimation, query_wasm, CommitResponse},
+    interact::{
+        commit_tx_with_gas_estimation, error::GasEstimatingTxCommit, query_wasm, CommitResponse,
+    },
     log::{self, log_commit_response, setup_logging},
     rpc_setup::{prepare_rpc, RpcSetup},
     signer::Signer,
@@ -140,10 +142,7 @@ async fn app_main() -> AppResult<()> {
 
             tx.clone()
         } {
-            let result: Result<
-                CommitResponse,
-                chain_comms::interact::error::GasEstimatingTxCommit,
-            > = commit_tx_with_gas_estimation(
+            let successful: bool = commit_tx_with_gas_estimation(
                 &mut signer,
                 &client,
                 config.as_ref(),
@@ -151,10 +150,14 @@ async fn app_main() -> AppResult<()> {
                 tx,
                 fallback_gas_limit,
             )
-            .await;
+            .await
+            .map_or_else(
+                |error: GasEstimatingTxCommit| {
+                    error!("Failed to feed data into oracle! Cause: {error}");
 
-            match result {
-                Ok(response) => {
+                    false
+                },
+                |response: CommitResponse| {
                     log_commit_response(&response);
 
                     if response.check_tx.code.is_ok() && response.tx_result.code.is_ok() {
@@ -165,19 +168,20 @@ async fn app_main() -> AppResult<()> {
 
                         *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
 
-                        continue 'feeder_loop;
+                        true
+                    } else {
+                        false
                     }
-                }
-                Err(error) => {
-                    error!("Failed to feed data into oracle! Cause: {error}");
+                },
+            );
 
-                    if recovery_loop(&mut signer, &recovery_mode_sender, &client)
-                        .await
-                        .is_error()
-                    {
-                        break 'feeder_loop;
-                    }
-                }
+            if successful {
+                continue 'feeder_loop;
+            } else if recovery_loop(&mut signer, &recovery_mode_sender, &client)
+                .await
+                .is_error()
+            {
+                break 'feeder_loop;
             }
         }
     }
