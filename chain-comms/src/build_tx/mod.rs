@@ -1,9 +1,6 @@
 use cosmrs::{
     proto::{cosmos::base::v1beta1::Coin, cosmwasm::wasm::v1::MsgExecuteContract},
-    tendermint::{
-        abci::response::{CheckTx, DeliverTx},
-        abci::Code,
-    },
+    tendermint::abci::{response::CheckTx, types::ExecTxResult, Code},
     tx::{Body, Fee, MessageExt, Raw as RawTx},
     Any,
 };
@@ -107,7 +104,7 @@ impl TxResponse for CheckTx {
     }
 }
 
-impl TxResponse for DeliverTx {
+impl TxResponse for ExecTxResult {
     fn code(&self) -> Code {
         self.code
     }

@@ -353,7 +353,7 @@ checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
 [[package]]
 name = "cosmos-sdk-proto"
 version = "0.19.0"
-source = "git+https://github.com/nolus-protocol/cosmos-rust.git#08dc9290a78aef09253b9504a4a3b6fc4cf70791"
+source = "git+https://github.com/nolus-protocol/cosmos-rust.git#98326d3abc139baeb4dcc86e378b0bf1720000d7"
 dependencies = [
  "prost",
  "prost-types",
@@ -364,7 +364,7 @@ dependencies = [
 [[package]]
 name = "cosmrs"
 version = "0.14.0"
-source = "git+https://github.com/nolus-protocol/cosmos-rust.git#08dc9290a78aef09253b9504a4a3b6fc4cf70791"
+source = "git+https://github.com/nolus-protocol/cosmos-rust.git#98326d3abc139baeb4dcc86e378b0bf1720000d7"
 dependencies = [
  "bip32",
  "cosmos-sdk-proto",
@@ -376,7 +376,7 @@ dependencies = [
  "serde",
  "serde_json",
  "subtle-encoding",
- "tendermint 0.32.2",
+ "tendermint",
  "tendermint-rpc",
  "thiserror",
 ]
@@ -1029,7 +1029,7 @@ dependencies = [
  "futures-util",
  "http",
  "hyper",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "tokio",
  "tokio-rustls 0.24.1",
 ]
@@ -1202,9 +1202,9 @@ checksum = "ed1202b2a6f884ae56f04cff409ab315c5ce26b5e58d7412e484f01fd52f52ef"
 
 [[package]]
 name = "memchr"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+checksum = "76fc44e2588d5b436dbc3c6cf62aef290f90dab6235744a93dfe1cc18f451e2c"
 
 [[package]]
 name = "mime"
@@ -1613,7 +1613,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-pemfile",
  "serde",
  "serde_json",
@@ -1690,9 +1690,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.6"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
+checksum = "cd8d6c9f025a446bc4d18ad9632e69aec8f287aa84499ee335599fabd20c3fd8"
 dependencies = [
  "log",
  "ring",
@@ -2106,9 +2106,8 @@ checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
 
 [[package]]
 name = "tendermint"
-version = "0.32.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f0a7d05cf78524782337f8edd55cbc578d159a16ad4affe2135c92f7dbac7f0"
+version = "0.33.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git#64c6032448409f6a829bda2caeb04d7e768d0ae3"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -2130,34 +2129,6 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.32.2",
- "time",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.33.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git#64c6032448409f6a829bda2caeb04d7e768d0ae3"
-dependencies = [
- "bytes",
- "digest 0.10.7",
- "ed25519",
- "ed25519-consensus",
- "flex-error",
- "futures",
- "num-traits",
- "once_cell",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "sha2 0.10.7",
- "signature",
- "subtle",
- "subtle-encoding",
  "tendermint-proto 0.33.0",
  "time",
  "zeroize",
@@ -2171,7 +2142,7 @@ dependencies = [
  "flex-error",
  "serde",
  "serde_json",
- "tendermint 0.33.0",
+ "tendermint",
  "toml 0.5.11",
  "url",
 ]
@@ -2233,7 +2204,7 @@ dependencies = [
  "serde_json",
  "subtle",
  "subtle-encoding",
- "tendermint 0.33.0",
+ "tendermint",
  "tendermint-config",
  "tendermint-proto 0.33.0",
  "thiserror",
@@ -2375,7 +2346,7 @@ version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "tokio",
 ]
 
@@ -2622,9 +2593,9 @@ checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "url"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50bff7831e19200a85b17131d085c25d7811bc4e186efdaf54bbd132994a88cb"
+checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
 dependencies = [
  "form_urlencoded",
  "idna",

@@ -157,8 +157,8 @@ async fn app_main() -> AppResult<()> {
                 Ok(response) => {
                     log_commit_response(&response);
 
-                    if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
-                        let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
+                    if response.check_tx.code.is_ok() && response.tx_result.code.is_ok() {
+                        let used_gas: u64 = response.tx_result.gas_used.unsigned_abs();
 
                         let fallback_gas_limit: &mut u64 =
                             fallback_gas_limit.get_or_insert(used_gas);

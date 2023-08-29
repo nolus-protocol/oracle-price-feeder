@@ -317,7 +317,7 @@ async fn commit_dispatch_tx(
     )
     .await?;
 
-    let raw_response: Vec<u8> = decode::exec_tx_data(&tx_commit_response.deliver_tx)?;
+    let raw_response: Vec<u8> = decode::exec_tx_data(&tx_commit_response.tx_result)?;
 
     let response: Result<DispatchResponse, serde_json_wasm::de::Error> =
         serde_json_wasm::from_slice::<DispatchResponse>(&raw_response);
@@ -331,7 +331,7 @@ async fn commit_dispatch_tx(
         });
 
     info_span!("Tx").in_scope(|| {
-        if tx_commit_response.check_tx.code.is_ok() && tx_commit_response.deliver_tx.code.is_ok() {
+        if tx_commit_response.check_tx.code.is_ok() && tx_commit_response.tx_result.code.is_ok() {
             if let Ok(response) = response.as_ref() {
                 info!(
                     "Dispatched {} alarms in total.",
@@ -347,7 +347,7 @@ async fn commit_dispatch_tx(
 
     Ok(CommitResult {
         dispatch_response: response?,
-        gas_used: GasUsed(tx_commit_response.deliver_tx.gas_used.unsigned_abs()),
+        gas_used: GasUsed(tx_commit_response.tx_result.gas_used.unsigned_abs()),
     })
 }
 
