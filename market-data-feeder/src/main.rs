@@ -47,6 +47,9 @@ pub const MAX_SEQ_ERRORS: u8 = 5;
 
 pub const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 
+type UnboundedChannel<T> = (UnboundedSender<T>, UnboundedReceiver<T>);
+type WatchChannel<T> = (watch::Sender<T>, watch::Receiver<T>);
+
 #[tokio::main]
 async fn main() -> AppResult<()> {
     let log_writer: RollingFileAppender = tracing_appender::rolling::hourly("./feeder-logs", "log");
@@ -86,15 +89,9 @@ async fn app_main() -> AppResult<()> {
 
     let tick_time: Duration = Duration::from_secs(config.tick_time());
 
-    let (recovery_mode_sender, recovery_mode_receiver): (
-        watch::Sender<bool>,
-        watch::Receiver<bool>,
-    ) = watch::channel(false);
+    let (recovery_mode_sender, recovery_mode_receiver): WatchChannel<bool> = watch::channel(false);
 
-    let (mut set, mut receiver): (
-        JoinSet<Result<(), error::Worker>>,
-        UnboundedReceiver<(usize, Instant, String)>,
-    ) = spawn_workers(
+    let (mut set, mut receiver): SpawnWorkersReturn = spawn_workers(
         &client,
         config.providers(),
         config.oracle_addr(),
@@ -301,10 +298,12 @@ async fn recover_after_error(signer: &mut Signer, client: &Client) -> RecoverySt
     RecoveryStatus::Success
 }
 
-type SpawnWorkersResult = AppResult<(
+type SpawnWorkersReturn = (
     JoinSet<Result<(), error::Worker>>,
     UnboundedReceiver<(usize, Instant, String)>,
-)>;
+);
+
+type SpawnWorkersResult = AppResult<SpawnWorkersReturn>;
 
 fn spawn_workers(
     client: &Arc<Client>,
@@ -315,10 +314,7 @@ fn spawn_workers(
 ) -> SpawnWorkersResult {
     let mut set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
 
-    let (sender, receiver): (
-        UnboundedSender<(usize, Instant, String)>,
-        UnboundedReceiver<(usize, Instant, String)>,
-    ) = unbounded_channel();
+    let (sender, receiver): UnboundedChannel<(usize, Instant, String)> = unbounded_channel();
 
     providers
         .iter()
