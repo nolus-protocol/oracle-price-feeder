@@ -5,7 +5,7 @@ gas_limit = 550_000
 
 [node]
 address_prefix = "nolus"
-chain_id = "vitosha-1"
+chain_id = "vitosha-2"
 gas_adjustment_numerator = 107
 gas_adjustment_denominator = 100
 fee_denom = "unls"
