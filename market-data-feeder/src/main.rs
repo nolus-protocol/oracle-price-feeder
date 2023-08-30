@@ -181,9 +181,10 @@ async fn app_main() -> AppResult<()> {
 
             if successful {
                 continue 'feeder_loop;
-            } else if recovery_loop(&mut signer, &recovery_mode_sender, &client)
-                .await
-                .is_error()
+            } else if signer.needs_update()
+                && recovery_loop(&mut signer, &recovery_mode_sender, &client)
+                    .await
+                    .is_error()
             {
                 break 'feeder_loop;
             }
@@ -217,34 +218,32 @@ async fn recovery_loop(
 
     info!("After-error recovery needed!");
 
-    if signer.needs_update() {
-        let set_in_recovery = |in_recovery: bool| {
-            let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
+    let set_in_recovery = |in_recovery: bool| {
+        let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
 
-            if is_error {
-                error!("Recovery mode state watch closed! Exiting broadcasting loop...");
-            }
+        if is_error {
+            error!("Recovery mode state watch closed! Exiting broadcasting loop...");
+        }
 
-            is_error
-        };
+        is_error
+    };
 
-        let recovered: RecoveryStatus = recover_after_error(signer, client.as_ref()).await;
+    let recovered: RecoveryStatus = recover_after_error(signer, client.as_ref()).await;
 
-        if recovered.is_error() {
-            if set_in_recovery(true) {
-                return RecoveryStatus::Error;
-            }
+    if recovered.is_error() {
+        if set_in_recovery(true) {
+            return RecoveryStatus::Error;
+        }
 
-            while recover_after_error(signer, client.as_ref())
-                .await
-                .is_error()
-            {
-                sleep(Duration::from_secs(15)).await;
-            }
+        while recover_after_error(signer, client.as_ref())
+            .await
+            .is_error()
+        {
+            sleep(Duration::from_secs(15)).await;
+        }
 
-            if set_in_recovery(false) {
-                return RecoveryStatus::Error;
-            }
+        if set_in_recovery(false) {
+            return RecoveryStatus::Error;
         }
     }
 

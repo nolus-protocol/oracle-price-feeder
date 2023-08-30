@@ -134,21 +134,25 @@ pub async fn commit_tx(
     let signed_tx: RawTx =
         unsigned_tx.commit(signer, calculate_fee(node_config, gas_limit)?, None, None)?;
 
-    let tx_commit_response: CommitResponse = match client
+    match client
         .with_json_rpc(|rpc: RpcHttpClient| async move { signed_tx.broadcast_commit(&rpc).await })
         .await
     {
-        Ok(response) => response,
+        Ok(response) => {
+            (if response.check_tx.code.is_ok() && response.tx_result.code.is_ok() {
+                Signer::tx_confirmed
+            } else {
+                Signer::set_needs_update
+            })(signer);
+
+            Ok(response)
+        }
         Err(error) => {
             signer.set_needs_update();
 
-            return Err(error.into());
+            Err(error.into())
         }
-    };
-
-    signer.tx_confirmed();
-
-    Ok(tx_commit_response)
+    }
 }
 
 pub async fn commit_tx_with_gas_estimation(
