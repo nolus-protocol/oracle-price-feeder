@@ -149,8 +149,8 @@ impl Provider for Client {
                 let AssetPrice {
                     spot_price:
                         Ratio {
-                            numerator: base,
-                            denominator: quote,
+                            numerator: quote,
+                            denominator: base,
                         },
                 } = resp
                     .json()
