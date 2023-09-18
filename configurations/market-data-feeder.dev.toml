@@ -5,7 +5,7 @@ gas_limit = 550_000
 
 [node]
 address_prefix = "nolus"
-chain_id = "vitosha-2"
+chain_id = "vitosha-3"
 gas_adjustment_numerator = 107
 gas_adjustment_denominator = 100
 fee_denom = "unls"
@@ -16,7 +16,7 @@ gas_price_denominator = 390
 main_type = "crypto"
 name = "osmosis"
 currencies = [
-    ["NLS", "ibc/7861EA8BE6CF462F83DBF8514BA97D175E7BB946C8EAF507A59FC806A56445DB"],
+    ["NLS", "ibc/60CCD515066BDEC287A05074FC7157504D3D7FAC816DD59BBC8F4F84EAB226E6"],
     ["OSMO", "uosmo"],
     ["AKT", "ibc/7153C8C55DB988805FAC69E449B680A8BAAC15944B87CF210ADCD1A3A9542857"],
     ["ATOM", "ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477"],
