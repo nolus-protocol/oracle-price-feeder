@@ -17,9 +17,8 @@ semver = { path = "./semver" }
 chain-comms = { path = "./chain-comms" }
 
 [patch.crates-io]
-cosmrs = { git = "https://github.com/nolus-protocol/cosmos-rust.git" }
-tendermint = { git = "https://github.com/nolus-protocol/tendermint-rs.git" }
-tendermint-rpc = { git = "https://github.com/nolus-protocol/tendermint-rs.git" }
+tendermint = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
+tendermint-rpc = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
 
 [profile.release]
 overflow-checks = true
