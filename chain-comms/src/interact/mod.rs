@@ -139,7 +139,7 @@ pub async fn commit_tx(
         .await
     {
         Ok(response) => {
-            (if response.check_tx.code.is_ok() && response.tx_result.code.is_ok() {
+            (if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
                 Signer::tx_confirmed
             } else {
                 Signer::set_needs_update

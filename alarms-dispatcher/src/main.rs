@@ -317,7 +317,7 @@ async fn commit_dispatch_tx(
     )
     .await?;
 
-    let raw_response: Vec<u8> = decode::exec_tx_data(&tx_commit_response.tx_result)?;
+    let raw_response: Vec<u8> = decode::exec_tx_data(&tx_commit_response.deliver_tx)?;
 
     let response: Result<DispatchResponse, serde_json_wasm::de::Error> =
         serde_json_wasm::from_slice::<DispatchResponse>(&raw_response);
@@ -331,7 +331,7 @@ async fn commit_dispatch_tx(
         });
 
     let successful: bool =
-        tx_commit_response.check_tx.code.is_ok() && tx_commit_response.tx_result.code.is_ok();
+        tx_commit_response.check_tx.code.is_ok() && tx_commit_response.deliver_tx.code.is_ok();
 
     info_span!("Tx").in_scope(|| {
         if successful {
@@ -351,14 +351,14 @@ async fn commit_dispatch_tx(
     if successful {
         response.map(|dispatch_response: DispatchResponse| CommitResult {
             dispatch_response,
-            gas_used: GasUsed(tx_commit_response.tx_result.gas_used.unsigned_abs()),
+            gas_used: GasUsed(tx_commit_response.deliver_tx.gas_used.unsigned_abs()),
         })
     } else {
         Err(error::CommitDispatchTx::TxFailed(
             if tx_commit_response.check_tx.code.is_err() {
                 tx_commit_response.check_tx.log
             } else {
-                tx_commit_response.tx_result.log
+                tx_commit_response.deliver_tx.log
             },
         ))
     }

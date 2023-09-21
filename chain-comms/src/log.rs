@@ -79,7 +79,7 @@ pub fn log_commit_response(response: &CommitResponse) {
 
     for (tx_name, tx_result) in [
         ("Check", &response.check_tx as &dyn TxResponse),
-        ("Tx", &response.tx_result as &dyn TxResponse),
+        ("Tx", &response.deliver_tx as &dyn TxResponse),
     ] {
         {
             let (code, log) = (tx_result.code(), tx_result.log());
