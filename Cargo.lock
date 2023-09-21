@@ -40,9 +40,9 @@ checksum = "f26201604c87b1e01bd3d98f8d5d9a8fcbb815e8cedb41ffccbeb4bf593a35fe"
 
 [[package]]
 name = "aho-corasick"
-version = "1.0.5"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c378d78423fdad8089616f827526ee33c19f2fddbd5de1629152c9593ba4783"
+checksum = "ea5d730647d4fadd988536d06fecce94b7b4f2a7efdae548f1cf4b63205518ab"
 dependencies = [
  "memchr",
 ]
@@ -358,7 +358,7 @@ checksum = "73c9d2043a9e617b0d602fbc0a0ecd621568edbf3a9774890a6d562389bd8e1c"
 dependencies = [
  "prost",
  "prost-types",
- "tendermint-proto 0.32.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tendermint-proto",
  "tonic",
 ]
 
@@ -886,9 +886,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-abi"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
+checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
 
 [[package]]
 name = "hex"
@@ -2016,9 +2016,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.11.0"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
+checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
 
 [[package]]
 name = "socket2"
@@ -2107,8 +2107,8 @@ checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
 
 [[package]]
 name = "tendermint"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#3dd46a60d7379f1fc60a6f8836b8c198c3a7332d"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#aef6c6750b70b8ae3282365e2004043a0a0d0931"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -2130,15 +2130,15 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.32.2 (git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header)",
+ "tendermint-proto",
  "time",
  "zeroize",
 ]
 
 [[package]]
 name = "tendermint-config"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#3dd46a60d7379f1fc60a6f8836b8c198c3a7332d"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#aef6c6750b70b8ae3282365e2004043a0a0d0931"
 dependencies = [
  "flex-error",
  "serde",
@@ -2150,26 +2150,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-version = "0.32.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0cec054567d16d85e8c3f6a3139963d1a66d9d3051ed545d31562550e9bcc3d"
-dependencies = [
- "bytes",
- "flex-error",
- "num-derive",
- "num-traits",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
- "time",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#3dd46a60d7379f1fc60a6f8836b8c198c3a7332d"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#aef6c6750b70b8ae3282365e2004043a0a0d0931"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2185,8 +2167,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint-rpc"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#3dd46a60d7379f1fc60a6f8836b8c198c3a7332d"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#aef6c6750b70b8ae3282365e2004043a0a0d0931"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2207,7 +2189,7 @@ dependencies = [
  "subtle-encoding",
  "tendermint",
  "tendermint-config",
- "tendermint-proto 0.32.2 (git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header)",
+ "tendermint-proto",
  "thiserror",
  "time",
  "tokio",
@@ -2364,9 +2346,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.8"
+version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "806fe8c2c87eccc8b3267cbae29ed3ab2d0bd37fca70ab622e46aaa9375ddb7d"
+checksum = "1d68074620f57a0b21594d9735eb2e98ab38b17f80d3fcb189fca266771ca60d"
 dependencies = [
  "bytes",
  "futures-core",
@@ -2778,9 +2760,9 @@ checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
 
 [[package]]
 name = "winapi-util"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70ec6ce85bb158151cae5e5c87f95a8e97d2c0c4b001223f33a334e3ce5de178"
+checksum = "f29e6f9198ba0d26b4c9f07dbe6f9ed633e1f3d5b8b414090084349e46a52596"
 dependencies = [
  "winapi",
 ]

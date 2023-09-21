@@ -18,6 +18,7 @@ chain-comms = { path = "./chain-comms" }
 
 [patch.crates-io]
 tendermint = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
+tendermint-proto = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
 tendermint-rpc = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
 
 [profile.release]
