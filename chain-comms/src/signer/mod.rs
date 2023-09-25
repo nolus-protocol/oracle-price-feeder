@@ -1,13 +1,15 @@
 use cosmrs::{
     crypto::secp256k1::SigningKey,
-    proto::cosmos::{
-        auth::v1beta1::BaseAccount,
-        tx::v1beta1::{SignDoc, TxRaw},
+    proto::{
+        cosmos::{
+            auth::v1beta1::BaseAccount,
+            tx::v1beta1::{SignDoc, TxRaw},
+        },
+        prost::Message,
     },
     tendermint::chain::Id as ChainId,
     tx::{Body, Fee, Raw, SignerInfo},
 };
-use prost::Message;
 
 use crate::{client::Client, interact::query_account_data};
 
@@ -36,6 +38,7 @@ impl Signer {
         }
     }
 
+    #[must_use]
     pub fn signer_address(&self) -> &str {
         &self.address
     }
@@ -89,6 +92,7 @@ impl Signer {
     }
 
     #[inline]
+    #[must_use]
     pub const fn needs_update(&self) -> bool {
         self.needs_update
     }

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub type VersionSegment = u16;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Serialize, Deserialize)]
+#[must_use]
 pub struct SemVer {
     major: VersionSegment,
     minor: VersionSegment,
@@ -20,6 +21,7 @@ impl SemVer {
         }
     }
 
+    #[must_use]
     pub const fn check_compatibility(&self, expected: Self) -> bool {
         self.major == expected.major
             && ((self.minor == expected.minor && self.patch >= expected.patch)

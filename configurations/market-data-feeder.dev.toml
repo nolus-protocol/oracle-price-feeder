@@ -1,4 +1,3 @@
-continuous = false
 tick_time = 60
 oracle_addr = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
 gas_limit = 550_000
@@ -12,8 +11,7 @@ fee_denom = "unls"
 gas_price_numerator = 1
 gas_price_denominator = 390
 
-[[providers]]
-main_type = "crypto"
+[providers.osmosis-lcd]
 name = "osmosis"
 currencies = [
     ["NLS", "ibc/60CCD515066BDEC287A05074FC7157504D3D7FAC816DD59BBC8F4F84EAB226E6"],
@@ -30,3 +28,5 @@ currencies = [
     ["WETH", "ibc/8AE11672A7DF38BF7B484AB642C5C85BA4A94810D57AE8945151818CD6179427"],
     ["WBTC", "ibc/BDA12A41BCF2DFB005A0794876E0E71D9538E0A7EB9607F600435EDDE5393EC4"],
 ]
+
+[comparison_providers]

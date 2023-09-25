@@ -10,6 +10,8 @@ use self::error::{Error, Result};
 
 pub mod error;
 
+pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
+
 pub async fn signing_key(derivation_path: &str, password: &str) -> Result<SigningKey> {
     let secret: String = match var("SIGNING_KEY_MNEMONIC") {
         Ok(secret) => secret,

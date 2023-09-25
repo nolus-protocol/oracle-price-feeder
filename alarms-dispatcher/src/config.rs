@@ -12,14 +12,17 @@ pub struct Contract {
 }
 
 impl Contract {
+    #[must_use]
     pub fn address(&self) -> &str {
         &self.address
     }
 
+    #[must_use]
     pub fn max_alarms_group(&self) -> u32 {
         self.max_alarms_group
     }
 
+    #[must_use]
     pub fn gas_limit_per_alarm(&self) -> u64 {
         self.gas_limit_per_alarm
     }
@@ -35,6 +38,7 @@ pub struct Config {
 }
 
 impl Config {
+    #[must_use]
     pub const fn poll_period_seconds(&self) -> u64 {
         self.poll_period_seconds
     }

@@ -35,42 +35,52 @@ pub struct Node {
 }
 
 impl Node {
+    #[must_use]
     pub fn http2_concurrency_limit(&self) -> Option<NonZeroUsize> {
         self.file.http2_concurrency_limit
     }
 
+    #[must_use]
     pub fn json_rpc_url(&self) -> &str {
         &self.environment.json_rpc_url
     }
 
+    #[must_use]
     pub fn grpc_url(&self) -> &str {
         &self.environment.grpc_url
     }
 
+    #[must_use]
     pub fn address_prefix(&self) -> &str {
         &self.file.address_prefix
     }
 
+    #[must_use]
     pub fn chain_id(&self) -> &ChainId {
         &self.file.chain_id
     }
 
+    #[must_use]
     pub fn fee_denom(&self) -> &str {
         &self.file.fee_denom
     }
 
+    #[must_use]
     pub fn gas_adjustment_numerator(&self) -> NonZeroU64 {
         self.file.gas_adjustment_numerator
     }
 
+    #[must_use]
     pub fn gas_adjustment_denominator(&self) -> NonZeroU64 {
         self.file.gas_adjustment_denominator
     }
 
+    #[must_use]
     pub fn gas_price_numerator(&self) -> NonZeroU64 {
         self.file.gas_price_numerator
     }
 
+    #[must_use]
     pub fn gas_price_denominator(&self) -> NonZeroU64 {
         self.file.gas_price_denominator
     }
@@ -91,7 +101,7 @@ where
         .map_err(DeserializeError::custom)
 }
 
-pub async fn read_config<C, P>(path: P) -> ModuleResult<C>
+pub async fn read<C, P>(path: P) -> ModuleResult<C>
 where
     C: DeserializeOwned + AsRef<Node>,
     P: AsRef<Path>,
@@ -157,8 +167,7 @@ where
         Ok(value) => T::from_str(&value).map(Some).map_err(D::Error::custom),
         Err(VarError::NotPresent) => Ok(None),
         Err(VarError::NotUnicode(_)) => Err(D::Error::custom(format!(
-            r#"Value for environment variable "{}" contains invalid unicode data."#,
-            var_name
+            r#"Value for environment variable "{var_name}" contains invalid unicode data."#,
         ))),
     }
 }

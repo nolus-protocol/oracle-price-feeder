@@ -2,17 +2,18 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::provider::Price;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryMsg {
-    ContractVersion {},
-    SupportedCurrencyPairs {},
+pub(crate) enum QueryMsg {}
+
+impl QueryMsg {
+    pub const CONTRACT_VERSION: &'static [u8] = br#"{"contract_version":{}}"#;
+
+    pub const SUPPORTED_CURRENCY_PAIRS: &'static [u8] = br#"{"supported_currency_pairs":{}}"#;
 }
 
-pub type PoolId = u64;
+pub(crate) type PoolId = u64;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct SwapLeg {
+pub(crate) struct SwapLeg {
     pub from: String,
     pub to: SwapTarget,
 }
@@ -28,7 +29,7 @@ impl<'de> Deserialize<'de> for SwapLeg {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct SwapTarget {
+pub(crate) struct SwapTarget {
     pub pool_id: PoolId,
     pub target: String,
 }
@@ -43,10 +44,10 @@ impl<'de> Deserialize<'de> for SwapTarget {
     }
 }
 
-pub type SupportedCurrencyPairsResponse = Vec<SwapLeg>;
+pub(crate) type SupportedCurrencyPairsResponse = Vec<SwapLeg>;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ExecuteMsg {
+pub(crate) enum ExecuteMsg {
     FeedPrices { prices: Box<[Price]> },
 }

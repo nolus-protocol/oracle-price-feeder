@@ -8,7 +8,7 @@ pub mod error;
 
 #[cold]
 #[inline]
-pub fn account_id(config: &Node, signing_key: &SigningKey) -> AccountIdResult<AccountId> {
+pub fn id(config: &Node, signing_key: &SigningKey) -> AccountIdResult<AccountId> {
     signing_key
         .public_key()
         .account_id(config.address_prefix())

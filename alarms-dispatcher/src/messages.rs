@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryMsg {
-    ContractVersion {},
-    AlarmsStatus {},
+pub(crate) enum QueryMsg {}
+
+impl QueryMsg {
+    pub const CONTRACT_VERSION: &'static [u8] = br#"{"contract_version":{}}"#;
+
+    pub const ALARMS_STATUS: &'static [u8] = br#"{"alarms_status":{}}"#;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -20,6 +21,7 @@ pub struct StatusResponse {
 }
 
 impl StatusResponse {
+    #[must_use]
     pub fn remaining_for_dispatch(&self) -> bool {
         self.remaining_alarms
     }
@@ -30,6 +32,7 @@ impl StatusResponse {
 pub struct DispatchResponse(u32);
 
 impl DispatchResponse {
+    #[must_use]
     pub fn dispatched_alarms(&self) -> u32 {
         self.0
     }

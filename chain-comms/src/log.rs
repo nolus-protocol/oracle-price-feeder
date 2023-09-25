@@ -37,7 +37,7 @@ where
     }
 }
 
-pub fn setup_logging<W>(writer: W) -> Result<(), SetGlobalDefaultError>
+pub fn setup<W>(writer: W) -> Result<(), SetGlobalDefaultError>
 where
     W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
 {
@@ -49,32 +49,25 @@ where
             .with_line_number(false)
             .with_writer(writer)
             .with_max_level({
-                #[cfg(debug_assertions)]
+                use std::{env::var_os, ffi::OsStr};
+
+                if var_os("DEBUG_LOGGING")
+                    .map(|value| {
+                        [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
+                            .contains(&value.as_os_str())
+                    })
+                    .unwrap_or(cfg!(debug_assertions))
                 {
                     tracing::level_filters::LevelFilter::DEBUG
-                }
-                #[cfg(not(debug_assertions))]
-                {
-                    use std::{env::var_os, ffi::OsStr};
-
-                    if var_os("DEBUG_LOGGING")
-                        .map(|value| {
-                            [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
-                                .contains(&value.as_os_str())
-                        })
-                        .unwrap_or_default()
-                    {
-                        tracing::level_filters::LevelFilter::DEBUG
-                    } else {
-                        tracing::level_filters::LevelFilter::INFO
-                    }
+                } else {
+                    tracing::level_filters::LevelFilter::INFO
                 }
             })
             .finish(),
     ))
 }
 
-pub fn log_commit_response(response: &CommitResponse) {
+pub fn commit_response(response: &CommitResponse) {
     info!("Hash: {}", response.hash);
 
     for (tx_name, tx_result) in [

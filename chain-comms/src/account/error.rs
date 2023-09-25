@@ -11,7 +11,7 @@ pub enum AccountData {
     #[error("No data is associated with account on the node!")]
     NotFound,
     #[error("Failed decoding account data from response! Cause: {0}")]
-    Decoding(#[from] prost::DecodeError),
+    Decoding(#[from] cosmrs::proto::prost::DecodeError),
 }
 
 pub type AccountIdResult<T> = Result<T, AccountId>;

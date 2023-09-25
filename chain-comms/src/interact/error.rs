@@ -7,7 +7,7 @@ pub enum AccountQuery {
     #[error("Node failed to provide information about requested address!")]
     NoAccountData,
     #[error("Failed to deserialize account data from protobuf! Cause: {0}")]
-    DeserializeAccountData(#[from] prost::DecodeError),
+    DeserializeAccountData(#[from] cosmrs::proto::prost::DecodeError),
 }
 
 #[derive(Debug, ThisError)]

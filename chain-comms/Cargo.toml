@@ -8,14 +8,13 @@ license.workspace = true
 
 [dependencies]
 cosmrs = { version = "0.14", default-features = false, features = ["rpc", "grpc", "bip32", "cosmwasm"] }
-base64 = "0.21"
+base64 = "0.21.4"
 http = { version = "0.2.9", default-features = false }
-prost = { version = "0.11.6", default-features = false, features = ["std"] }
 thiserror = "1"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "fs"] }
-toml = "0.7.1"
+toml = "0.7.8"
 tonic = { version = "0.9.2", default_features = false, features = ["tls", "tls-roots", "gzip"] }
 tracing = "0.1.37"
-tracing-subscriber = "0.3.16"
+tracing-subscriber = "0.3.17"
 serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "0.5"
+serde-json-wasm = "1"

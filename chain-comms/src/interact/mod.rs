@@ -10,6 +10,7 @@ use cosmrs::{
         cosmwasm::wasm::v1::{
             query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
         },
+        prost,
     },
     rpc::HttpClient as RpcHttpClient,
     tx::{Fee, Raw as RawTx},
@@ -55,7 +56,7 @@ pub async fn query_account_data(
 }
 
 pub async fn query_wasm<R>(
-    client: &Client,
+    rpc: TonicChannel,
     address: &str,
     query: &[u8],
 ) -> Result<R, error::WasmQuery>
@@ -63,18 +64,10 @@ where
     R: DeserializeOwned,
 {
     serde_json_wasm::from_slice::<R>(&{
-        let data = client
-            .with_grpc({
-                let query_data = query.to_vec();
-
-                move |rpc| async move {
-                    WasmQueryClient::new(rpc)
-                        .smart_contract_state(QuerySmartContractStateRequest {
-                            address: address.into(),
-                            query_data,
-                        })
-                        .await
-                }
+        let data: Vec<u8> = WasmQueryClient::new(rpc)
+            .smart_contract_state(QuerySmartContractStateRequest {
+                address: address.into(),
+                query_data: query.to_vec(),
             })
             .await?
             .into_inner()
@@ -191,8 +184,9 @@ pub async fn commit_tx_with_gas_estimation(
         .and_then(|result: u128| {
             result.checked_div(node_config.gas_adjustment_denominator().get().into())
         })
-        .map(|result| u64::try_from(result).unwrap_or(u64::MAX))
-        .unwrap_or(tx_gas_limit);
+        .map_or(tx_gas_limit, |result| {
+            u64::try_from(result).unwrap_or(u64::MAX)
+        });
 
     commit_tx(signer, client, node_config, unsigned_tx, adjusted_gas_limit)
         .await

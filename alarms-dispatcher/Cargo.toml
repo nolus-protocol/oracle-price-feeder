@@ -10,14 +10,14 @@ license.workspace = true
 semver = { workspace = true }
 chain-comms = { workspace = true }
 
-base64 = "0.21"
-prost = "0.11.6"
+base64 = "0.21.4"
+prost = "0.12"
 serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "0.5"
+serde-json-wasm = "1"
 thiserror = "1"
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "fs"] }
 tracing = "0.1.37"
 tracing-appender = "0.2.2"
 
 [build-dependencies]
-time = { version = "0.3.17", default-features = false, features = ["std", "formatting"] }
+time = { version = "0.3.28", default-features = false, features = ["std", "formatting"] }

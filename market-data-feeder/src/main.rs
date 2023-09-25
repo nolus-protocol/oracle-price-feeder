@@ -1,13 +1,11 @@
-use std::{collections::BTreeMap, io, str::FromStr, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io, sync::Arc, time::Duration};
 
 use tokio::{
-    select,
     sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        mpsc::{UnboundedReceiver, UnboundedSender},
         watch,
     },
-    task::JoinSet,
-    time::{interval, sleep, timeout, Instant},
+    time::{sleep, timeout, Instant},
 };
 use tracing::{error, info, info_span, span::EnteredSpan};
 use tracing_appender::{
@@ -21,50 +19,45 @@ use chain_comms::{
     interact::{
         commit_tx_with_gas_estimation, error::GasEstimatingTxCommit, query_wasm, CommitResponse,
     },
-    log::{self, log_commit_response, setup_logging},
+    log,
+    reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signer::Signer,
+    signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 use semver::SemVer;
 
-use self::{
-    config::{Config, Provider as ProviderConfig},
-    error::AppResult,
-    messages::{ExecuteMsg, QueryMsg},
-    provider::{Factory, Provider, Type},
-};
+use self::{config::Config, messages::QueryMsg, result::Result};
 
-pub mod config;
-pub mod error;
-pub mod messages;
-pub mod provider;
+mod config;
+mod deviation;
+mod error;
+mod messages;
+mod provider;
+mod providers;
+mod result;
+mod workers;
 
-pub const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
-
-pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
-
-pub const MAX_SEQ_ERRORS: u8 = 5;
-
-pub const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
+const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
 
 type UnboundedChannel<T> = (UnboundedSender<T>, UnboundedReceiver<T>);
 type WatchChannel<T> = (watch::Sender<T>, watch::Receiver<T>);
 
 #[tokio::main]
-async fn main() -> AppResult<()> {
+async fn main() -> Result<()> {
     let log_writer: RollingFileAppender = tracing_appender::rolling::hourly("./feeder-logs", "log");
 
     let (log_writer, _guard): (NonBlocking, WorkerGuard) =
         tracing_appender::non_blocking(log::CombinedWriter::new(io::stdout(), log_writer));
 
-    setup_logging(log_writer)?;
+    log::setup(log_writer)?;
 
     info!(concat!(
         "Running version built on: ",
         env!("BUILD_START_TIME_DATE", "No build time provided!")
     ));
 
-    let result: AppResult<()> = app_main().await;
+    let result: Result<()> = app_main().await;
 
     if let Err(error) = &result {
         error!("{error}");
@@ -73,17 +66,17 @@ async fn main() -> AppResult<()> {
     result
 }
 
-async fn app_main() -> AppResult<()> {
+async fn app_main() -> Result<()> {
     let RpcSetup {
         mut signer,
         config,
-        client,
+        nolus_node,
         ..
-    } = prepare_rpc::<Config, _>("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
+    }: RpcSetup<Config> = prepare_rpc("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
-    check_compatibility(&config, &client).await?;
+    check_compatibility(&config, &nolus_node).await?;
 
-    let client: Arc<Client> = Arc::new(client);
+    let nolus_node: Arc<Client> = Arc::new(nolus_node);
 
     info!("Starting workers...");
 
@@ -91,13 +84,18 @@ async fn app_main() -> AppResult<()> {
 
     let (recovery_mode_sender, recovery_mode_receiver): WatchChannel<bool> = watch::channel(false);
 
-    let (mut set, mut receiver): SpawnWorkersReturn = spawn_workers(
-        &client,
-        config.providers(),
-        config.oracle_addr(),
+    let workers::SpawnWorkersReturn {
+        mut set,
+        mut receiver,
+    }: workers::SpawnWorkersReturn = workers::spawn(
+        nolus_node.clone(),
+        config.providers().clone(),
+        config.comparison_providers(),
+        config.oracle_addr().into(),
         tick_time,
         recovery_mode_receiver,
-    )?;
+    )
+    .await?;
 
     info!("Workers started. Entering broadcasting loop...");
 
@@ -121,9 +119,9 @@ async fn app_main() -> AppResult<()> {
         if messages.is_empty() {
             if channel_closed {
                 break 'feeder_loop;
-            } else {
-                continue 'feeder_loop;
             }
+
+            continue 'feeder_loop;
         }
 
         let mut is_retry: bool = false;
@@ -148,7 +146,7 @@ async fn app_main() -> AppResult<()> {
         } {
             let successful: bool = commit_tx_with_gas_estimation(
                 &mut signer,
-                &client,
+                &nolus_node,
                 config.as_ref(),
                 config.gas_limit(),
                 tx,
@@ -162,7 +160,7 @@ async fn app_main() -> AppResult<()> {
                     false
                 },
                 |response: CommitResponse| {
-                    log_commit_response(&response);
+                    log::commit_response(&response);
 
                     if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
                         let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
@@ -182,7 +180,7 @@ async fn app_main() -> AppResult<()> {
             if successful {
                 continue 'feeder_loop;
             } else if signer.needs_update()
-                && recovery_loop(&mut signer, &recovery_mode_sender, &client)
+                && recovery_loop(&mut signer, &recovery_mode_sender, &nolus_node)
                     .await
                     .is_error()
             {
@@ -252,16 +250,15 @@ async fn recovery_loop(
     RecoveryStatus::Success
 }
 
-async fn check_compatibility(config: &Config, client: &Client) -> AppResult<()> {
+async fn check_compatibility(config: &Config, client: &Client) -> Result<()> {
     info!("Checking compatibility with contract version...");
 
     {
-        let version: SemVer = query_wasm(
-            client,
-            config.oracle_addr(),
-            &serde_json_wasm::to_vec(&QueryMsg::ContractVersion {})?,
-        )
-        .await?;
+        let version: SemVer = client
+            .with_grpc(|rpc: TonicChannel| {
+                query_wasm(rpc, config.oracle_addr(), QueryMsg::CONTRACT_VERSION)
+            })
+            .await?;
 
         if !version.check_compatibility(COMPATIBLE_VERSION) {
             error!(
@@ -295,127 +292,4 @@ async fn recover_after_error(signer: &mut Signer, client: &Client) -> RecoverySt
     info!("Continuing normal workflow...");
 
     RecoveryStatus::Success
-}
-
-type SpawnWorkersReturn = (
-    JoinSet<Result<(), error::Worker>>,
-    UnboundedReceiver<(usize, Instant, String)>,
-);
-
-type SpawnWorkersResult = AppResult<SpawnWorkersReturn>;
-
-fn spawn_workers(
-    client: &Arc<Client>,
-    providers: &[ProviderConfig],
-    oracle_addr: &str,
-    tick_time: Duration,
-    recovery_mode: watch::Receiver<bool>,
-) -> SpawnWorkersResult {
-    let mut set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
-
-    let (sender, receiver): UnboundedChannel<(usize, Instant, String)> = unbounded_channel();
-
-    providers
-        .iter()
-        .map(|provider_cfg: &ProviderConfig| {
-            let p_type: Type = Type::from_str(&provider_cfg.main_type)?;
-
-            Factory::new_provider(&p_type, provider_cfg)
-                .map_err(error::Application::InstantiateProvider)
-        })
-        .collect::<AppResult<Vec<_>>>()?
-        .into_iter()
-        .enumerate()
-        .for_each(|(monotonic_id, provider)| {
-            let client: Arc<Client> = client.clone();
-
-            let sender: UnboundedSender<(usize, Instant, String)> = sender.clone();
-
-            let provider_name = format!("Provider #{}/\"{}\"", monotonic_id, provider.name());
-
-            set.spawn(provider_main_loop(
-                provider,
-                client,
-                oracle_addr.into(),
-                move |instant: Instant, data: String| {
-                    sender.send((monotonic_id, instant, data)).map_err(|_| ())
-                },
-                provider_name,
-                tick_time,
-                recovery_mode.clone(),
-            ));
-        });
-
-    Ok((set, receiver))
-}
-
-async fn provider_main_loop<SenderFn>(
-    provider: Box<dyn Provider + Send>,
-    client: Arc<Client>,
-    oracle_addr: String,
-    sender: SenderFn,
-    provider_name: String,
-    tick_time: Duration,
-    mut recovery_mode: watch::Receiver<bool>,
-) -> Result<(), error::Worker>
-where
-    SenderFn: Fn(Instant, String) -> Result<(), ()>,
-{
-    let provider: Box<dyn Provider + Send> = { provider };
-
-    let mut interval: tokio::time::Interval = interval(tick_time);
-
-    let mut seq_error_counter: u8 = 0;
-
-    'worker_loop: loop {
-        if select! {
-            _ = interval.tick() => false,
-            Ok(()) = recovery_mode.changed() => {
-                *recovery_mode.borrow()
-            }
-        } {
-            while *recovery_mode.borrow() {
-                if recovery_mode.changed().await.is_err() {
-                    error!("Recovery mode state watch closed! Exiting worker loop...");
-
-                    break 'worker_loop Err(error::Worker::RecoveryModeWatchClosed);
-                }
-            }
-        }
-
-        let spot_prices_future = provider.get_spot_prices(&client, &oracle_addr);
-
-        match spot_prices_future.await {
-            Ok(prices) => {
-                seq_error_counter = 0;
-
-                let price_feed_json: String =
-                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?;
-
-                if sender(Instant::now(), price_feed_json).is_err() {
-                    info!(
-                        provider_name = %provider_name,
-                        "Communication channel has been closed! Exiting worker task..."
-                    );
-
-                    break 'worker_loop Ok(());
-                }
-            }
-            Err(error) => {
-                error!(
-                    provider_name = %provider_name,
-                    "Couldn't get price feed! Cause: {:?}",
-                    error
-                );
-
-                if seq_error_counter == MAX_SEQ_ERRORS {
-                    info!(provider_name = %provider_name, "Falling asleep...");
-
-                    sleep(MAX_SEQ_ERRORS_SLEEP_DURATION).await;
-                } else {
-                    seq_error_counter += 1;
-                }
-            }
-        };
-    }
 }

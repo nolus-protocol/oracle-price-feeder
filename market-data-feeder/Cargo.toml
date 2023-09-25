@@ -12,21 +12,23 @@ name = "feeder"
 semver = { workspace = true }
 chain-comms = { workspace = true }
 
-futures = "0.3.26"
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.11.20", default-features = false, features = ["json", "rustls-tls"] }
+url = { version = "2.4.1", default-features = false }
+http = { version = "0.2.9", default-features = false }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "fs", "signal"] }
+futures = "0.3.28"
 tracing = "0.1.37"
-tracing-subscriber = "0.3.16"
+tracing-subscriber = "0.3.17"
 tracing-appender = "0.2.2"
 
 serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "0.5"
+serde-json-wasm = "1"
 toml = "0.7.1"
 thiserror = "1"
-async-trait = "0.1.53"
-tonic = { version = "0.9.2", features = ["tls", "tls-roots", "gzip"] }
-prost = "0.11"
-prost-types = "0.11"
+async-trait = "0.1.73"
+prost = "0.12"
+prost-types = "0.12"
+bnum = "0.8"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros"] }
@@ -34,4 +36,4 @@ wiremock = "0.5.2"
 actix-rt = "2.7"
 
 [build-dependencies]
-time = { version = "0.3.17", default-features = false, features = ["std", "formatting"] }
+time = { version = "0.3.28", default-features = false, features = ["std", "formatting"] }

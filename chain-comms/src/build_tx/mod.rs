@@ -21,6 +21,7 @@ struct Msg {
 }
 
 #[derive(Clone)]
+#[must_use]
 pub struct ContractTx {
     contract: String,
     messages: Vec<Msg>,

@@ -9,9 +9,11 @@ use chain_comms::{
     config::Node,
     decode,
     interact::{commit_tx_with_gas_estimation, query_wasm, CommitResponse},
-    log::{self, log_commit_response, setup_logging},
+    log::{self, commit_response, setup},
+    reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signer::Signer,
+    signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 use semver::SemVer;
 
@@ -28,8 +30,6 @@ pub mod messages;
 pub const ORACLE_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
 pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 1);
 
-pub const DEFAULT_COSMOS_HD_PATH: &str = "m/44'/118'/0'/0/0";
-
 pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
 #[tokio::main]
@@ -39,7 +39,7 @@ async fn main() -> AppResult<()> {
     let (log_writer, _guard) =
         tracing_appender::non_blocking(log::CombinedWriter::new(std::io::stdout(), log_writer));
 
-    setup_logging(log_writer)?;
+    setup(log_writer)?;
 
     info!(concat!(
         "Running version built on: ",
@@ -73,12 +73,10 @@ async fn app_main() -> AppResult<()> {
             ORACLE_COMPATIBLE_VERSION,
         ),
     ] {
-        let version: SemVer = query_wasm(
-            &rpc_setup.client,
-            contract.address(),
-            &serde_json_wasm::to_vec(&QueryMsg::ContractVersion {})?,
-        )
-        .await?;
+        let version: SemVer = rpc_setup
+            .nolus_node
+            .with_grpc(|rpc| query_wasm(rpc, contract.address(), QueryMsg::CONTRACT_VERSION))
+            .await?;
 
         if !version.check_compatibility(compatible_version) {
             error!(
@@ -112,7 +110,7 @@ async fn dispatch_alarms(
     RpcSetup {
         ref mut signer,
         ref config,
-        ref client,
+        nolus_node: ref client,
         ..
     }: RpcSetup<Config>,
 ) -> Result<(), error::DispatchAlarms> {
@@ -123,8 +121,6 @@ async fn dispatch_alarms(
     ); 2];
 
     let poll_period: Duration = Duration::from_secs(config.poll_period_seconds());
-
-    let query: Vec<u8> = serde_json_wasm::to_vec(&QueryMsg::AlarmsStatus {})?;
 
     let mut fallback_gas_limit: Option<u64> = None;
 
@@ -153,7 +149,7 @@ async fn dispatch_alarms(
                     config,
                     client,
                     contract,
-                    &query,
+                    QueryMsg::ALARMS_STATUS,
                     &mut fallback_gas_limit,
                 )
                 .await
@@ -162,9 +158,9 @@ async fn dispatch_alarms(
                     DispatchResult::DispatchFailed => {
                         if is_retry {
                             break 'dispatch_alarm;
-                        } else {
-                            is_retry = true;
                         }
+
+                        is_retry = true;
                     }
                 }
             }
@@ -259,7 +255,9 @@ async fn dispatch_alarm<'r>(
     let mut max_gas_used: Option<GasUsed> = None;
 
     loop {
-        let response: StatusResponse = query_wasm(client, contract.address(), query).await?;
+        let response: StatusResponse = client
+            .with_grpc(|rpc: TonicChannel| query_wasm(rpc, contract.address(), query))
+            .await?;
 
         return Ok(if response.remaining_for_dispatch() {
             let result: CommitResult =
@@ -345,7 +343,7 @@ async fn commit_dispatch_tx(
             }
         }
 
-        log_commit_response(&tx_commit_response);
+        commit_response(&tx_commit_response);
     });
 
     if successful {
