@@ -2,7 +2,10 @@ use std::collections::BTreeMap;
 
 use bnum::BUint;
 
-use crate::{config::Ticker, error, provider::Price};
+use crate::{
+    config::Ticker,
+    provider::{Price, PriceComparisonGuardError},
+};
 
 /// Capable of storing integers with precision of 320 bits.
 pub(crate) type UInt = BUint<5>;
@@ -11,7 +14,7 @@ pub(crate) async fn compare_prices(
     prices: Box<[Price]>,
     comparison_prices: Box<[Price]>,
     max_deviation_exclusive: u64,
-) -> Result<(), error::PriceComparisonGuard> {
+) -> Result<(), PriceComparisonGuardError> {
     const HUNDRED: UInt = UInt::from_digit(100);
 
     const fn to_big_uint(n: u128) -> UInt {
@@ -31,7 +34,7 @@ pub(crate) async fn compare_prices(
             )
             .is_some()
         {
-            return Err(error::PriceComparisonGuard::DuplicatePrice(
+            return Err(PriceComparisonGuardError::DuplicatePrice(
                 price.amount().ticker().to_string(),
                 price.amount_quote().ticker().to_string(),
             ));
@@ -44,7 +47,7 @@ pub(crate) async fn compare_prices(
             .and_then(|map: &BTreeMap<Ticker, (u128, u128)>| map.get(price.amount_quote().ticker()))
             .copied()
             .ok_or_else(|| {
-                error::PriceComparisonGuard::MissingComparisonPrice(
+                PriceComparisonGuardError::MissingComparisonPrice(
                     price.amount().ticker().to_string(),
                     price.amount_quote().ticker().to_string(),
                 )
@@ -72,7 +75,7 @@ pub(crate) async fn compare_prices(
         };
 
         if deviation_percent >= UInt::from_digit(max_deviation_exclusive) {
-            return Err(error::PriceComparisonGuard::DeviationTooBig(
+            return Err(PriceComparisonGuardError::DeviationTooBig(
                 price.amount().ticker().to_string(),
                 price.amount_quote().ticker().to_string(),
                 deviation_percent,

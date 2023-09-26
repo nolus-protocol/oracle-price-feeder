@@ -4,7 +4,7 @@ use thiserror::Error as ThisError;
 
 use semver::SemVer;
 
-use crate::deviation::UInt as DeviationPercentInt;
+use crate::provider::PriceComparisonGuardError;
 
 #[derive(Debug, ThisError)]
 pub(crate) enum Application {
@@ -40,23 +40,9 @@ pub(crate) enum Worker {
     #[error("Failed to instantiate price comparison provider with id: {0}! Cause: {1}")]
     InstantiatePriceComparisonProvider(String, Box<dyn StdError + Send + 'static>),
     #[error("Price comparison guard failure! Cause: {0}")]
-    PriceComparisonGuard(#[from] PriceComparisonGuard),
+    PriceComparisonGuard(#[from] PriceComparisonGuardError),
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Recovery mode state watch closed!")]
     RecoveryModeWatchClosed,
-}
-
-#[derive(Debug, ThisError)]
-pub(crate) enum PriceComparisonGuard {
-    #[error("Failed to fetch prices for price comparison guard! Cause: {0}")]
-    FetchPrices(crate::provider::Error),
-    #[error("Failed to fetch comparison prices for price comparison guard! Cause: {0}")]
-    FetchComparisonPrices(crate::provider::Error),
-    #[error("Price comparison guard failed due to a duplicated price! Duplicated pair: {0}")]
-    DuplicatePrice(String, String),
-    #[error("Price comparison guard failed due to a missing comparison price! Missing pair: {0}")]
-    MissingComparisonPrice(String, String),
-    #[error("Price deviation too big for \"{0}/{1}\" pair! Deviation equal to {2} percent!")]
-    DeviationTooBig(String, String, DeviationPercentInt),
 }

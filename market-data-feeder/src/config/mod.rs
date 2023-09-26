@@ -8,6 +8,8 @@ use thiserror::Error as ThisError;
 
 use chain_comms::config::Node;
 
+pub(crate) use self::currencies::Currencies;
+
 mod currencies;
 
 pub(crate) type Ticker = String;
@@ -57,17 +59,15 @@ impl AsRef<Node> for Config {
     }
 }
 
-pub(crate) trait ProviderTrait: Sync + Send + 'static {
+pub(crate) trait ProviderConfig: Sync + Send + 'static {
     const ENV_PREFIX: &'static str;
 
     fn name(&self) -> &str;
 
-    fn currencies(&self) -> &BTreeMap<Ticker, Symbol>;
-
     fn misc(&self) -> &BTreeMap<String, toml::Value>;
 }
 
-pub(crate) trait ProviderExtTrait: ProviderTrait {
+pub(crate) trait ProviderConfigExt: ProviderConfig {
     fn fetch_from_env(id: &str, name: &str) -> Result<String, EnvError> {
         let name: String = format!(
             "{prefix}PROVIDER_{id}_{field}",
@@ -80,7 +80,7 @@ pub(crate) trait ProviderExtTrait: ProviderTrait {
     }
 }
 
-impl<T> ProviderExtTrait for T where T: ProviderTrait + ?Sized {}
+impl<T> ProviderConfigExt for T where T: ProviderConfig + ?Sized {}
 
 #[derive(Debug, ThisError)]
 #[error("Variable name: \"{0}\". Cause: {1}")]
@@ -91,8 +91,6 @@ pub(crate) struct EnvError(String, env::VarError);
 #[serde(rename_all = "snake_case")]
 pub(crate) struct Provider {
     name: String,
-    #[serde(with = "currencies::serde")]
-    pub currencies: BTreeMap<Ticker, Symbol>,
     #[serde(flatten)]
     pub misc: BTreeMap<String, toml::Value>,
 }
@@ -106,15 +104,11 @@ pub(crate) struct ProviderWithComparison {
     pub provider: Provider,
 }
 
-impl ProviderTrait for ProviderWithComparison {
+impl ProviderConfig for ProviderWithComparison {
     const ENV_PREFIX: &'static str = "";
 
     fn name(&self) -> &str {
         &self.provider.name
-    }
-
-    fn currencies(&self) -> &BTreeMap<Ticker, Symbol> {
-        &self.provider.currencies
     }
 
     fn misc(&self) -> &BTreeMap<String, toml::Value> {
@@ -138,15 +132,11 @@ pub(crate) struct ComparisonProvider {
     pub provider: Provider,
 }
 
-impl ProviderTrait for ComparisonProvider {
+impl ProviderConfig for ComparisonProvider {
     const ENV_PREFIX: &'static str = "COMPARISON_";
 
     fn name(&self) -> &str {
         &self.provider.name
-    }
-
-    fn currencies(&self) -> &BTreeMap<Ticker, Symbol> {
-        &self.provider.currencies
     }
 
     fn misc(&self) -> &BTreeMap<String, toml::Value> {

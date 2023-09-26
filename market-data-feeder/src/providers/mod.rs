@@ -1,4 +1,7 @@
-use crate::{config::ProviderExtTrait, provider::ProviderSized};
+use crate::{
+    config::ProviderConfigExt,
+    provider::{ComparisonProvider, ProviderSized},
+};
 
 use self::osmosis::Osmosis;
 
@@ -7,10 +10,21 @@ mod osmosis;
 pub(crate) struct Providers;
 
 impl Providers {
-    pub fn visit<V, Config>(id: &str, visitor: V) -> Option<V::Return>
+    pub fn visit_provider<V, Config>(id: &str, visitor: V) -> Option<V::Return>
     where
-        V: Visitor<Config>,
-        Config: ProviderExtTrait,
+        V: ProviderVisitor<Config>,
+        Config: ProviderConfigExt,
+    {
+        match id {
+            <Osmosis as ProviderSized<Config>>::ID => Some(visitor.on::<Osmosis>()),
+            _ => None,
+        }
+    }
+
+    pub fn visit_comparison_provider<V, Config>(id: &str, visitor: V) -> Option<V::Return>
+    where
+        V: ComparisonProviderVisitor<Config>,
+        Config: ProviderConfigExt,
     {
         match id {
             <Osmosis as ProviderSized<Config>>::ID => Some(visitor.on::<Osmosis>()),
@@ -19,13 +33,24 @@ impl Providers {
     }
 }
 
-pub(crate) trait Visitor<Config>
+pub(crate) trait ProviderVisitor<Config>
 where
-    Config: ProviderExtTrait,
+    Config: ProviderConfigExt,
 {
     type Return;
 
     fn on<P>(self) -> Self::Return
     where
         P: ProviderSized<Config>;
+}
+
+pub(crate) trait ComparisonProviderVisitor<Config>
+where
+    Config: ProviderConfigExt,
+{
+    type Return;
+
+    fn on<P>(self) -> Self::Return
+    where
+        P: ProviderSized<Config> + ComparisonProvider;
 }

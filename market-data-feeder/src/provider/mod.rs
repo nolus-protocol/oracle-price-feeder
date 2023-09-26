@@ -1,25 +1,28 @@
 use std::{error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
+use futures::{FutureExt as _, TryFutureExt as _};
 use serde::{Deserialize, Serialize};
 
 use chain_comms::client::Client as NodeClient;
 
-use crate::config::ProviderExtTrait;
+use crate::config::ProviderConfigExt;
 
-pub(crate) use self::error::Error;
+pub(crate) use self::error::{
+    PriceComparisonGuard as PriceComparisonGuardError, Provider as ProviderError,
+};
 
 mod error;
 
 #[async_trait]
 pub(crate) trait Provider: Sync + Send + 'static {
-    async fn get_prices(&self, fault_tolerant: bool) -> Result<Box<[Price]>, Error>;
+    async fn get_prices(&self, fault_tolerant: bool) -> Result<Box<[Price]>, ProviderError>;
 }
 
 #[async_trait]
 pub(crate) trait ProviderSized<Config>: Provider + Sized
 where
-    Config: ProviderExtTrait,
+    Config: ProviderConfigExt,
 {
     const ID: &'static str;
 
@@ -33,6 +36,40 @@ where
     ) -> Result<Self, Self::ConstructError>
     where
         Self: Sized;
+}
+
+#[async_trait]
+pub(crate) trait ComparisonProvider: Provider {
+    async fn benchmark_prices(
+        &self,
+        benchmarked_provider: &dyn Provider,
+        max_deviation_exclusive: u64,
+    ) -> Result<(), PriceComparisonGuardError> {
+        self.get_prices(false)
+            .map(|result: Result<Box<[Price]>, ProviderError>| {
+                result.map_err(PriceComparisonGuardError::FetchPrices)
+            })
+            .and_then(|prices: Box<[Price]>| {
+                benchmarked_provider.get_prices(false).map(
+                    |result: Result<Box<[Price]>, ProviderError>| {
+                        result
+                            .map(|comparison_prices: Box<[Price]>| (prices, comparison_prices))
+                            .map_err(PriceComparisonGuardError::FetchComparisonPrices)
+                    },
+                )
+            })
+            .and_then(
+                |(prices, comparison_prices): (Box<[Price]>, Box<[Price]>)| async move {
+                    crate::deviation::compare_prices(
+                        prices,
+                        comparison_prices,
+                        max_deviation_exclusive,
+                    )
+                    .await
+                },
+            )
+            .await
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

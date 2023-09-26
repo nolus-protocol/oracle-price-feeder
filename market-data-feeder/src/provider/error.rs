@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum Provider {
     #[error("Failed to join task into worker's own task! Cause: {0}")]
     TaskSetJoin(#[from] tokio::task::JoinError),
 
@@ -24,4 +24,18 @@ pub enum Error {
 
     #[error("{0}")]
     Serialization(#[from] serde_json_wasm::ser::Error),
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum PriceComparisonGuard {
+    #[error("Failed to fetch prices for price comparison guard! Cause: {0}")]
+    FetchPrices(Provider),
+    #[error("Failed to fetch comparison prices for price comparison guard! Cause: {0}")]
+    FetchComparisonPrices(Provider),
+    #[error("Price comparison guard failed due to a duplicated price! Duplicated pair: {0}")]
+    DuplicatePrice(String, String),
+    #[error("Price comparison guard failed due to a missing comparison price! Missing pair: {0}")]
+    MissingComparisonPrice(String, String),
+    #[error("Price deviation too big for \"{0}/{1}\" pair! Deviation equal to {2} percent!")]
+    DeviationTooBig(String, String, crate::deviation::UInt),
 }

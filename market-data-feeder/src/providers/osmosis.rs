@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, convert::identity, sync::Arc};
+use std::{convert::identity, sync::Arc};
 
 use async_trait::async_trait;
 use reqwest::{
@@ -7,18 +7,19 @@ use reqwest::{
 };
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
+use tokio::task::JoinSet;
+use toml::Value;
 
 use chain_comms::{
     client::Client as NodeClient,
     interact::{error, query_wasm},
     reexport::tonic::transport::Channel as TonicChannel,
 };
-use tokio::task::JoinSet;
 
 use crate::{
-    config::{EnvError, ProviderExtTrait, Symbol, Ticker},
+    config::{Currencies, EnvError, ProviderConfigExt, Symbol, Ticker},
     messages::{PoolId, QueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
-    provider::{Error as ProviderError, Price, Provider, ProviderSized},
+    provider::{ComparisonProvider, Price, Provider, ProviderError, ProviderSized},
 };
 
 pub(crate) struct Osmosis {
@@ -26,7 +27,7 @@ pub(crate) struct Osmosis {
     prices_rpc_url: Url,
     nolus_node: Arc<NodeClient>,
     oracle_addr: Arc<str>,
-    currencies: BTreeMap<Ticker, Symbol>,
+    currencies: Currencies,
 }
 
 impl Osmosis {
@@ -52,8 +53,8 @@ impl Osmosis {
             swap_legs
                 .into_iter()
                 .filter_map(|swap: SwapLeg| -> Option<Route> {
-                    let from_symbol: String = self.currencies.get(&swap.from).cloned()?;
-                    let to_symbol: String = self.currencies.get(&swap.to.target).cloned()?;
+                    let from_symbol: String = self.currencies.0.get(&swap.from).cloned()?;
+                    let to_symbol: String = self.currencies.0.get(&swap.to.target).cloned()?;
 
                     Some(Route {
                         pool_id: swap.to.pool_id,
@@ -168,7 +169,7 @@ impl Provider for Osmosis {
 #[async_trait]
 impl<Config> ProviderSized<Config> for Osmosis
 where
-    Config: ProviderExtTrait,
+    Config: ProviderConfigExt,
 {
     const ID: &'static str = "osmosis";
 
@@ -183,27 +184,46 @@ where
     where
         Self: Sized,
     {
-        Config::fetch_from_env(id, "RPC_URL")
-            .map_err(ConstructError::FetchPricesRpcUrl)
-            .and_then(|prices_rpc_url: String| {
-                Url::parse(&prices_rpc_url).map_err(ConstructError::InvalidPricesRpcUrl)
+        config
+            .misc()
+            .get("currencies")
+            .ok_or(ConstructError::MissingField("currencies"))
+            .cloned()
+            .and_then(|value: Value| {
+                value.try_into().map_err(|error: toml::de::Error| {
+                    ConstructError::DeserializeField("currencies", error)
+                })
             })
-            .map(|prices_rpc_url: Url| Self {
-                http_client: ReqwestClient::new(),
-                prices_rpc_url,
-                nolus_node: nolus_node.clone(),
-                oracle_addr: oracle_addr.clone(),
-                currencies: config.currencies().clone(),
+            .and_then(|currencies: Currencies| {
+                Config::fetch_from_env(id, "RPC_URL")
+                    .map_err(ConstructError::FetchPricesRpcUrl)
+                    .and_then(|prices_rpc_url: String| {
+                        Url::parse(&prices_rpc_url).map_err(ConstructError::InvalidPricesRpcUrl)
+                    })
+                    .map(|prices_rpc_url: Url| Self {
+                        http_client: ReqwestClient::new(),
+                        prices_rpc_url,
+                        nolus_node: nolus_node.clone(),
+                        oracle_addr: oracle_addr.clone(),
+                        currencies,
+                    })
             })
     }
 }
 
+#[async_trait]
+impl ComparisonProvider for Osmosis {}
+
 #[derive(Debug, Error)]
 pub(crate) enum ConstructError {
+    #[error("Missing \"{0}\" field in configuration file!")]
+    MissingField(&'static str),
+    #[error("Failed to deserialize field \"{0}\"! Cause: {1}")]
+    DeserializeField(&'static str, toml::de::Error),
     #[error("Failed to fetch prices RPC's URL from environment variables! Cause: {0}")]
-    FetchPricesRpcUrl(EnvError),
+    FetchPricesRpcUrl(#[from] EnvError),
     #[error("Failed to parse prices RPC's URL! Cause: {0}")]
-    InvalidPricesRpcUrl(url::ParseError),
+    InvalidPricesRpcUrl(#[from] url::ParseError),
 }
 
 struct Route {
