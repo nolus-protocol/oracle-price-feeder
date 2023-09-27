@@ -22,7 +22,7 @@ use crate::{
     },
     error,
     messages::ExecuteMsg,
-    provider::{ComparisonProvider, Provider, ProviderSized},
+    provider::{ComparisonProvider, FromConfig, Provider},
     providers::{self, ComparisonProviderVisitor, ProviderVisitor},
     result::Result as AppResult,
     UnboundedChannel,
@@ -183,14 +183,12 @@ struct PriceComparisonProviderVisitor<'r> {
     nolus_node: &'r Arc<Client>,
 }
 
-impl<'r> ComparisonProviderVisitor<ComparisonProviderConfig>
-    for PriceComparisonProviderVisitor<'r>
-{
+impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
     type Return = Result<Arc<dyn ComparisonProvider>, error::Worker>;
 
     fn on<P>(self) -> Self::Return
     where
-        P: ProviderSized<ComparisonProviderConfig> + ComparisonProvider,
+        P: ComparisonProvider + FromConfig,
     {
         Handle::current()
             .block_on(P::from_config(
@@ -218,12 +216,12 @@ struct TaskSpawningProviderVisitor<'r> {
     oracle_addr: &'r Arc<str>,
 }
 
-impl<'r> ProviderVisitor<ProviderWithComparisonConfig> for TaskSpawningProviderVisitor<'r> {
+impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
     type Return = Result<(), error::Worker>;
 
     fn on<P>(self) -> Self::Return
     where
-        P: ProviderSized<ProviderWithComparisonConfig>,
+        P: Provider + FromConfig,
     {
         match block_on(P::from_config(
             self.provider_id,
@@ -268,7 +266,7 @@ async fn perform_check_and_enter_loop<P>(
     recovery_mode: watch::Receiver<bool>,
 ) -> Result<(), error::Worker>
 where
-    P: ProviderSized<ProviderWithComparisonConfig>,
+    P: Provider + FromConfig,
 {
     if let Some((comparison_provider, max_deviation_exclusive)) = comparison_provider_and_deviation
     {

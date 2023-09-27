@@ -19,7 +19,7 @@ use chain_comms::{
 use crate::{
     config::{Currencies, EnvError, ProviderConfigExt, Symbol, Ticker},
     messages::{PoolId, QueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
-    provider::{ComparisonProvider, Price, Provider, ProviderError, ProviderSized},
+    provider::{FromConfig, Price, Provider, ProviderError},
 };
 
 pub(crate) struct Osmosis {
@@ -167,22 +167,19 @@ impl Provider for Osmosis {
 }
 
 #[async_trait]
-impl<Config> ProviderSized<Config> for Osmosis
-where
-    Config: ProviderConfigExt,
-{
+impl FromConfig for Osmosis {
     const ID: &'static str = "osmosis";
 
     type ConstructError = ConstructError;
 
-    async fn from_config(
+    async fn from_config<Config>(
         id: &str,
         config: &Config,
         oracle_addr: &Arc<str>,
         nolus_node: &Arc<NodeClient>,
     ) -> Result<Self, Self::ConstructError>
     where
-        Self: Sized,
+        Config: ProviderConfigExt,
     {
         config
             .misc()
@@ -210,9 +207,6 @@ where
             })
     }
 }
-
-#[async_trait]
-impl ComparisonProvider for Osmosis {}
 
 #[derive(Debug, Error)]
 pub(crate) enum ConstructError {

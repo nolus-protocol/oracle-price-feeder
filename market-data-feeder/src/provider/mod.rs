@@ -20,26 +20,19 @@ pub(crate) trait Provider: Sync + Send + 'static {
 }
 
 #[async_trait]
-pub(crate) trait ProviderSized<Config>: Provider + Sized
-where
-    Config: ProviderConfigExt,
-{
-    const ID: &'static str;
-
-    type ConstructError: StdError + Send + 'static;
-
-    async fn from_config(
-        id: &str,
-        config: &Config,
-        oracle_addr: &Arc<str>,
-        nolus_client: &Arc<NodeClient>,
-    ) -> Result<Self, Self::ConstructError>
-    where
-        Self: Sized;
+pub(crate) trait ComparisonProvider: Sync + Send + 'static {
+    async fn benchmark_prices(
+        &self,
+        benchmarked_provider: &dyn Provider,
+        max_deviation_exclusive: u64,
+    ) -> Result<(), PriceComparisonGuardError>;
 }
 
 #[async_trait]
-pub(crate) trait ComparisonProvider: Provider {
+impl<T> ComparisonProvider for T
+where
+    T: Provider + ?Sized,
+{
     async fn benchmark_prices(
         &self,
         benchmarked_provider: &dyn Provider,
@@ -70,6 +63,22 @@ pub(crate) trait ComparisonProvider: Provider {
             )
             .await
     }
+}
+
+#[async_trait]
+pub(crate) trait FromConfig: Sync + Send + Sized + 'static {
+    const ID: &'static str;
+
+    type ConstructError: StdError + Send + 'static;
+
+    async fn from_config<Config>(
+        id: &str,
+        config: &Config,
+        oracle_addr: &Arc<str>,
+        nolus_client: &Arc<NodeClient>,
+    ) -> Result<Self, Self::ConstructError>
+    where
+        Config: ProviderConfigExt;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
