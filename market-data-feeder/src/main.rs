@@ -1,5 +1,6 @@
-use std::{collections::BTreeMap, io, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io, sync::Arc, task::Context, time::Duration};
 
+use futures::future::poll_fn;
 use tokio::{
     sync::{
         mpsc::{UnboundedReceiver, UnboundedSender},
@@ -33,6 +34,7 @@ mod config;
 mod deviation;
 mod error;
 mod messages;
+mod price;
 mod provider;
 mod providers;
 mod result;
@@ -97,11 +99,23 @@ async fn app_main() -> Result<()> {
     )
     .await?;
 
-    info!("Workers started. Entering broadcasting loop...");
+    info!("Entering broadcasting loop...");
 
     let mut fallback_gas_limit: Option<u64> = None;
 
     'feeder_loop: loop {
+        if let Some(result) = poll_fn(|cx: &mut Context| set.poll_join_next(cx)).await {
+            match result {
+                Ok(Ok(())) => unreachable!(),
+                Ok(Err(error)) => {
+                    error!(error = ?error, "Provider exitted prematurely! Error: {error}", error = error)
+                }
+                Err(error) => {
+                    error!(error = ?error, "Provider exitted prematurely and was unable to be joined! Probable cause is a panic! Error: {error}", error = error)
+                }
+            }
+        }
+
         let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
 
         let channel_closed: bool = timeout(tick_time, async {

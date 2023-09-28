@@ -84,7 +84,7 @@ fn construct_comparison_provider_f(
 
     move |(id, config): (&String, &ComparisonProviderConfig)| {
         providers::Providers::visit_comparison_provider(
-            config.name(),
+            config.provider.name(),
             PriceComparisonProviderVisitor {
                 provider_id: id,
                 provider_config: config,
@@ -143,7 +143,7 @@ fn try_for_each_provider_f(
             .and_then(
                 |price_comparison_provider: Option<(&Arc<dyn ComparisonProvider>, u64)>| {
                     providers::Providers::visit_provider(
-                        config.name(),
+                        config.provider.name(),
                         TaskSpawningProviderVisitor {
                             worker_task_spawner_config: TaskSpawnerConfig {
                                 set,
@@ -160,7 +160,7 @@ fn try_for_each_provider_f(
                         },
                     )
                     .ok_or(error::Application::UnknownProviderId(String::from(
-                        config.name(),
+                        config.provider.name(),
                     )))
                     .and_then(|result: Result<(), error::Worker>| result.map_err(From::from))
                 },
@@ -188,12 +188,12 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
 
     fn on<P>(self) -> Self::Return
     where
-        P: ComparisonProvider + FromConfig,
+        P: ComparisonProvider + FromConfig<true>,
     {
         Handle::current()
-            .block_on(P::from_config(
+            .block_on(FromConfig::<true>::from_config(
                 self.provider_id,
-                self.provider_config,
+                &self.provider_config.provider,
                 self.oracle_addr,
                 self.nolus_node,
             ))
@@ -221,11 +221,11 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
 
     fn on<P>(self) -> Self::Return
     where
-        P: Provider + FromConfig,
+        P: Provider + FromConfig<false>,
     {
-        match block_on(P::from_config(
+        match block_on(<P as FromConfig<false>>::from_config(
             self.provider_id,
-            self.provider_config,
+            &self.provider_config.provider,
             self.oracle_addr,
             self.nolus_node,
         )) {
@@ -266,7 +266,7 @@ async fn perform_check_and_enter_loop<P>(
     recovery_mode: watch::Receiver<bool>,
 ) -> Result<(), error::Worker>
 where
-    P: Provider + FromConfig,
+    P: Provider,
 {
     if let Some((comparison_provider, max_deviation_exclusive)) = comparison_provider_and_deviation
     {

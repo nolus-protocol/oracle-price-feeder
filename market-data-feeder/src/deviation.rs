@@ -4,15 +4,16 @@ use bnum::BUint;
 
 use crate::{
     config::Ticker,
-    provider::{Price, PriceComparisonGuardError},
+    price::{Coin, Price},
+    provider::PriceComparisonGuardError,
 };
 
 /// Capable of storing integers with precision of 320 bits.
 pub(crate) type UInt = BUint<5>;
 
 pub(crate) async fn compare_prices(
-    prices: Box<[Price]>,
-    comparison_prices: Box<[Price]>,
+    prices: &[Price],
+    comparison_prices: &[Price],
     max_deviation_exclusive: u64,
 ) -> Result<(), PriceComparisonGuardError> {
     const HUNDRED: UInt = UInt::from_digit(100);
@@ -24,19 +25,25 @@ pub(crate) async fn compare_prices(
 
     let mut map: BTreeMap<Ticker, BTreeMap<Ticker, (u128, u128)>> = BTreeMap::new();
 
-    for price in comparison_prices.iter() {
+    for (price, inverted) in comparison_prices
+        .iter()
+        .flat_map(|price: &Price| [(price, false), (price, true)])
+    {
+        let (base, quote): (&Coin, &Coin) = if inverted {
+            (price.amount_quote(), price.amount())
+        } else {
+            (price.amount(), price.amount_quote())
+        };
+
         if map
-            .entry(price.amount().ticker().to_string())
+            .entry(base.ticker().to_string())
             .or_default()
-            .insert(
-                price.amount_quote().ticker().to_string(),
-                (price.amount().amount(), price.amount_quote().amount()),
-            )
+            .insert(quote.ticker().to_string(), (base.amount(), quote.amount()))
             .is_some()
         {
             return Err(PriceComparisonGuardError::DuplicatePrice(
-                price.amount().ticker().to_string(),
-                price.amount_quote().ticker().to_string(),
+                base.ticker().to_string(),
+                quote.ticker().to_string(),
             ));
         }
     }

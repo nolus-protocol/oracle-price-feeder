@@ -12,6 +12,7 @@ pub(crate) use self::currencies::Currencies;
 
 mod currencies;
 
+pub(crate) type TickerUnsized = str;
 pub(crate) type Ticker = String;
 
 pub(crate) type Symbol = String;
@@ -59,19 +60,23 @@ impl AsRef<Node> for Config {
     }
 }
 
-pub(crate) trait ProviderConfig: Sync + Send + 'static {
-    const ENV_PREFIX: &'static str;
-
+pub(crate) trait ProviderConfig: Sync + Send {
     fn name(&self) -> &str;
 
     fn misc(&self) -> &BTreeMap<String, toml::Value>;
 }
 
-pub(crate) trait ProviderConfigExt: ProviderConfig {
+pub(crate) trait ProviderConfigExt<const COMPARISON: bool>: ProviderConfig {
+    fn fetch_from_env(id: &str, name: &str) -> Result<String, EnvError>;
+}
+
+impl<T> ProviderConfigExt<true> for T
+where
+    T: ProviderConfig + ?Sized,
+{
     fn fetch_from_env(id: &str, name: &str) -> Result<String, EnvError> {
         let name: String = format!(
-            "{prefix}PROVIDER_{id}_{field}",
-            prefix = Self::ENV_PREFIX,
+            "COMPARISON_PROVIDER_{id}_{field}",
             id = id.to_ascii_uppercase(),
             field = name.to_ascii_uppercase()
         );
@@ -79,8 +84,6 @@ pub(crate) trait ProviderConfigExt: ProviderConfig {
         var(&name).map_err(|error: env::VarError| EnvError(name, error))
     }
 }
-
-impl<T> ProviderConfigExt for T where T: ProviderConfig + ?Sized {}
 
 #[derive(Debug, ThisError)]
 #[error("Variable name: \"{0}\". Cause: {1}")]
@@ -95,6 +98,28 @@ pub(crate) struct Provider {
     pub misc: BTreeMap<String, toml::Value>,
 }
 
+impl ProviderConfig for Provider {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn misc(&self) -> &BTreeMap<String, toml::Value> {
+        &self.misc
+    }
+}
+
+impl ProviderConfigExt<false> for Provider {
+    fn fetch_from_env(id: &str, name: &str) -> Result<String, EnvError> {
+        let name: String = format!(
+            "PROVIDER_{id}_{field}",
+            id = id.to_ascii_uppercase(),
+            field = name.to_ascii_uppercase()
+        );
+
+        var(&name).map_err(|error: env::VarError| EnvError(name, error))
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[must_use]
 #[serde(rename_all = "snake_case")]
@@ -102,18 +127,6 @@ pub(crate) struct ProviderWithComparison {
     pub comparison: Option<ComparisonProviderIdAndMaxDeviation>,
     #[serde(flatten)]
     pub provider: Provider,
-}
-
-impl ProviderConfig for ProviderWithComparison {
-    const ENV_PREFIX: &'static str = "";
-
-    fn name(&self) -> &str {
-        &self.provider.name
-    }
-
-    fn misc(&self) -> &BTreeMap<String, toml::Value> {
-        &self.provider.misc
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -130,16 +143,4 @@ pub(crate) struct ComparisonProviderIdAndMaxDeviation {
 pub(crate) struct ComparisonProvider {
     #[serde(flatten)]
     pub provider: Provider,
-}
-
-impl ProviderConfig for ComparisonProvider {
-    const ENV_PREFIX: &'static str = "COMPARISON_";
-
-    fn name(&self) -> &str {
-        &self.provider.name
-    }
-
-    fn misc(&self) -> &BTreeMap<String, toml::Value> {
-        &self.provider.misc
-    }
 }

@@ -5,7 +5,7 @@ use reqwest::{
     Client as ReqwestClient, Error as ReqwestError, RequestBuilder, Response as ReqwestResponse,
     Url,
 };
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use thiserror::Error;
 use tokio::task::JoinSet;
 use toml::Value;
@@ -19,10 +19,12 @@ use chain_comms::{
 use crate::{
     config::{Currencies, EnvError, ProviderConfigExt, Symbol, Ticker},
     messages::{PoolId, QueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
-    provider::{FromConfig, Price, Provider, ProviderError},
+    price::{Price, Ratio},
+    provider::{FromConfig, Provider, ProviderError},
 };
 
 pub(crate) struct Osmosis {
+    instance_id: String,
     http_client: ReqwestClient,
     prices_rpc_url: Url,
     nolus_node: Arc<NodeClient>,
@@ -91,20 +93,19 @@ impl Osmosis {
         from_ticker: Ticker,
         to_ticker: Ticker,
     ) -> Result<Price, ReqwestError> {
-        response.json().await.map(
-            |AssetPrice {
-                 spot_price:
-                     Ratio {
-                         numerator: base,
-                         denominator: quote,
-                     },
-             }| Price::new(from_ticker, base, to_ticker, quote),
-        )
+        response
+            .json()
+            .await
+            .map(|AssetPrice { spot_price }| spot_price.to_price(from_ticker, to_ticker))
     }
 }
 
 #[async_trait]
 impl Provider for Osmosis {
+    fn instance_id(&self) -> &str {
+        &self.instance_id
+    }
+
     async fn get_prices(&self, fault_tolerant: bool) -> Result<Box<[Price]>, ProviderError> {
         let mut prices: Vec<Price> = Vec::new();
 
@@ -167,7 +168,7 @@ impl Provider for Osmosis {
 }
 
 #[async_trait]
-impl FromConfig for Osmosis {
+impl FromConfig<false> for Osmosis {
     const ID: &'static str = "osmosis";
 
     type ConstructError = ConstructError;
@@ -179,7 +180,7 @@ impl FromConfig for Osmosis {
         nolus_node: &Arc<NodeClient>,
     ) -> Result<Self, Self::ConstructError>
     where
-        Config: ProviderConfigExt,
+        Config: ProviderConfigExt<false>,
     {
         config
             .misc()
@@ -198,6 +199,7 @@ impl FromConfig for Osmosis {
                         Url::parse(&prices_rpc_url).map_err(ConstructError::InvalidPricesRpcUrl)
                     })
                     .map(|prices_rpc_url: Url| Self {
+                        instance_id: id.to_string(),
                         http_client: ReqwestClient::new(),
                         prices_rpc_url,
                         nolus_node: nolus_node.clone(),
@@ -234,51 +236,4 @@ struct TickerSymbol {
 #[derive(Debug, Deserialize)]
 pub struct AssetPrice {
     spot_price: Ratio,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct Ratio {
-    numerator: u128,
-    denominator: u128,
-}
-
-impl<'de> Deserialize<'de> for Ratio {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let point: usize;
-
-        let spot_price: String = {
-            let mut spot_price: String = String::deserialize(deserializer)?;
-
-            point = spot_price
-                .find('.')
-                .map_or(spot_price.len(), |point: usize| -> usize {
-                    spot_price = spot_price.trim_end_matches('0').into();
-
-                    spot_price.remove(point);
-
-                    point
-                });
-
-            spot_price
-        };
-
-        Ok(Ratio {
-            numerator: 10_u128
-                .checked_pow(
-                    (spot_price.len() - point)
-                        .try_into()
-                        .map_err(serde::de::Error::custom)?,
-                )
-                .ok_or_else(|| {
-                    serde::de::Error::custom("Couldn't calculate ratio! Exponent too big!")
-                })?,
-            denominator: spot_price
-                .trim_start_matches('0')
-                .parse()
-                .map_err(serde::de::Error::custom)?,
-        })
-    }
 }

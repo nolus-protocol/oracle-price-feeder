@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::provider::Price;
+use crate::price::Price;
 
 pub(crate) enum QueryMsg {}
 
