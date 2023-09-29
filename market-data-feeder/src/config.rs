@@ -9,14 +9,12 @@ use thiserror::Error as ThisError;
 
 use chain_comms::config::Node;
 
-pub(crate) use self::currencies::Currencies;
-
-mod currencies;
-
 pub(crate) type TickerUnsized = str;
 pub(crate) type Ticker = String;
 
 pub(crate) type Symbol = String;
+
+pub(crate) type Currencies = BTreeMap<Ticker, Symbol>;
 
 #[derive(Debug, Deserialize)]
 #[must_use]

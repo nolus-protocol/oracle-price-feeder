@@ -55,8 +55,8 @@ impl Osmosis {
             swap_legs
                 .into_iter()
                 .filter_map(|swap: SwapLeg| -> Option<Route> {
-                    let from_symbol: String = self.currencies.0.get(&swap.from).cloned()?;
-                    let to_symbol: String = self.currencies.0.get(&swap.to.target).cloned()?;
+                    let from_symbol: String = self.currencies.get(&swap.from).cloned()?;
+                    let to_symbol: String = self.currencies.get(&swap.to.target).cloned()?;
 
                     Some(Route {
                         pool_id: swap.to.pool_id,
