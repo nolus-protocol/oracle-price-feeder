@@ -14,7 +14,7 @@ pub enum Provider {
     FetchPoolPrice(reqwest::Error),
 
     #[error(
-        "Failed to fetch price from pool for pair \"{0}/{1}\" because server responded with an error! Returned status code: {0}"
+        "Failed to fetch price from pool for pair \"{0}/{1}\" because server responded with an error! Returned status code: {2}"
     )]
     ServerResponse(String, String, u16),
 
