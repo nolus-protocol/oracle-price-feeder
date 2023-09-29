@@ -1,9 +1,10 @@
 use std::{
     collections::BTreeMap,
     env::{self, var},
+    sync::Arc,
 };
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 use thiserror::Error as ThisError;
 
 use chain_comms::config::Node;
@@ -21,37 +22,13 @@ pub(crate) type Symbol = String;
 #[must_use]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) struct Config {
-    tick_time: u64,
-    providers: BTreeMap<String, ProviderWithComparison>,
-    comparison_providers: BTreeMap<String, ComparisonProvider>,
-    oracle_addr: String,
-    gas_limit: u64,
-    node: Node,
-}
-
-impl Config {
-    #[must_use]
-    pub fn tick_time(&self) -> u64 {
-        self.tick_time
-    }
-
-    pub fn providers(&self) -> &BTreeMap<String, ProviderWithComparison> {
-        &self.providers
-    }
-
-    pub fn comparison_providers(&self) -> &BTreeMap<String, ComparisonProvider> {
-        &self.comparison_providers
-    }
-
-    #[must_use]
-    pub fn oracle_addr(&self) -> &str {
-        &self.oracle_addr
-    }
-
-    #[must_use]
-    pub fn gas_limit(&self) -> u64 {
-        self.gas_limit
-    }
+    pub tick_time: u64,
+    pub providers: BTreeMap<String, ProviderWithComparison>,
+    pub comparison_providers: BTreeMap<String, ComparisonProvider>,
+    #[serde(deserialize_with = "deserialize_arc_str")]
+    pub oracle_addr: Arc<str>,
+    pub gas_limit: u64,
+    pub node: Node,
 }
 
 impl AsRef<Node> for Config {
@@ -61,9 +38,13 @@ impl AsRef<Node> for Config {
 }
 
 pub(crate) trait ProviderConfig: Sync + Send {
-    fn name(&self) -> &str;
+    fn name(&self) -> &Arc<str>;
 
     fn misc(&self) -> &BTreeMap<String, toml::Value>;
+
+    fn misc_mut(&mut self) -> &mut BTreeMap<String, toml::Value>;
+
+    fn into_misc(self) -> BTreeMap<String, toml::Value>;
 }
 
 pub(crate) trait ProviderConfigExt<const COMPARISON: bool>: ProviderConfig {
@@ -93,18 +74,27 @@ pub(crate) struct EnvError(String, env::VarError);
 #[must_use]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct Provider {
-    name: String,
+    #[serde(deserialize_with = "deserialize_arc_str")]
+    name: Arc<str>,
     #[serde(flatten)]
-    pub misc: BTreeMap<String, toml::Value>,
+    misc: BTreeMap<String, toml::Value>,
 }
 
 impl ProviderConfig for Provider {
-    fn name(&self) -> &str {
+    fn name(&self) -> &Arc<str> {
         &self.name
     }
 
     fn misc(&self) -> &BTreeMap<String, toml::Value> {
         &self.misc
+    }
+
+    fn misc_mut(&mut self) -> &mut BTreeMap<String, toml::Value> {
+        &mut self.misc
+    }
+
+    fn into_misc(self) -> BTreeMap<String, toml::Value> {
+        self.misc
     }
 }
 
@@ -143,4 +133,11 @@ pub(crate) struct ComparisonProviderIdAndMaxDeviation {
 pub(crate) struct ComparisonProvider {
     #[serde(flatten)]
     pub provider: Provider,
+}
+
+fn deserialize_arc_str<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Into::into)
 }

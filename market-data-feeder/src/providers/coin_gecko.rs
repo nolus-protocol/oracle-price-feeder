@@ -25,12 +25,30 @@ use crate::{
 };
 
 pub(crate) struct SanityCheck {
+    mandatory: bool,
     http_client: Arc<ReqwestClient>,
     ticker_mapping: BTreeMap<Arc<TickerUnsized>, Arc<str>>,
     supported_vs_currencies: BTreeSet<Arc<str>>,
 }
 
 impl SanityCheck {
+    fn extract_mandatory_check_flag<Config>(config: &mut Config) -> Result<bool, ConstructError>
+    where
+        Config: ProviderConfigExt<true>,
+    {
+        const MANDATORY_CHECK_FIELD: &str = "mandatory";
+
+        config
+            .misc_mut()
+            .remove(MANDATORY_CHECK_FIELD)
+            .ok_or(ConstructError::MissingField(MANDATORY_CHECK_FIELD))
+            .and_then(|value: Value| {
+                value.try_into().map_err(|error: toml::de::Error| {
+                    ConstructError::DeserializeField(MANDATORY_CHECK_FIELD, error)
+                })
+            })
+    }
+
     fn construct_http_client<Config>(id: &str) -> Result<Arc<ReqwestClient>, ConstructError>
     where
         Config: ProviderConfigExt<true>,
@@ -60,7 +78,7 @@ impl SanityCheck {
     }
 
     fn extract_ticker_mapping<Config>(
-        config: &Config,
+        config: &mut Config,
     ) -> Result<BTreeMap<Arc<TickerUnsized>, Arc<str>>, ConstructError>
     where
         Config: ProviderConfigExt<true>,
@@ -68,9 +86,8 @@ impl SanityCheck {
         const TICKER_MAPPING_FIELD: &str = "ticker_mapping";
 
         config
-            .misc()
-            .get(TICKER_MAPPING_FIELD)
-            .cloned()
+            .misc_mut()
+            .remove(TICKER_MAPPING_FIELD)
             .ok_or(ConstructError::MissingField(TICKER_MAPPING_FIELD))
             .and_then(|value: Value| {
                 value
@@ -276,32 +293,55 @@ impl ComparisonProvider for SanityCheck {
             set.spawn(Self::query(self.http_client.clone(), mappings, regex));
         }
 
-        while let Some(result) = set.join_next().await {
-            result
-                .map_err(BenchmarkError::JoinQueryTask)
-                .and_then(identity)
-                .map(|price: Price| comparison_prices.push(price))
-                .map_err(|error: BenchmarkError| {
-                    PriceComparisonGuardError::ProviderSpecific(Box::new(error))
-                })?;
-        }
+        if prices.is_empty() {
+            debug_assert!(set.is_empty());
 
-        let result =
-            deviation::compare_prices(&prices, &comparison_prices, max_deviation_exclusive).await;
+            if self.mandatory {
+                tracing::error!(
+                    "Sanity check failed for provider with ID: {id}! No intersection of prices is empty!",
+                    id = benchmarked_provider.instance_id()
+                );
 
-        if result.is_ok() {
-            tracing::info!(
-                "Sanity check passed for provider with ID: {id}.",
-                id = benchmarked_provider.instance_id()
-            );
+                Err(PriceComparisonGuardError::ProviderSpecific(Box::new(
+                    BenchmarkError::EmptyPricesIntersection,
+                )))
+            } else {
+                tracing::warn!(
+                    "Sanity check unavailable for provider with ID: {id}! No intersection of prices is empty!",
+                    id = benchmarked_provider.instance_id()
+                );
+
+                Ok(())
+            }
         } else {
-            tracing::error!(
-                "Sanity check failed for provider with ID: {id}!",
-                id = benchmarked_provider.instance_id()
-            );
-        }
+            while let Some(result) = set.join_next().await {
+                result
+                    .map_err(BenchmarkError::JoinQueryTask)
+                    .and_then(identity)
+                    .map(|price: Price| comparison_prices.push(price))
+                    .map_err(|error: BenchmarkError| {
+                        PriceComparisonGuardError::ProviderSpecific(Box::new(error))
+                    })?;
+            }
 
-        result
+            let result: Result<(), PriceComparisonGuardError> =
+                deviation::compare_prices(&prices, &comparison_prices, max_deviation_exclusive)
+                    .await;
+
+            if result.is_ok() {
+                tracing::info!(
+                    "Sanity check passed for provider with ID: {id}.",
+                    id = benchmarked_provider.instance_id()
+                );
+            } else {
+                tracing::error!(
+                    "Sanity check failed for provider with ID: {id}!",
+                    id = benchmarked_provider.instance_id()
+                );
+            }
+
+            result
+        }
     }
 }
 
@@ -317,6 +357,8 @@ enum BenchmarkError {
     InvalidUtf8(FromUtf8Error),
     #[error("Failed to parse price! Cause: {0}")]
     ParsePrice(price::Error),
+    #[error("Failed to benchmark prices because intersection is empty!")]
+    EmptyPricesIntersection,
     #[error("Failed to join price query task into main one! Cause: {0}")]
     JoinQueryTask(tokio::task::JoinError),
 }
@@ -329,25 +371,45 @@ impl FromConfig<true> for SanityCheck {
 
     async fn from_config<Config>(
         id: &str,
-        config: &Config,
+        mut config: Config,
         _: &Arc<str>,
         _: &Arc<NodeClient>,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<true>,
     {
+        let mandatory: bool = Self::extract_mandatory_check_flag(&mut config)?;
+
         let http_client: Arc<ReqwestClient> = Self::construct_http_client::<Config>(id)?;
 
         let ticker_mapping: BTreeMap<Arc<TickerUnsized>, Arc<str>> =
-            Self::extract_ticker_mapping(config)?;
+            Self::extract_ticker_mapping(&mut config)?;
 
-        Self::fetch_supported_vs_currencies(&http_client, &ticker_mapping)
-            .await
-            .map(|supported_vs_currencies: BTreeSet<Arc<str>>| Self {
-                http_client,
-                ticker_mapping,
-                supported_vs_currencies,
-            })
+        if let Some(fields) =
+            config
+                .into_misc()
+                .into_keys()
+                .reduce(|mut accumulator: String, key: String| {
+                    accumulator.reserve(key.len() + 2);
+
+                    accumulator.push_str(", ");
+
+                    accumulator.push_str(&key);
+
+                    accumulator
+                })
+        {
+            Err(ConstructError::UnknownFields(fields.into_boxed_str()))
+        } else {
+            Self::fetch_supported_vs_currencies(&http_client, &ticker_mapping)
+                .await
+                .map(|supported_vs_currencies: BTreeSet<Arc<str>>| Self {
+                    mandatory,
+                    http_client,
+                    ticker_mapping,
+                    supported_vs_currencies,
+                })
+        }
     }
 }
 
@@ -363,6 +425,8 @@ pub(crate) enum ConstructError {
     ConstructApiKeyHeaderValue(#[from] http::header::InvalidHeaderValue),
     #[error("Failed to construct HTTP client! Cause: {0}")]
     ConstructHttpClient(ReqwestError),
+    #[error("Unknown fields found! Unknown fields: {0}")]
+    UnknownFields(Box<str>),
     #[error("Failed to send \"supported versus currencies\"! Cause: {0}")]
     SendSupportedVsCurrencies(ReqwestError),
     #[error("Failed to fetch \"supported versus currencies\"! Cause: {0}")]

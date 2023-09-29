@@ -82,7 +82,7 @@ async fn app_main() -> Result<()> {
 
     info!("Starting workers...");
 
-    let tick_time: Duration = Duration::from_secs(config.tick_time());
+    let tick_time: Duration = Duration::from_secs(config.tick_time);
 
     let (recovery_mode_sender, recovery_mode_receiver): WatchChannel<bool> = watch::channel(false);
 
@@ -91,9 +91,9 @@ async fn app_main() -> Result<()> {
         mut receiver,
     }: workers::SpawnWorkersReturn = workers::spawn(
         nolus_node.clone(),
-        config.providers().clone(),
-        config.comparison_providers(),
-        config.oracle_addr().into(),
+        config.providers,
+        config.comparison_providers,
+        config.oracle_addr.clone(),
         tick_time,
         recovery_mode_receiver,
     )
@@ -141,7 +141,7 @@ async fn app_main() -> Result<()> {
         let mut is_retry: bool = false;
 
         let mut tx: Option<ContractTx> = Some(messages.into_values().fold(
-            ContractTx::new(config.oracle_addr().to_string()),
+            ContractTx::new(config.oracle_addr.to_string()),
             |tx: ContractTx, msg: Vec<u8>| tx.add_message(msg, Vec::new()),
         ));
 
@@ -161,8 +161,8 @@ async fn app_main() -> Result<()> {
             let successful: bool = commit_tx_with_gas_estimation(
                 &mut signer,
                 &nolus_node,
-                config.as_ref(),
-                config.gas_limit(),
+                &config.node,
+                config.gas_limit,
                 tx,
                 fallback_gas_limit,
             )
@@ -270,7 +270,7 @@ async fn check_compatibility(config: &Config, client: &Client) -> Result<()> {
     {
         let version: SemVer = client
             .with_grpc(|rpc: TonicChannel| {
-                query_wasm(rpc, config.oracle_addr(), QueryMsg::CONTRACT_VERSION)
+                query_wasm(rpc, &config.oracle_addr, QueryMsg::CONTRACT_VERSION)
             })
             .await?;
 

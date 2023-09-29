@@ -175,7 +175,7 @@ impl FromConfig<false> for Osmosis {
 
     async fn from_config<Config>(
         id: &str,
-        config: &Config,
+        mut config: Config,
         oracle_addr: &Arc<str>,
         nolus_node: &Arc<NodeClient>,
     ) -> Result<Self, Self::ConstructError>
@@ -183,29 +183,45 @@ impl FromConfig<false> for Osmosis {
         Config: ProviderConfigExt<false>,
     {
         config
-            .misc()
-            .get("currencies")
+            .misc_mut()
+            .remove("currencies")
             .ok_or(ConstructError::MissingField("currencies"))
-            .cloned()
             .and_then(|value: Value| {
                 value.try_into().map_err(|error: toml::de::Error| {
                     ConstructError::DeserializeField("currencies", error)
                 })
             })
             .and_then(|currencies: Currencies| {
-                Config::fetch_from_env(id, "RPC_URL")
-                    .map_err(ConstructError::FetchPricesRpcUrl)
-                    .and_then(|prices_rpc_url: String| {
-                        Url::parse(&prices_rpc_url).map_err(ConstructError::InvalidPricesRpcUrl)
-                    })
-                    .map(|prices_rpc_url: Url| Self {
-                        instance_id: id.to_string(),
-                        http_client: ReqwestClient::new(),
-                        prices_rpc_url,
-                        nolus_node: nolus_node.clone(),
-                        oracle_addr: oracle_addr.clone(),
-                        currencies,
-                    })
+                if let Some(fields) =
+                    config
+                        .into_misc()
+                        .into_keys()
+                        .reduce(|mut accumulator: String, key: String| {
+                            accumulator.reserve(key.len() + 2);
+
+                            accumulator.push_str(", ");
+
+                            accumulator.push_str(&key);
+
+                            accumulator
+                        })
+                {
+                    Err(ConstructError::UnknownFields(fields.into_boxed_str()))
+                } else {
+                    Config::fetch_from_env(id, "RPC_URL")
+                        .map_err(ConstructError::FetchPricesRpcUrl)
+                        .and_then(|prices_rpc_url: String| {
+                            Url::parse(&prices_rpc_url).map_err(ConstructError::InvalidPricesRpcUrl)
+                        })
+                        .map(|prices_rpc_url: Url| Self {
+                            instance_id: id.to_string(),
+                            http_client: ReqwestClient::new(),
+                            prices_rpc_url,
+                            nolus_node: nolus_node.clone(),
+                            oracle_addr: oracle_addr.clone(),
+                            currencies,
+                        })
+                }
             })
     }
 }
@@ -216,6 +232,8 @@ pub(crate) enum ConstructError {
     MissingField(&'static str),
     #[error("Failed to deserialize field \"{0}\"! Cause: {1}")]
     DeserializeField(&'static str, toml::de::Error),
+    #[error("Unknown fields found! Unknown fields: {0}")]
+    UnknownFields(Box<str>),
     #[error("Failed to fetch prices RPC's URL from environment variables! Cause: {0}")]
     FetchPricesRpcUrl(#[from] EnvError),
     #[error("Failed to parse prices RPC's URL! Cause: {0}")]

@@ -18,7 +18,8 @@ use chain_comms::client::Client;
 use crate::{
     config::{
         ComparisonProvider as ComparisonProviderConfig, ComparisonProviderIdAndMaxDeviation,
-        ProviderConfig as _, ProviderWithComparison as ProviderWithComparisonConfig,
+        Provider as ProviderConfig, ProviderConfig as _,
+        ProviderWithComparison as ProviderWithComparisonConfig,
     },
     error,
     messages::ExecuteMsg,
@@ -40,17 +41,17 @@ pub(crate) struct SpawnWorkersReturn {
 pub(crate) async fn spawn(
     nolus_node: Arc<Client>,
     providers: BTreeMap<String, ProviderWithComparisonConfig>,
-    price_comparison_providers: &BTreeMap<String, ComparisonProviderConfig>,
+    price_comparison_providers: BTreeMap<String, ComparisonProviderConfig>,
     oracle_addr: Arc<str>,
     tick_time: Duration,
     recovery_mode: watch::Receiver<bool>,
 ) -> AppResult<SpawnWorkersReturn> {
     let mut set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
 
-    let price_comparison_providers: BTreeMap<String, Arc<dyn ComparisonProvider>> =
+    let price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>> =
         block_in_place(|| {
             price_comparison_providers
-                .iter()
+                .into_iter()
                 .map(construct_comparison_provider_f(&oracle_addr, &nolus_node))
                 .collect::<Result<_, _>>()
         })?;
@@ -59,7 +60,7 @@ pub(crate) async fn spawn(
 
     block_in_place(move || {
         providers
-            .iter()
+            .into_iter()
             .enumerate()
             .try_for_each(try_for_each_provider_f(
                 price_comparison_providers,
@@ -77,73 +78,70 @@ pub(crate) async fn spawn(
 fn construct_comparison_provider_f(
     oracle_addr: &Arc<str>,
     nolus_node: &Arc<Client>,
-) -> impl Fn((&String, &ComparisonProviderConfig)) -> AppResult<(String, Arc<dyn ComparisonProvider>)>
+) -> impl Fn((String, ComparisonProviderConfig)) -> AppResult<(Arc<str>, Arc<dyn ComparisonProvider>)>
 {
     let nolus_node: Arc<Client> = nolus_node.clone();
     let oracle_addr: Arc<str> = oracle_addr.clone();
 
-    move |(id, config): (&String, &ComparisonProviderConfig)| {
-        providers::Providers::visit_comparison_provider(
-            config.provider.name(),
+    move |(id, config): (String, ComparisonProviderConfig)| {
+        let id: Arc<str> = id.into();
+
+        if let Some(result) = providers::Providers::visit_comparison_provider(
+            &config.provider.name().clone(),
             PriceComparisonProviderVisitor {
-                provider_id: id,
+                provider_id: id.clone(),
                 provider_config: config,
                 oracle_addr: &oracle_addr,
                 nolus_node: &nolus_node,
             },
-        )
-        .map_or_else(
-            || {
-                Err(error::Application::UnknownPriceComparisonProviderId(
-                    id.clone(),
-                ))
-            },
-            |result: Result<Arc<dyn ComparisonProvider>, error::Worker>| {
-                result
-                    .map(|comparison_provider: Arc<dyn ComparisonProvider>| {
-                        (id.clone(), comparison_provider)
-                    })
-                    .map_err(error::Application::Worker)
-            },
-        )
+        ) {
+            result
+                .map(|comparison_provider: Arc<dyn ComparisonProvider>| (id, comparison_provider))
+                .map_err(error::Application::Worker)
+        } else {
+            Err(error::Application::UnknownPriceComparisonProviderId(id))
+        }
     }
 }
 
 fn try_for_each_provider_f(
-    price_comparison_providers: BTreeMap<String, Arc<dyn ComparisonProvider>>,
+    price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>>,
     set: &mut JoinSet<Result<(), error::Worker>>,
     tick_time: Duration,
     recovery_mode: watch::Receiver<bool>,
     nolus_node: Arc<Client>,
     sender: UnboundedSender<(usize, Instant, String)>,
     oracle_addr: Arc<str>,
-) -> impl FnMut((usize, (&String, &ProviderWithComparisonConfig))) -> AppResult<()> + '_ {
-    move |(monotonic_id, (id, config)): (usize, (&String, &ProviderWithComparisonConfig))| {
+) -> impl FnMut((usize, (String, ProviderWithComparisonConfig))) -> AppResult<()> + '_ {
+    move |(monotonic_id, (id, config)): (usize, (String, ProviderWithComparisonConfig))| {
         config
             .comparison
-            .as_ref()
             .map(
-                |&ComparisonProviderIdAndMaxDeviation {
-                     provider_id: ref provider,
+                |ComparisonProviderIdAndMaxDeviation {
+                     provider_id,
                      max_deviation_exclusive,
-                 }: &ComparisonProviderIdAndMaxDeviation| {
-                    price_comparison_providers.get(provider).map_or_else(
-                        || {
-                            Err(error::Application::UnknownPriceComparisonProviderId(
-                                provider.to_string(),
-                            ))
-                        },
-                        |provider: &Arc<dyn ComparisonProvider>| {
-                            Ok((provider, max_deviation_exclusive))
-                        },
-                    )
+                 }: ComparisonProviderIdAndMaxDeviation| {
+                    price_comparison_providers
+                        .get(provider_id.as_str())
+                        .map_or_else(
+                            || {
+                                Err(error::Application::UnknownPriceComparisonProviderId(
+                                    provider_id.into(),
+                                ))
+                            },
+                            |provider: &Arc<dyn ComparisonProvider>| {
+                                Ok((provider, max_deviation_exclusive))
+                            },
+                        )
                 },
             )
             .transpose()
             .and_then(
                 |price_comparison_provider: Option<(&Arc<dyn ComparisonProvider>, u64)>| {
+                    let provider_name: Arc<str> = config.provider.name().clone();
+
                     providers::Providers::visit_provider(
-                        config.provider.name(),
+                        &provider_name,
                         TaskSpawningProviderVisitor {
                             worker_task_spawner_config: TaskSpawnerConfig {
                                 set,
@@ -152,16 +150,14 @@ fn try_for_each_provider_f(
                                 recovery_mode: &recovery_mode,
                                 price_comparison_provider,
                             },
-                            provider_id: id,
-                            provider_config: config,
+                            provider_id: &id,
+                            provider_config: config.provider,
                             nolus_node: &nolus_node,
                             sender: &sender,
                             oracle_addr: &oracle_addr,
                         },
                     )
-                    .ok_or(error::Application::UnknownProviderId(String::from(
-                        config.provider.name(),
-                    )))
+                    .ok_or(error::Application::UnknownProviderId(provider_name))
                     .and_then(|result: Result<(), error::Worker>| result.map_err(From::from))
                 },
             )
@@ -177,8 +173,8 @@ struct TaskSpawnerConfig<'r> {
 }
 
 struct PriceComparisonProviderVisitor<'r> {
-    provider_id: &'r str,
-    provider_config: &'r ComparisonProviderConfig,
+    provider_id: Arc<str>,
+    provider_config: ComparisonProviderConfig,
     oracle_addr: &'r Arc<str>,
     nolus_node: &'r Arc<Client>,
 }
@@ -192,17 +188,14 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
     {
         Handle::current()
             .block_on(FromConfig::<true>::from_config(
-                self.provider_id,
-                &self.provider_config.provider,
+                &self.provider_id,
+                self.provider_config.provider,
                 self.oracle_addr,
                 self.nolus_node,
             ))
             .map(|provider: P| Arc::new(provider) as Arc<dyn ComparisonProvider>)
             .map_err(|error: P::ConstructError| {
-                error::Worker::InstantiatePriceComparisonProvider(
-                    self.provider_id.to_string(),
-                    Box::new(error),
-                )
+                error::Worker::InstantiatePriceComparisonProvider(self.provider_id, Box::new(error))
             })
     }
 }
@@ -210,7 +203,7 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
 struct TaskSpawningProviderVisitor<'r> {
     worker_task_spawner_config: TaskSpawnerConfig<'r>,
     provider_id: &'r str,
-    provider_config: &'r ProviderWithComparisonConfig,
+    provider_config: ProviderConfig,
     nolus_node: &'r Arc<Client>,
     sender: &'r UnboundedSender<(usize, Instant, String)>,
     oracle_addr: &'r Arc<str>,
@@ -225,7 +218,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
     {
         match block_on(<P as FromConfig<false>>::from_config(
             self.provider_id,
-            &self.provider_config.provider,
+            self.provider_config,
             self.oracle_addr,
             self.nolus_node,
         )) {

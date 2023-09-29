@@ -1,4 +1,4 @@
-use std::{error::Error as StdError, sync::Arc};
+use std::{collections::BTreeMap, error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
 use futures::{FutureExt as _, TryFutureExt as _};
@@ -77,7 +77,7 @@ pub(crate) trait FromConfig<const COMPARISON: bool>: Sync + Send + Sized + 'stat
 
     async fn from_config<Config>(
         id: &str,
-        config: &Config,
+        config: Config,
         oracle_addr: &Arc<str>,
         nolus_client: &Arc<NodeClient>,
     ) -> Result<Self, Self::ConstructError>
@@ -93,30 +93,44 @@ impl<T: FromConfig<false>> FromConfig<true> for T {
 
     async fn from_config<Config>(
         id: &str,
-        config: &Config,
+        config: Config,
         oracle_addr: &Arc<str>,
         nolus_client: &Arc<NodeClient>,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<true>,
     {
-        <T as FromConfig<false>>::from_config(id, &F(config), oracle_addr, nolus_client).await
+        <T as FromConfig<false>>::from_config(
+            id,
+            ProviderConfigWrapper(config),
+            oracle_addr,
+            nolus_client,
+        )
+        .await
     }
 }
 
-struct F<'r, Config: ProviderConfigExt<true>>(&'r Config);
+struct ProviderConfigWrapper<Config: ProviderConfigExt<true>>(Config);
 
-impl<'r, Config: ProviderConfigExt<true>> ProviderConfig for F<'r, Config> {
-    fn name(&self) -> &str {
+impl<Config: ProviderConfigExt<true>> ProviderConfig for ProviderConfigWrapper<Config> {
+    fn name(&self) -> &Arc<str> {
         self.0.name()
     }
 
-    fn misc(&self) -> &std::collections::BTreeMap<String, toml::Value> {
+    fn misc(&self) -> &BTreeMap<String, toml::Value> {
         self.0.misc()
+    }
+
+    fn misc_mut(&mut self) -> &mut BTreeMap<String, toml::Value> {
+        self.0.misc_mut()
+    }
+
+    fn into_misc(self) -> BTreeMap<String, toml::Value> {
+        self.0.into_misc()
     }
 }
 
-impl<'r, Config: ProviderConfigExt<true>> ProviderConfigExt<false> for F<'r, Config> {
+impl<Config: ProviderConfigExt<true>> ProviderConfigExt<false> for ProviderConfigWrapper<Config> {
     fn fetch_from_env(id: &str, name: &str) -> Result<String, crate::config::EnvError> {
         Config::fetch_from_env(id, name)
     }

@@ -1,4 +1,4 @@
-use std::error::Error as StdError;
+use std::{error::Error as StdError, sync::Arc};
 
 use thiserror::Error as ThisError;
 
@@ -22,9 +22,9 @@ pub(crate) enum Application {
         actual: SemVer,
     },
     #[error("Unknown provider identifier! Got: {0}")]
-    UnknownProviderId(String),
+    UnknownProviderId(Arc<str>),
     #[error("Unknown price comparison provider identifier! Got: {0}")]
-    UnknownPriceComparisonProviderId(String),
+    UnknownPriceComparisonProviderId(Arc<str>),
     #[error("Failed to instantiate provider! Cause: {0}")]
     InvalidProviderUrl(#[from] url::ParseError),
     #[error("Failed to commit price feeding transaction! Cause: {0}")]
@@ -38,7 +38,7 @@ pub(crate) enum Worker {
     #[error("Failed to instantiate provider with id: {0}! Cause: {1}")]
     InstantiateProvider(String, Box<dyn StdError + Send + 'static>),
     #[error("Failed to instantiate price comparison provider with id: {0}! Cause: {1}")]
-    InstantiatePriceComparisonProvider(String, Box<dyn StdError + Send + 'static>),
+    InstantiatePriceComparisonProvider(Arc<str>, Box<dyn StdError + Send + 'static>),
     #[error("Price comparison guard failure! Cause: {0}")]
     PriceComparisonGuard(#[from] PriceComparisonGuardError),
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
