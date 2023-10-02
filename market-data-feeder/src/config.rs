@@ -1,10 +1,14 @@
 use std::{
     collections::BTreeMap,
     env::{self, var},
+    fmt::{Formatter, Result as FmtResult},
     sync::Arc,
 };
 
-use serde::{Deserialize, Deserializer};
+use serde::{
+    de::{Deserializer, Error as DeserializeError, MapAccess, Visitor},
+    Deserialize,
+};
 use thiserror::Error as ThisError;
 
 use chain_comms::config::Node;
@@ -21,6 +25,7 @@ pub(crate) type Currencies = BTreeMap<Ticker, Symbol>;
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) struct Config {
     pub tick_time: u64,
+    #[serde(deserialize_with = "deserialize_providers_map")]
     pub providers: BTreeMap<String, ProviderWithComparison>,
     pub comparison_providers: BTreeMap<String, ComparisonProvider>,
     #[serde(deserialize_with = "deserialize_arc_str")]
@@ -108,18 +113,15 @@ impl ProviderConfigExt<false> for Provider {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 #[must_use]
-#[serde(rename_all = "snake_case")]
 pub(crate) struct ProviderWithComparison {
     pub comparison: Option<ComparisonProviderIdAndMaxDeviation>,
-    #[serde(flatten)]
     pub provider: Provider,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 #[must_use]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) struct ComparisonProviderIdAndMaxDeviation {
     pub provider_id: String,
     pub max_deviation_exclusive: u64,
@@ -131,6 +133,95 @@ pub(crate) struct ComparisonProviderIdAndMaxDeviation {
 pub(crate) struct ComparisonProvider {
     #[serde(flatten)]
     pub provider: Provider,
+}
+
+fn deserialize_providers_map<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, ProviderWithComparison>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct V;
+
+    impl<'de> Visitor<'de> for V {
+        type Value = BTreeMap<String, ProviderWithComparison>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
+            formatter.write_str("price feed provider with optional comparison provider")
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'de>,
+        {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "snake_case", deny_unknown_fields)]
+            pub(crate) struct RawComparisonProviderId {
+                pub provider_id: String,
+            }
+
+            impl RawComparisonProviderId {
+                fn read_from_env_and_convert<E>(
+                    self,
+                    id: &str,
+                ) -> Result<ComparisonProviderIdAndMaxDeviation, E>
+                where
+                    E: DeserializeError,
+                {
+                    <Provider as ProviderConfigExt<false>>::fetch_from_env(id, "max_deviation")
+                        .map_err(E::custom)
+                        .and_then(|value: String| {
+                            value
+                                .parse()
+                                .map_err(E::custom)
+                                .map(|max_deviation_exclusive: u64| {
+                                    ComparisonProviderIdAndMaxDeviation {
+                                        provider_id: self.provider_id,
+                                        max_deviation_exclusive,
+                                    }
+                                })
+                        })
+                }
+            }
+
+            #[derive(Deserialize)]
+            #[serde(rename_all = "snake_case")]
+            struct RawProviderWithComparison {
+                comparison: Option<RawComparisonProviderId>,
+                #[serde(flatten)]
+                provider: Provider,
+            }
+
+            let mut providers: BTreeMap<String, ProviderWithComparison> = BTreeMap::new();
+
+            while let Some((
+                id,
+                RawProviderWithComparison {
+                    comparison,
+                    provider,
+                },
+            )) = map.next_entry::<String, RawProviderWithComparison>()?
+            {
+                let comparison: Option<ComparisonProviderIdAndMaxDeviation> = comparison
+                    .map(|comparison: RawComparisonProviderId| {
+                        comparison.read_from_env_and_convert::<A::Error>(&id)
+                    })
+                    .transpose()?;
+
+                providers.insert(
+                    id,
+                    ProviderWithComparison {
+                        comparison,
+                        provider,
+                    },
+                );
+            }
+
+            Ok(providers)
+        }
+    }
+
+    deserializer.deserialize_map(V)
 }
 
 fn deserialize_arc_str<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>

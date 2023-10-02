@@ -13,6 +13,8 @@ gas_price_denominator = 390
 
 [providers.osmosis-lcd]
 name = "osmosis"
+[providers.osmosis-lcd.comparison]
+provider_id = "sanity_check"
 [providers.osmosis-lcd.currencies]
 AKT = "ibc/7153C8C55DB988805FAC69E449B680A8BAAC15944B87CF210ADCD1A3A9542857"
 ATOM = "ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477"
@@ -28,4 +30,25 @@ USDC = "ibc/6F34E1BD664C36CE49ACC28E60D62559A5F96C4F9A6CCE4FC5A67B2852E24CFE"
 WBTC = "ibc/BDA12A41BCF2DFB005A0794876E0E71D9538E0A7EB9607F600435EDDE5393EC4"
 WETH = "ibc/8AE11672A7DF38BF7B484AB642C5C85BA4A94810D57AE8945151818CD6179427"
 
-[comparison_providers]
+[comparison_providers.sanity_check]
+name = "coin_gecko_sanity_check"
+mandatory = true
+[comparison_providers.sanity_check.ticker_mapping]
+AKT = "akash-network"
+ATOM = "cosmos-hub"
+AXL = "axelar"
+CRO = "cronos"
+EVMOS = "evmos"
+INJ = "injective"
+JUNO = "juno-network"
+SCRT = "secret"
+ST_ATOM = "stride-staked-atom"
+ST_OSMO = "stride-staked-osmo"
+STARS = "stargaze"
+STK_ATOM = "stkatom"
+STRD = "stride"
+NLS = "nolus"
+OSMO = "osmosis"
+USDC = "usd"
+WBTC = "bitcoin"
+WETH = "ethereum"
