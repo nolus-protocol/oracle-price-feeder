@@ -67,6 +67,7 @@ jobs:
     needs:
       - "code_coverage"
       - "test_release_profile"
+    if: "github.ref_type == 'tag'"
     steps:
       - uses: "actions/checkout@v3"
       - name: "Build compiling image"
