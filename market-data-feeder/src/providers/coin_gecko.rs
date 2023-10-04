@@ -21,7 +21,7 @@ use crate::{
     config::{self, ProviderConfigExt, Ticker, TickerUnsized},
     deviation,
     price::{self, Price, Ratio},
-    provider::{ComparisonProvider, FromConfig, PriceComparisonGuardError, Provider},
+    provider::{ComparisonProvider, FromConfig, PriceComparisonGuardError},
 };
 
 pub(crate) struct SanityCheck {
@@ -266,14 +266,11 @@ struct Mappings {
 impl ComparisonProvider for SanityCheck {
     async fn benchmark_prices(
         &self,
-        benchmarked_provider: &dyn Provider,
+        benchmarked_provider_id: &str,
+        prices: &[Price],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError> {
-        let mut prices: Vec<Price> = benchmarked_provider
-            .get_prices(true)
-            .await
-            .map_err(PriceComparisonGuardError::FetchPrices)?
-            .into_vec();
+        let mut prices: Vec<Price> = prices.to_vec();
 
         let mut comparison_prices: Vec<Price> = Vec::new();
 
@@ -299,16 +296,16 @@ impl ComparisonProvider for SanityCheck {
             if self.mandatory {
                 tracing::error!(
                     "Sanity check failed for provider with ID: {id}! No intersection of prices is empty!",
-                    id = benchmarked_provider.instance_id()
+                    id = benchmarked_provider_id,
                 );
 
-                Err(PriceComparisonGuardError::ProviderSpecific(Box::new(
+                Err(PriceComparisonGuardError::ComparisonProviderSpecific(Box::new(
                     BenchmarkError::EmptyPricesIntersection,
                 )))
             } else {
                 tracing::warn!(
                     "Sanity check unavailable for provider with ID: {id}! No intersection of prices is empty!",
-                    id = benchmarked_provider.instance_id()
+                    id = benchmarked_provider_id,
                 );
 
                 Ok(())
@@ -320,7 +317,7 @@ impl ComparisonProvider for SanityCheck {
                     .and_then(identity)
                     .map(|price: Price| comparison_prices.push(price))
                     .map_err(|error: BenchmarkError| {
-                        PriceComparisonGuardError::ProviderSpecific(Box::new(error))
+                        PriceComparisonGuardError::ComparisonProviderSpecific(Box::new(error))
                     })?;
             }
 
@@ -331,12 +328,12 @@ impl ComparisonProvider for SanityCheck {
             if result.is_ok() {
                 tracing::info!(
                     "Sanity check passed for provider with ID: {id}.",
-                    id = benchmarked_provider.instance_id()
+                    id = benchmarked_provider_id,
                 );
             } else {
                 tracing::error!(
                     "Sanity check failed for provider with ID: {id}!",
-                    id = benchmarked_provider.instance_id()
+                    id = benchmarked_provider_id,
                 );
             }
 
