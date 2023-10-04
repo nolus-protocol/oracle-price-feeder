@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use futures::{FutureExt as _, TryFutureExt as _};
 
 use chain_comms::client::Client as NodeClient;
+use tracing::{error, info};
 
 use crate::{
     config::{ProviderConfig, ProviderConfigExt},
@@ -27,7 +28,8 @@ pub(crate) trait Provider: Sync + Send + 'static {
 pub(crate) trait ComparisonProvider: Sync + Send + 'static {
     async fn benchmark_prices(
         &self,
-        benchmarked_provider: &dyn Provider,
+        benchmarked_provider_id: &str,
+        prices: &[Price],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError>;
 }
@@ -39,32 +41,29 @@ where
 {
     async fn benchmark_prices(
         &self,
-        benchmarked_provider: &dyn Provider,
+        benchmarked_provider_id: &str,
+        prices: &[Price],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError> {
         self.get_prices(false)
             .map(|result: Result<Box<[Price]>, ProviderError>| {
                 result.map_err(PriceComparisonGuardError::FetchPrices)
             })
-            .and_then(|prices: Box<[Price]>| {
-                benchmarked_provider.get_prices(false).map(
-                    |result: Result<Box<[Price]>, ProviderError>| {
-                        result
-                            .map(|comparison_prices: Box<[Price]>| (prices, comparison_prices))
-                            .map_err(PriceComparisonGuardError::FetchComparisonPrices)
-                    },
+            .and_then(|comparison_prices: Box<[Price]>| async move {
+                let result: Result<(), PriceComparisonGuardError> = crate::deviation::compare_prices(
+                    &prices,
+                    &comparison_prices,
+                    max_deviation_exclusive,
                 )
+                .await;
+
+                match &result {
+                    Ok(()) => info!("Price comparison guard check of \"{benchmarked_provider_id}\" passed against \"{self_id}\".", self_id = self.instance_id()),
+                    Err(error) => error!(error = ?error, "Price comparison guard check of \"{benchmarked_provider_id}\" failed against \"{self_id}\"! Cause: {error}", self_id = self.instance_id()),
+                }
+
+                result
             })
-            .and_then(
-                |(prices, comparison_prices): (Box<[Price]>, Box<[Price]>)| async move {
-                    crate::deviation::compare_prices(
-                        &prices,
-                        &comparison_prices,
-                        max_deviation_exclusive,
-                    )
-                    .await
-                },
-            )
             .await
     }
 }
