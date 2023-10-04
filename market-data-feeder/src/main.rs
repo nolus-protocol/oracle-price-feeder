@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, io, sync::Arc, task::Context, time::Duration};
+use std::{
+    collections::BTreeMap,
+    io,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use futures::future::poll_fn;
 use tokio::{
@@ -104,7 +110,12 @@ async fn app_main() -> Result<()> {
     let mut fallback_gas_limit: Option<u64> = None;
 
     'feeder_loop: loop {
-        if let Some(result) = poll_fn(|cx: &mut Context| set.poll_join_next(cx)).await {
+        if let Some(result) = poll_fn(|cx: &mut Context| match set.poll_join_next(cx) {
+            Poll::Pending => Poll::Ready(None),
+            result => result,
+        })
+        .await
+        {
             match result {
                 Ok(Ok(())) => unreachable!(),
                 Ok(Err(error)) => {
