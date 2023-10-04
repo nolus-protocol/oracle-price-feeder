@@ -32,8 +32,6 @@ pub enum Provider {
 pub(crate) enum PriceComparisonGuard {
     #[error("Failed to fetch prices for price comparison guard! Cause: {0}")]
     FetchPrices(Provider),
-    #[error("Failed to fetch comparison prices for price comparison guard! Cause: {0}")]
-    FetchComparisonPrices(Provider),
     #[error("Price comparison guard failed due to a duplicated price! Duplicated pair: {0}/{1}")]
     DuplicatePrice(String, String),
     #[error(
@@ -43,5 +41,5 @@ pub(crate) enum PriceComparisonGuard {
     #[error("Price deviation too big for \"{0}/{1}\" pair! Deviation equal to {2} percent!")]
     DeviationTooBig(String, String, crate::deviation::UInt),
     #[error("Failure due to an provider-specific error! Cause: {0}")]
-    ProviderSpecific(Box<dyn StdError + Send + 'static>),
+    ComparisonProviderSpecific(Box<dyn StdError + Send + 'static>),
 }
