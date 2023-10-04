@@ -14,7 +14,7 @@ use tokio::{
     },
     time::{sleep, timeout, Instant},
 };
-use tracing::{error, info, info_span, span::EnteredSpan};
+use tracing::{error, info, info_span};
 use tracing_appender::{
     non_blocking::{NonBlocking, WorkerGuard},
     rolling::RollingFileAppender,
@@ -237,19 +237,21 @@ async fn recovery_loop(
     recovery_mode_sender: &watch::Sender<bool>,
     client: &Arc<Client>,
 ) -> RecoveryStatus {
-    let span: EnteredSpan = info_span!("recover-after-error").entered();
+    let set_in_recovery = info_span!("recover-after-error").in_scope(|| {
+        info!("After-error recovery needed!");
 
-    info!("After-error recovery needed!");
+        let set_in_recovery = |in_recovery: bool| {
+            let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
 
-    let set_in_recovery = |in_recovery: bool| {
-        let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
+            if is_error {
+                error!("Recovery mode state watch closed! Exiting broadcasting loop...");
+            }
 
-        if is_error {
-            error!("Recovery mode state watch closed! Exiting broadcasting loop...");
-        }
+            is_error
+        };
 
-        is_error
-    };
+        set_in_recovery
+    });
 
     let recovered: RecoveryStatus = recover_after_error(signer, client.as_ref()).await;
 
@@ -269,8 +271,6 @@ async fn recovery_loop(
             return RecoveryStatus::Error;
         }
     }
-
-    drop(span);
 
     RecoveryStatus::Success
 }
