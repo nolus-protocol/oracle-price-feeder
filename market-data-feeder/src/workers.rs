@@ -11,7 +11,7 @@ use tokio::{
     task::{block_in_place, JoinSet},
     time::{interval, sleep, Instant, Interval},
 };
-use tracing::info;
+use tracing::{info, info_span};
 
 use chain_comms::client::Client;
 
@@ -23,7 +23,10 @@ use crate::{
     },
     error,
     messages::ExecuteMsg,
-    provider::{ComparisonProvider, FromConfig, Provider},
+    price::Price,
+    provider::{
+        ComparisonProvider, FromConfig, PriceComparisonGuardError, Provider, ProviderError,
+    },
     providers::{self, ComparisonProviderVisitor, ProviderVisitor},
     result::Result as AppResult,
     UnboundedChannel,
@@ -261,12 +264,35 @@ async fn perform_check_and_enter_loop<P>(
 where
     P: Provider,
 {
+    let prices: Box<[Price]> =
+        provider
+            .get_prices(false)
+            .await
+            .map_err(|error: ProviderError| {
+                error::Worker::PriceComparisonGuard(PriceComparisonGuardError::FetchPrices(error))
+            })?;
+
     if let Some((comparison_provider, max_deviation_exclusive)) = comparison_provider_and_deviation
     {
         comparison_provider
-            .benchmark_prices(&provider, max_deviation_exclusive)
+            .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
             .await?;
     }
+
+    info_span!("Prices comparison guard", provider = provider.instance_id()).in_scope(|| {
+        info!("Prices to be fed:");
+
+        for price in prices.iter() {
+            info!(
+                "\t1 {} ~ {} {:.12}",
+                price.amount().ticker(),
+                (price.amount_quote().amount() as f64) / (price.amount().amount() as f64),
+                price.amount_quote().ticker()
+            );
+        }
+    });
+
+    sleep(Duration::from_secs(300)).await;
 
     provider_main_loop(
         provider,
