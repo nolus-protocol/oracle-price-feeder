@@ -1,0 +1,54 @@
+tick_time = 60
+oracle_addr = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
+gas_limit = 550_000
+
+[node]
+address_prefix = "nolus"
+chain_id = "vitosha-3"
+gas_adjustment_numerator = 107
+gas_adjustment_denominator = 100
+fee_denom = "unls"
+gas_price_numerator = 1
+gas_price_denominator = 390
+
+[providers.osmosis-lcd]
+name = "osmosis"
+[providers.osmosis-lcd.comparison]
+provider_id = "sanity_check"
+[providers.osmosis-lcd.currencies]
+AKT = "ibc/7153C8C55DB988805FAC69E449B680A8BAAC15944B87CF210ADCD1A3A9542857"
+ATOM = "ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477"
+CRO = "ibc/E6931F78057F7CC5DA0FD6CEF82FF39373A6E0452BF1FD76910B93292CF356C1"
+EVMOS = "ibc/3A7AC1F623B3475EE1F3CF849FBC4751FCEB956327ED4E5D49C676828EF9533E"
+JUNO = "ibc/8E2FEFCBD754FA3C97411F0126B9EC76191BAA1B3959CB73CECF396A4037BBF0"
+MARS = "ibc/2E7368A14AC9AB7870F32CFEA687551C5064FA861868EDF7437BC877358A81F9"
+NLS = "ibc/60CCD515066BDEC287A05074FC7157504D3D7FAC816DD59BBC8F4F84EAB226E6"
+OSMO = "uosmo"
+SCRT = "ibc/0954E1C28EB7AF5B72D24F3BC2B47BBB2FDF91BDDFD57B74B99E133AED40972A"
+STARS = "ibc/987C17B11ABC2B20019178ACE62929FE9840202CE79498E29FE8E5CB02B7C0A4"
+USDC = "ibc/6F34E1BD664C36CE49ACC28E60D62559A5F96C4F9A6CCE4FC5A67B2852E24CFE"
+WBTC = "ibc/BDA12A41BCF2DFB005A0794876E0E71D9538E0A7EB9607F600435EDDE5393EC4"
+WETH = "ibc/8AE11672A7DF38BF7B484AB642C5C85BA4A94810D57AE8945151818CD6179427"
+
+[comparison_providers.sanity_check]
+name = "coin_gecko_sanity_check"
+mandatory = true
+[comparison_providers.sanity_check.ticker_mapping]
+AKT = "akash-network"
+ATOM = "cosmos-hub"
+AXL = "axelar"
+CRO = "cronos"
+EVMOS = "evmos"
+INJ = "injective"
+JUNO = "juno-network"
+SCRT = "secret"
+ST_ATOM = "stride-staked-atom"
+ST_OSMO = "stride-staked-osmo"
+STARS = "stargaze"
+STK_ATOM = "stkatom"
+STRD = "stride"
+NLS = "nolus"
+OSMO = "osmosis"
+USDC = "usd"
+WBTC = "bitcoin"
+WETH = "ethereum"

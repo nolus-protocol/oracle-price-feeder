@@ -213,6 +213,8 @@ async fn handle_alarms_dispatch<'r>(
             error!("{error}");
 
             if signer.needs_update() {
+                drop(span);
+
                 let recovered: bool = recover_after_error(signer, client).await;
 
                 if !recovered {
@@ -221,8 +223,6 @@ async fn handle_alarms_dispatch<'r>(
                     }
                 }
             }
-
-            drop(span);
 
             DispatchResult::DispatchFailed
         }
