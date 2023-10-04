@@ -240,7 +240,7 @@ async fn recovery_loop(
     let set_in_recovery = info_span!("recover-after-error").in_scope(|| {
         info!("After-error recovery needed!");
 
-        let set_in_recovery = |in_recovery: bool| {
+        |in_recovery: bool| {
             let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
 
             if is_error {
@@ -248,9 +248,7 @@ async fn recovery_loop(
             }
 
             is_error
-        };
-
-        set_in_recovery
+        }
     });
 
     let recovered: RecoveryStatus = recover_after_error(signer, client.as_ref()).await;

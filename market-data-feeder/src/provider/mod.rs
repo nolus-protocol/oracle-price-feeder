@@ -51,7 +51,7 @@ where
             })
             .and_then(|comparison_prices: Box<[Price]>| async move {
                 let result: Result<(), PriceComparisonGuardError> = crate::deviation::compare_prices(
-                    &prices,
+                    prices,
                     &comparison_prices,
                     max_deviation_exclusive,
                 )
