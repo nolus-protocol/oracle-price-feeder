@@ -299,9 +299,9 @@ impl ComparisonProvider for SanityCheck {
                     id = benchmarked_provider_id,
                 );
 
-                Err(PriceComparisonGuardError::ComparisonProviderSpecific(Box::new(
-                    BenchmarkError::EmptyPricesIntersection,
-                )))
+                Err(PriceComparisonGuardError::ComparisonProviderSpecific(
+                    Box::new(BenchmarkError::EmptyPricesIntersection),
+                ))
             } else {
                 tracing::warn!(
                     "Sanity check unavailable for provider with ID: {id}! No intersection of prices is empty!",
