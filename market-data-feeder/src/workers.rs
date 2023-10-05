@@ -154,6 +154,7 @@ fn try_for_each_provider_f(
                             },
                             provider_id: &id,
                             provider_config: config.provider,
+                            time_before_feeding: config.time_before_feeding,
                             nolus_node: &nolus_node,
                             sender: &sender,
                             oracle_addr: &oracle_addr,
@@ -206,6 +207,7 @@ struct TaskSpawningProviderVisitor<'r> {
     worker_task_spawner_config: TaskSpawnerConfig<'r>,
     provider_id: &'r str,
     provider_config: ProviderConfig,
+    time_before_feeding: Duration,
     nolus_node: &'r Arc<Client>,
     sender: &'r UnboundedSender<(usize, Instant, String)>,
     oracle_addr: &'r Arc<str>,
@@ -228,16 +230,21 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                 self.worker_task_spawner_config
                     .set
                     .spawn(perform_check_and_enter_loop(
+                        (
                             provider,
+                            format!("Provider \"{}\" [{}]", self.provider_id, P::ID),
+                        ),
                         self.worker_task_spawner_config
                             .price_comparison_provider
                             .map(|(comparison_provider, max_deviation_exclusive)| {
                                 (comparison_provider.clone(), max_deviation_exclusive)
                             }),
-                        format!("Provider \"{}\" [{}]", self.provider_id, P::ID),
+                        self.time_before_feeding,
                         self.sender.clone(),
+                        (
                             self.worker_task_spawner_config.monotonic_id,
                             self.worker_task_spawner_config.tick_time,
+                        ),
                         self.worker_task_spawner_config.recovery_mode.clone(),
                     ));
 
@@ -252,12 +259,11 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
 }
 
 async fn perform_check_and_enter_loop<P>(
-    provider: P,
+    (provider, provider_name): (P, String),
     comparison_provider_and_deviation: Option<(Arc<dyn ComparisonProvider>, u64)>,
-    provider_name: String,
+    time_before_feeding: Duration,
     sender: UnboundedSender<(usize, Instant, String)>,
-    monotonic_id: usize,
-    tick_time: Duration,
+    (monotonic_id, tick_time): (usize, Duration),
     recovery_mode: watch::Receiver<bool>,
 ) -> Result<(), error::Worker>
 where
@@ -291,7 +297,7 @@ where
         }
     });
 
-    sleep(Duration::from_secs(300)).await;
+    sleep(time_before_feeding).await;
 
     provider_main_loop(
         provider,

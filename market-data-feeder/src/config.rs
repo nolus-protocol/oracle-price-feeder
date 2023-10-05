@@ -3,6 +3,7 @@ use std::{
     env::{self, var},
     fmt::{Formatter, Result as FmtResult},
     sync::Arc,
+    time::Duration,
 };
 
 use serde::{
@@ -116,8 +117,9 @@ impl ProviderConfigExt<false> for Provider {
 #[derive(Debug, Clone)]
 #[must_use]
 pub(crate) struct ProviderWithComparison {
-    pub comparison: Option<ComparisonProviderIdAndMaxDeviation>,
     pub provider: Provider,
+    pub time_before_feeding: Duration,
+    pub comparison: Option<ComparisonProviderIdAndMaxDeviation>,
 }
 
 #[derive(Debug, Clone)]
@@ -187,9 +189,9 @@ where
             #[derive(Deserialize)]
             #[serde(rename_all = "snake_case")]
             struct RawProviderWithComparison {
-                comparison: Option<RawComparisonProviderId>,
                 #[serde(flatten)]
                 provider: Provider,
+                comparison: Option<RawComparisonProviderId>,
             }
 
             let mut providers: BTreeMap<String, ProviderWithComparison> = BTreeMap::new();
@@ -202,6 +204,14 @@ where
                 },
             )) = map.next_entry::<String, RawProviderWithComparison>()?
             {
+                let seconds_before_feeding: u64 =
+                    <Provider as ProviderConfigExt<false>>::fetch_from_env(
+                        &id,
+                        "seconds_before_feeding",
+                    )
+                    .map_err(A::Error::custom)
+                    .and_then(|value: String| value.parse().map_err(A::Error::custom))?;
+
                 let comparison: Option<ComparisonProviderIdAndMaxDeviation> = comparison
                     .map(|comparison: RawComparisonProviderId| {
                         comparison.read_from_env_and_convert::<A::Error>(&id)
@@ -211,8 +221,9 @@ where
                 providers.insert(
                     id,
                     ProviderWithComparison {
-                        comparison,
                         provider,
+                        time_before_feeding: Duration::from_secs(seconds_before_feeding),
+                        comparison,
                     },
                 );
             }
