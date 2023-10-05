@@ -79,6 +79,7 @@ pub enum Error {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(into = "CoinDTO")]
 #[must_use]
 pub(crate) struct Coin {
     amount: u128,
@@ -96,6 +97,21 @@ impl Coin {
 
     pub const fn ticker(&self) -> &Ticker {
         &self.ticker
+    }
+}
+
+#[derive(Serialize)]
+struct CoinDTO {
+    amount: String,
+    ticker: Ticker,
+}
+
+impl From<Coin> for CoinDTO {
+    fn from(value: Coin) -> Self {
+        Self {
+            amount: value.amount.to_string(),
+            ticker: value.ticker,
+        }
     }
 }
 
