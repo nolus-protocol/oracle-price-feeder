@@ -1,6 +1,5 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
-use futures::executor::block_on;
 use tokio::{
     runtime::Handle,
     select,
@@ -219,7 +218,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
     where
         P: Provider + FromConfig<false>,
     {
-        match block_on(<P as FromConfig<false>>::from_config(
+        match Handle::current().block_on(<P as FromConfig<false>>::from_config(
             self.provider_id,
             self.provider_config,
             self.oracle_addr,
@@ -229,7 +228,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                 self.worker_task_spawner_config
                     .set
                     .spawn(perform_check_and_enter_loop(
-                        provider,
+                            provider,
                         self.worker_task_spawner_config
                             .price_comparison_provider
                             .map(|(comparison_provider, max_deviation_exclusive)| {
@@ -237,8 +236,8 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                             }),
                         format!("Provider \"{}\" [{}]", self.provider_id, P::ID),
                         self.sender.clone(),
-                        self.worker_task_spawner_config.monotonic_id,
-                        self.worker_task_spawner_config.tick_time,
+                            self.worker_task_spawner_config.monotonic_id,
+                            self.worker_task_spawner_config.tick_time,
                         self.worker_task_spawner_config.recovery_mode.clone(),
                     ));
 
