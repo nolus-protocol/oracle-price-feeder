@@ -289,7 +289,7 @@ where
 
         for price in prices.iter() {
             info!(
-                "\t1 {} ~ {} {:.12}",
+                "\t1 {}\t~ {} {}",
                 price.amount().ticker(),
                 (price.amount_quote().amount() as f64) / (price.amount().amount() as f64),
                 price.amount_quote().ticker()
