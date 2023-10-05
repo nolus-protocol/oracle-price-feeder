@@ -122,7 +122,7 @@ async fn app_main() -> Result<()> {
 
     let mut fallback_gas_limit: Option<u64> = None;
 
-    'feeder_loop: loop {
+    'feeder_loop: while !set.is_empty() {
         if let Some(result) = poll_fn(|cx: &mut Context| match set.poll_join_next(cx) {
             Poll::Pending => Poll::Ready(None),
             result => result,
@@ -142,23 +142,16 @@ async fn app_main() -> Result<()> {
 
         let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
 
-        let channel_closed: bool = timeout(tick_time, async {
+        let _: StdResult<(), Elapsed> = timeout(tick_time, async {
             while let Some((id, instant, data)) = receiver.recv().await {
                 if Instant::now().duration_since(instant) < tick_time {
                     messages.insert(id, Vec::from(data));
                 }
             }
-
-            true
         })
-        .await
-        .unwrap_or(false);
+        .await;
 
         if messages.is_empty() {
-            if channel_closed {
-                break 'feeder_loop;
-            }
-
             continue 'feeder_loop;
         }
 
@@ -228,8 +221,6 @@ async fn app_main() -> Result<()> {
     }
 
     drop(receiver);
-
-    while set.join_next().await.is_some() {}
 
     Ok(())
 }
