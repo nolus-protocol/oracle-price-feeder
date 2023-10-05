@@ -1,4 +1,7 @@
-use std::time::Duration;
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 use tokio::time::sleep;
 use tracing::{debug, error, info, info_span, span::EnteredSpan};
@@ -34,10 +37,15 @@ pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
+    static LOGGER_ON_DROP: AtomicBool = AtomicBool::new(false);
+
     let log_writer = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
 
-    let (log_writer, _guard) =
-        tracing_appender::non_blocking(log::CombinedWriter::new(std::io::stdout(), log_writer));
+    let (log_writer, _guard) = tracing_appender::non_blocking(log::CombinedWriter::new(
+        std::io::stdout(),
+        log_writer,
+        &LOGGER_ON_DROP,
+    ));
 
     setup(log_writer)?;
 
@@ -49,7 +57,11 @@ async fn main() -> AppResult<()> {
     let result: AppResult<()> = app_main().await;
 
     if let Err(error) = &result {
-        error!("{error}");
+        error!(error = ?error, "{}", error);
+    }
+
+    while !LOGGER_ON_DROP.load(Ordering::Acquire) {
+        tokio::task::yield_now().await;
     }
 
     result

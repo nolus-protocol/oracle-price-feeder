@@ -1,4 +1,7 @@
-use std::io::{Result as IoResult, Write};
+use std::{
+    io::{Result as IoResult, Write},
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use tracing::{
     debug,
@@ -8,18 +11,28 @@ use tracing::{
 
 use crate::{build_tx::TxResponse, interact::CommitResponse};
 
-pub struct CombinedWriter<T, U>(T, U)
+pub struct CombinedWriter<T, U>(T, U, &'static AtomicBool)
 where
     T: Write + Send + Sync + 'static,
     U: Write + Send + Sync + 'static;
+
+impl<T, U> Drop for CombinedWriter<T, U>
+where
+    T: Write + Send + Sync + 'static,
+    U: Write + Send + Sync + 'static,
+{
+    fn drop(&mut self) {
+        self.2.store(true, Ordering::Release)
+    }
+}
 
 impl<T, U> CombinedWriter<T, U>
 where
     T: Write + Send + Sync + 'static,
     U: Write + Send + Sync + 'static,
 {
-    pub fn new(first: T, second: U) -> Self {
-        Self(first, second)
+    pub fn new(first: T, second: U, on_drop: &'static AtomicBool) -> Self {
+        Self(first, second, on_drop)
     }
 }
 

@@ -1,7 +1,11 @@
 use std::{
     collections::BTreeMap,
     io,
-    sync::Arc,
+    result::Result as StdResult,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
     time::Duration,
 };
@@ -12,7 +16,7 @@ use tokio::{
         mpsc::{UnboundedReceiver, UnboundedSender},
         watch,
     },
-    time::{sleep, timeout, Instant},
+    time::{error::Elapsed, sleep, timeout, Instant},
 };
 use tracing::{error, info, info_span};
 use tracing_appender::{
@@ -53,10 +57,13 @@ type WatchChannel<T> = (watch::Sender<T>, watch::Receiver<T>);
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    static LOGGER_ON_DROP: AtomicBool = AtomicBool::new(false);
+
     let log_writer: RollingFileAppender = tracing_appender::rolling::hourly("./feeder-logs", "log");
 
-    let (log_writer, _guard): (NonBlocking, WorkerGuard) =
-        tracing_appender::non_blocking(log::CombinedWriter::new(io::stdout(), log_writer));
+    let (log_writer, log_guard): (NonBlocking, WorkerGuard) = tracing_appender::non_blocking(
+        log::CombinedWriter::new(io::stdout(), log_writer, &LOGGER_ON_DROP),
+    );
 
     log::setup(log_writer)?;
 
@@ -68,7 +75,13 @@ async fn main() -> Result<()> {
     let result: Result<()> = app_main().await;
 
     if let Err(error) = &result {
-        error!("{error}");
+        error!(error = ?error, "{}", error);
+    }
+
+    drop(log_guard);
+
+    while !LOGGER_ON_DROP.load(Ordering::Acquire) {
+        tokio::task::yield_now().await;
     }
 
     result
