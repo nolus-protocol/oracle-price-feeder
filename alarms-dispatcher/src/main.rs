@@ -3,6 +3,7 @@ use std::{
     time::Duration,
 };
 
+use serde::Deserialize;
 use tokio::time::sleep;
 use tracing::{debug, error, info, info_span, span::EnteredSpan};
 
@@ -18,7 +19,10 @@ use chain_comms::{
     signer::Signer,
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
-use semver::{Comparator as SemVerComparator, Prerelease as SemVerPrerelease, Version};
+use semver::{
+    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
+    Prerelease as SemVerPrerelease, Version,
+};
 
 use self::{
     config::{Config, Contract},
@@ -85,6 +89,29 @@ async fn app_main() -> AppResult<()> {
 
     info!("Checking compatibility with contract version...");
 
+    check_comparibility(&rpc_setup).await?;
+
+    info!("Contract is compatible with feeder version.");
+
+    let result = dispatch_alarms(rpc_setup).await;
+
+    if let Err(error) = &result {
+        error!("{error}");
+    }
+
+    info!("Shutting down...");
+
+    result.map_err(Into::into)
+}
+
+async fn check_comparibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
+    #[derive(Deserialize)]
+    struct JsonVersion {
+        major: u64,
+        minor: u64,
+        patch: u64,
+    }
+
     for (contract, name, compatible) in [
         (
             rpc_setup.config.time_alarms(),
@@ -97,7 +124,7 @@ async fn app_main() -> AppResult<()> {
             ORACLE_COMPATIBLE_VERSION,
         ),
     ] {
-        let version: Version = rpc_setup
+        let version: JsonVersion = rpc_setup
             .nolus_node
             .with_grpc(|rpc: TonicChannel| {
                 query_wasm(
@@ -107,6 +134,14 @@ async fn app_main() -> AppResult<()> {
                 )
             })
             .await?;
+
+        let version: Version = Version {
+            major: version.major,
+            minor: version.minor,
+            patch: version.patch,
+            pre: SemVerPrerelease::EMPTY,
+            build: SemVerBuildMetadata::EMPTY,
+        };
 
         if !compatible.matches(&version) {
             error!(
@@ -123,17 +158,7 @@ async fn app_main() -> AppResult<()> {
         }
     }
 
-    info!("Contract is compatible with feeder version.");
-
-    let result = dispatch_alarms(rpc_setup).await;
-
-    if let Err(error) = &result {
-        error!("{error}");
-    }
-
-    info!("Shutting down...");
-
-    result.map_err(Into::into)
+    Ok(())
 }
 
 async fn dispatch_alarms(

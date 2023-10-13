@@ -10,6 +10,7 @@ use std::{
 };
 
 use futures::future::poll_fn;
+use serde::Deserialize;
 use tokio::{
     sync::{
         mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -36,7 +37,10 @@ use chain_comms::{
     signer::Signer,
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
-use semver::{Comparator as SemVerComparator, Prerelease as SemVerPrerelease, Version};
+use semver::{
+    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
+    Prerelease as SemVerPrerelease, Version,
+};
 
 use self::{config::Config, messages::QueryMsg, result::Result};
 
@@ -342,24 +346,40 @@ async fn recovery_loop(
 }
 
 async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()> {
+    #[derive(Deserialize)]
+    struct JsonVersion {
+        major: u64,
+        minor: u64,
+        patch: u64,
+    }
+
     info!("Checking compatibility with contract version...");
 
     for oracle in config.oracles.iter() {
-        let version: Version = client
+        let version: JsonVersion = client
             .with_grpc(|rpc: TonicChannel| {
                 query_wasm(rpc, oracle.to_string(), QueryMsg::CONTRACT_VERSION)
             })
             .await?;
 
+        let version: Version = Version {
+            major: version.major,
+            minor: version.minor,
+            patch: version.patch,
+            pre: SemVerPrerelease::EMPTY,
+            build: SemVerBuildMetadata::EMPTY,
+        };
+
         if !COMPATIBLE_VERSION.matches(&version) {
             error!(
                 oracle = %oracle,
-                compatible_minimum = %COMPATIBLE_VERSION,
+                compatible = %COMPATIBLE_VERSION,
                 actual = %version,
                 "Feeder version is incompatible with contract version!"
             );
 
             return Err(error::Application::IncompatibleContractVersion {
+                oracle_addr: oracle.clone(),
                 compatible: COMPATIBLE_VERSION,
                 actual: version,
             });
