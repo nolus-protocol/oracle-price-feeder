@@ -36,7 +36,7 @@ use chain_comms::{
     signer::Signer,
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
-use semver::SemVer;
+use semver::{Comparator as SemVerComparator, Prerelease as SemVerPrerelease, Version};
 
 use self::{config::Config, messages::QueryMsg, result::Result};
 
@@ -50,7 +50,13 @@ mod providers;
 mod result;
 mod workers;
 
-const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
+const COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
+    op: semver::Op::GreaterEq,
+    major: 0,
+    minor: Some(5),
+    patch: None,
+    pre: SemVerPrerelease::EMPTY,
+};
 
 type UnboundedChannel<T> = (UnboundedSender<T>, UnboundedReceiver<T>);
 type WatchChannel<T> = (watch::Sender<T>, watch::Receiver<T>);
@@ -277,25 +283,26 @@ async fn recovery_loop(
     RecoveryStatus::Success
 }
 
-async fn check_compatibility(config: &Config, client: &Client) -> Result<()> {
+async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()> {
     info!("Checking compatibility with contract version...");
 
-    {
-        let version: SemVer = client
+    for oracle in config.oracles.iter() {
+        let version: Version = client
             .with_grpc(|rpc: TonicChannel| {
-                query_wasm(rpc, &config.oracle_addr, QueryMsg::CONTRACT_VERSION)
+                query_wasm(rpc, oracle.to_string(), QueryMsg::CONTRACT_VERSION)
             })
             .await?;
 
-        if !version.check_compatibility(COMPATIBLE_VERSION) {
+        if !COMPATIBLE_VERSION.matches(&version) {
             error!(
+                oracle = %oracle,
                 compatible_minimum = %COMPATIBLE_VERSION,
                 actual = %version,
                 "Feeder version is incompatible with contract version!"
             );
 
             return Err(error::Application::IncompatibleContractVersion {
-                minimum_compatible: COMPATIBLE_VERSION,
+                compatible: COMPATIBLE_VERSION,
                 actual: version,
             });
         }

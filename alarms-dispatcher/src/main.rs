@@ -18,7 +18,7 @@ use chain_comms::{
     signer::Signer,
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
-use semver::SemVer;
+use semver::{Comparator as SemVerComparator, Prerelease as SemVerPrerelease, Version};
 
 use self::{
     config::{Config, Contract},
@@ -30,8 +30,20 @@ pub mod config;
 pub mod error;
 pub mod messages;
 
-pub const ORACLE_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
-pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 1);
+pub const ORACLE_COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
+    op: semver::Op::GreaterEq,
+    major: 0,
+    minor: Some(5),
+    patch: None,
+    pre: SemVerPrerelease::EMPTY,
+};
+pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
+    op: semver::Op::GreaterEq,
+    major: 0,
+    minor: Some(4),
+    patch: Some(1),
+    pre: SemVerPrerelease::EMPTY,
+};
 
 pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
@@ -73,7 +85,7 @@ async fn app_main() -> AppResult<()> {
 
     info!("Checking compatibility with contract version...");
 
-    for (contract, name, compatible_version) in [
+    for (contract, name, compatible) in [
         (
             rpc_setup.config.time_alarms(),
             "timealarms",
@@ -85,21 +97,27 @@ async fn app_main() -> AppResult<()> {
             ORACLE_COMPATIBLE_VERSION,
         ),
     ] {
-        let version: SemVer = rpc_setup
+        let version: Version = rpc_setup
             .nolus_node
-            .with_grpc(|rpc| query_wasm(rpc, contract.address(), QueryMsg::CONTRACT_VERSION))
+            .with_grpc(|rpc: TonicChannel| {
+                query_wasm(
+                    rpc,
+                    contract.address().to_string(),
+                    QueryMsg::CONTRACT_VERSION,
+                )
+            })
             .await?;
 
-        if !version.check_compatibility(compatible_version) {
+        if !compatible.matches(&version) {
             error!(
-                compatible_minimum = %compatible_version,
+                compatible = %compatible,
                 actual = %version,
                 r#"Dispatcher version is incompatible with "{name}" contract's version!"#,
             );
 
             return Err(error::Application::IncompatibleContractVersion {
                 contract: name,
-                minimum_compatible: compatible_version,
+                compatible,
                 actual: version,
             });
         }

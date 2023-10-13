@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "semver",
     "chain-comms",
     "market-data-feeder",
     "alarms-dispatcher",
@@ -13,8 +12,9 @@ edition = "2021"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-semver = { path = "./semver" }
 chain-comms = { path = "./chain-comms" }
+
+semver = { version = "1", features = ["serde"] }
 
 [patch.crates-io]
 tendermint = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }

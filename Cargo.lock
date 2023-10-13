@@ -54,7 +54,7 @@ dependencies = [
  "base64 0.21.4",
  "chain-comms",
  "prost 0.12.1",
- "semver 0.1.0",
+ "semver",
  "serde",
  "serde-json-wasm",
  "thiserror",
@@ -1199,7 +1199,7 @@ dependencies = [
  "prost-types 0.12.1",
  "regex",
  "reqwest",
- "semver 0.1.0",
+ "semver",
  "serde",
  "serde-json-wasm",
  "thiserror",
@@ -1890,16 +1890,12 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "0.1.0"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "semver"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "836fa6a3e1e547f9a2c4040802ec865b5d85f4014efe00555d7090a3dcaa1090"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "serde"
@@ -2253,7 +2249,7 @@ dependencies = [
  "hyper-rustls 0.22.1",
  "peg",
  "pin-project",
- "semver 1.0.20",
+ "semver",
  "serde",
  "serde_bytes",
  "serde_json",

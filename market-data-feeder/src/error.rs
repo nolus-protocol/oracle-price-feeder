@@ -2,7 +2,7 @@ use std::{error::Error as StdError, sync::Arc};
 
 use thiserror::Error as ThisError;
 
-use semver::SemVer;
+use semver::Version;
 
 use crate::provider::PriceComparisonGuardError;
 
@@ -16,10 +16,10 @@ pub(crate) enum Application {
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]
     ContractVersionQuery(#[from] chain_comms::interact::error::WasmQuery),
-    #[error("Contract's version is not compatible! Minimum compatible version is {minimum_compatible}, but contract's actual version is {actual}!")]
+    #[error("Contract's version is not compatible! Minimum compatible version is {compatible}, but contract's actual version is {actual}!")]
     IncompatibleContractVersion {
-        minimum_compatible: SemVer,
-        actual: SemVer,
+        compatible: semver::Comparator,
+        actual: Version,
     },
     #[error("Unknown provider identifier! Got: {0}")]
     UnknownProviderId(Arc<str>),
