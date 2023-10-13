@@ -107,6 +107,8 @@ configurations/*
 !configurations/market-data-feeder.dev.toml
 !configurations/market-data-feeder.test.toml
 !configurations/market-data-feeder.main.toml
+alarms-dispatcher.toml
+market-data-feeder.toml
 
 ### Application Logs
 dispatcher-logs/
