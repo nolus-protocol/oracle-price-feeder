@@ -1,6 +1,9 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{
+    de::{Deserialize, Deserializer},
+    Serialize,
+};
 
-use crate::price::Price;
+use crate::price::{Coin, Price};
 
 pub(crate) enum QueryMsg {}
 
@@ -46,8 +49,11 @@ impl<'de> Deserialize<'de> for SwapTarget {
 
 pub(crate) type SupportedCurrencyPairsResponse = Vec<SwapLeg>;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum ExecuteMsg {
-    FeedPrices { prices: Box<[Price]> },
+pub(crate) enum ExecuteMsg<C>
+where
+    C: Coin,
+{
+    FeedPrices { prices: Box<[Price<C>]> },
 }

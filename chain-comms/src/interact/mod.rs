@@ -33,7 +33,7 @@ pub async fn query_account_data(
     prost::Message::decode(
         {
             let data = client
-                .with_grpc(move |rpc| async move {
+                .with_grpc(move |rpc: TonicChannel| async move {
                     AuthQueryClient::new(rpc)
                         .account(QueryAccountRequest {
                             address: address.into(),
@@ -57,29 +57,22 @@ pub async fn query_account_data(
 
 pub async fn query_wasm<R>(
     rpc: TonicChannel,
-    address: &str,
+    address: String,
     query: &[u8],
 ) -> Result<R, error::WasmQuery>
 where
     R: DeserializeOwned,
 {
-    serde_json_wasm::from_slice::<R>(&{
-        let data: Vec<u8> = WasmQueryClient::new(rpc)
+    serde_json_wasm::from_slice(
+        &WasmQueryClient::new(rpc)
             .smart_contract_state(QuerySmartContractStateRequest {
-                address: address.into(),
+                address,
                 query_data: query.to_vec(),
             })
             .await?
             .into_inner()
-            .data;
-
-        debug!(
-            data = %String::from_utf8_lossy(&data),
-            "gRPC query response from {address} returned successfully!",
-        );
-
-        data
-    })
+            .data,
+    )
     .map_err(Into::into)
 }
 

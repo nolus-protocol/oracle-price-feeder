@@ -3,7 +3,7 @@ use std::str::FromStr;
 use serde::{de::Error as DeserializeError, Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
-use crate::config::Ticker;
+use crate::config::{Ticker, TickerUnsized};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) struct Ratio {
@@ -45,8 +45,24 @@ impl Ratio {
             })
     }
 
-    pub const fn to_price(self, base: Ticker, quote: Ticker) -> Price {
-        Price::new(base, self.denominator, quote, self.numerator)
+    pub const fn to_price(self, base: Ticker, quote: Ticker) -> Price<CoinWithoutDecimalPlaces> {
+        Price::new(
+            CoinWithoutDecimalPlaces::new(self.denominator, base),
+            CoinWithoutDecimalPlaces::new(self.numerator, quote),
+        )
+    }
+
+    pub const fn to_price_with_decimal_places(
+        self,
+        base_ticker: Ticker,
+        base_decimal_places: u8,
+        quote_ticker: Ticker,
+        quote_decimal_places: u8,
+    ) -> Price<CoinWithDecimalPlaces> {
+        Price::new(
+            CoinWithDecimalPlaces::new(self.denominator, base_ticker, base_decimal_places),
+            CoinWithDecimalPlaces::new(self.numerator, quote_ticker, quote_decimal_places),
+        )
     }
 }
 
@@ -78,24 +94,65 @@ pub enum Error {
     ExponentTooBig,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub trait Coin: Send + 'static {
+    fn amount(&self) -> u128;
+
+    fn ticker(&self) -> &TickerUnsized;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 #[serde(into = "CoinDTO")]
 #[must_use]
-pub(crate) struct Coin {
+pub(crate) struct CoinWithoutDecimalPlaces {
     amount: u128,
     ticker: Ticker,
 }
 
-impl Coin {
+impl CoinWithoutDecimalPlaces {
     pub const fn new(amount: u128, ticker: String) -> Self {
         Self { amount, ticker }
     }
+}
 
-    pub const fn amount(&self) -> u128 {
+impl Coin for CoinWithoutDecimalPlaces {
+    fn amount(&self) -> u128 {
         self.amount
     }
 
-    pub const fn ticker(&self) -> &Ticker {
+    fn ticker(&self) -> &TickerUnsized {
+        &self.ticker
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(into = "CoinDTO")]
+#[must_use]
+pub(crate) struct CoinWithDecimalPlaces {
+    amount: u128,
+    ticker: Ticker,
+    decimal_places: u8,
+}
+
+impl CoinWithDecimalPlaces {
+    pub const fn new(amount: u128, ticker: String, decimal_places: u8) -> Self {
+        Self {
+            amount,
+            ticker,
+            decimal_places,
+        }
+    }
+
+    pub const fn decimal_places(&self) -> u8 {
+        self.decimal_places
+    }
+}
+
+impl Coin for CoinWithDecimalPlaces {
+    fn amount(&self) -> u128 {
+        self.amount
+    }
+
+    fn ticker(&self) -> &TickerUnsized {
         &self.ticker
     }
 }
@@ -106,47 +163,50 @@ struct CoinDTO {
     ticker: Ticker,
 }
 
-impl From<Coin> for CoinDTO {
-    fn from(value: Coin) -> Self {
+impl From<CoinWithoutDecimalPlaces> for CoinDTO {
+    fn from(CoinWithoutDecimalPlaces { amount, ticker }: CoinWithoutDecimalPlaces) -> Self {
         Self {
-            amount: value.amount.to_string(),
-            ticker: value.ticker,
+            amount: amount.to_string(),
+            ticker,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[must_use]
-pub(crate) struct Price {
-    amount: Coin,
-    amount_quote: Coin,
+impl From<CoinWithDecimalPlaces> for CoinDTO {
+    fn from(CoinWithDecimalPlaces { amount, ticker, .. }: CoinWithDecimalPlaces) -> Self {
+        Self {
+            amount: amount.to_string(),
+            ticker,
+        }
+    }
 }
 
-impl Price {
-    pub const fn new(
-        base_ticker: String,
-        base_amount: u128,
-        quote_ticker: String,
-        quote_amount: u128,
-    ) -> Self {
-        Self::new_from_coins(
-            Coin::new(base_amount, base_ticker),
-            Coin::new(quote_amount, quote_ticker),
-        )
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[must_use]
+pub(crate) struct Price<C>
+where
+    C: Coin,
+{
+    amount: C,
+    amount_quote: C,
+}
 
-    pub const fn new_from_coins(amount: Coin, amount_quote: Coin) -> Self {
+impl<C> Price<C>
+where
+    C: Coin,
+{
+    pub const fn new(amount: C, amount_quote: C) -> Self {
         Price {
             amount,
             amount_quote,
         }
     }
 
-    pub const fn amount(&self) -> &Coin {
+    pub const fn amount(&self) -> &C {
         &self.amount
     }
 
-    pub const fn amount_quote(&self) -> &Coin {
+    pub const fn amount_quote(&self) -> &C {
         &self.amount_quote
     }
 }

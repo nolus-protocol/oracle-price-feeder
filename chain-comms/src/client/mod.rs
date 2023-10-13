@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 
 use cosmrs::rpc::HttpClient as TendermintRpcClient;
 use tonic::transport::{Channel, Endpoint};
@@ -10,10 +10,8 @@ use self::error::Result;
 pub mod error;
 
 #[derive(Debug, Clone)]
-pub struct Client {
-    json_rpc: TendermintRpcClient,
-    grpc: Channel,
-}
+#[repr(transparent)]
+pub struct Client(Arc<Inner>);
 
 impl Client {
     pub async fn from_config(config: &Node) -> Result<Self> {
@@ -39,7 +37,7 @@ impl Client {
                 .await?
         };
 
-        Ok(Self { json_rpc, grpc })
+        Ok(Self(Arc::new(Inner { json_rpc, grpc })))
     }
 
     pub async fn with_json_rpc<F, R>(&self, f: F) -> R::Output
@@ -47,7 +45,7 @@ impl Client {
         F: FnOnce(TendermintRpcClient) -> R,
         R: Future,
     {
-        f(self.json_rpc.clone()).await
+        f(self.0.json_rpc.clone()).await
     }
 
     pub async fn with_grpc<F, R>(&self, f: F) -> R::Output
@@ -55,6 +53,12 @@ impl Client {
         F: FnOnce(Channel) -> R,
         R: Future,
     {
-        f(self.grpc.clone()).await
+        f(self.0.grpc.clone()).await
     }
+}
+
+#[derive(Debug, Clone)]
+struct Inner {
+    json_rpc: TendermintRpcClient,
+    grpc: Channel,
 }

@@ -2,13 +2,13 @@ use std::{collections::BTreeMap, error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
 use futures::{FutureExt as _, TryFutureExt as _};
+use tracing::{error, info};
 
 use chain_comms::client::Client as NodeClient;
-use tracing::{error, info};
 
 use crate::{
     config::{ProviderConfig, ProviderConfigExt},
-    price::Price,
+    price::{CoinWithDecimalPlaces, Price},
 };
 
 pub(crate) use self::error::{
@@ -21,7 +21,10 @@ mod error;
 pub(crate) trait Provider: Sync + Send + 'static {
     fn instance_id(&self) -> &str;
 
-    async fn get_prices(&self, fault_tolerant: bool) -> Result<Box<[Price]>, ProviderError>;
+    async fn get_prices(
+        &self,
+        fault_tolerant: bool,
+    ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError>;
 }
 
 #[async_trait]
@@ -29,7 +32,7 @@ pub(crate) trait ComparisonProvider: Sync + Send + 'static {
     async fn benchmark_prices(
         &self,
         benchmarked_provider_id: &str,
-        prices: &[Price],
+        prices: &[Price<CoinWithDecimalPlaces>],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError>;
 }
@@ -42,14 +45,14 @@ where
     async fn benchmark_prices(
         &self,
         benchmarked_provider_id: &str,
-        prices: &[Price],
+        prices: &[Price<CoinWithDecimalPlaces>],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError> {
         self.get_prices(false)
-            .map(|result: Result<Box<[Price]>, ProviderError>| {
+            .map(|result: Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError>| {
                 result.map_err(PriceComparisonGuardError::FetchPrices)
             })
-            .and_then(|comparison_prices: Box<[Price]>| async move {
+            .and_then(|comparison_prices: Box<[Price<CoinWithDecimalPlaces>]>| async move {
                 let result: Result<(), PriceComparisonGuardError> = crate::deviation::compare_prices(
                     prices,
                     &comparison_prices,
@@ -77,8 +80,7 @@ pub(crate) trait FromConfig<const COMPARISON: bool>: Sync + Send + Sized + 'stat
     async fn from_config<Config>(
         id: &str,
         config: Config,
-        oracle_addr: &Arc<str>,
-        nolus_client: &Arc<NodeClient>,
+        nolus_client: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<COMPARISON>;
@@ -93,19 +95,12 @@ impl<T: FromConfig<false>> FromConfig<true> for T {
     async fn from_config<Config>(
         id: &str,
         config: Config,
-        oracle_addr: &Arc<str>,
-        nolus_client: &Arc<NodeClient>,
+        nolus_client: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<true>,
     {
-        <T as FromConfig<false>>::from_config(
-            id,
-            ProviderConfigWrapper(config),
-            oracle_addr,
-            nolus_client,
-        )
-        .await
+        <T as FromConfig<false>>::from_config(id, ProviderConfigWrapper(config), nolus_client).await
     }
 }
 
@@ -114,6 +109,10 @@ struct ProviderConfigWrapper<Config: ProviderConfigExt<true>>(Config);
 impl<Config: ProviderConfigExt<true>> ProviderConfig for ProviderConfigWrapper<Config> {
     fn name(&self) -> &Arc<str> {
         self.0.name()
+    }
+
+    fn oracle_addr(&self) -> &Arc<str> {
+        self.0.oracle_addr()
     }
 
     fn misc(&self) -> &BTreeMap<String, toml::Value> {

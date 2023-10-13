@@ -21,10 +21,10 @@ pub enum Provider {
     #[error("Failed to deserialize fetched price from response's body! Cause: {0}")]
     DeserializePoolPrice(reqwest::Error),
 
-    #[error("{0}")]
+    #[error("Failed to query WASM contract! Cause: {0}")]
     WasmQuery(#[from] chain_comms::interact::error::WasmQuery),
 
-    #[error("{0}")]
+    #[error("Serialization failed! Cause: {0}")]
     Serialization(#[from] serde_json_wasm::ser::Error),
 }
 

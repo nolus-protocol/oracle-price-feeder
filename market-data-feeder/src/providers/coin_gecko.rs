@@ -20,7 +20,7 @@ use chain_comms::client::Client as NodeClient;
 use crate::{
     config::{self, ProviderConfigExt, Ticker, TickerUnsized},
     deviation,
-    price::{self, Price, Ratio},
+    price::{self, Coin, CoinWithDecimalPlaces, CoinWithoutDecimalPlaces, Price, Ratio},
     provider::{ComparisonProvider, FromConfig, PriceComparisonGuardError},
 };
 
@@ -142,13 +142,13 @@ impl SanityCheck {
             .await
     }
 
-    fn get_mappings(&self, price: &Price) -> Option<Mappings> {
+    fn get_mappings(&self, price: &Price<CoinWithDecimalPlaces>) -> Option<Mappings> {
         self.ticker_mapping
-            .get_key_value(price.amount().ticker().as_str())
+            .get_key_value(price.amount().ticker())
             .and_then(
                 |(base_ticker, base_mapping): (&Arc<TickerUnsized>, &Arc<str>)| {
                     self.ticker_mapping
-                        .get_key_value(price.amount_quote().ticker().as_str())
+                        .get_key_value(price.amount_quote().ticker())
                         .and_then(
                             |(quote_ticker, quote_mapping): (&Arc<TickerUnsized>, &Arc<str>)| {
                                 (self.supported_vs_currencies.contains(base_mapping.as_ref())
@@ -191,7 +191,7 @@ impl SanityCheck {
         http_client: Arc<ReqwestClient>,
         mappings: Mappings,
         regex: &'static Regex,
-    ) -> Result<Price, BenchmarkError> {
+    ) -> Result<Price<CoinWithoutDecimalPlaces>, BenchmarkError> {
         const PRICE_URL: &str = "https://pro-api.coingecko.com/api/v3/simple/price";
 
         http_client
@@ -267,22 +267,23 @@ impl ComparisonProvider for SanityCheck {
     async fn benchmark_prices(
         &self,
         benchmarked_provider_id: &str,
-        prices: &[Price],
+        prices: &[Price<CoinWithDecimalPlaces>],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError> {
-        let mut prices: Vec<Price> = prices.to_vec();
+        let mut prices: Vec<Price<CoinWithDecimalPlaces>> = prices.to_vec();
 
-        let mut comparison_prices: Vec<Price> = Vec::new();
+        let mut comparison_prices: Vec<Price<CoinWithoutDecimalPlaces>> = Vec::new();
 
         let regex: &'static Regex = Self::regex();
 
-        let mut set: JoinSet<Result<Price, BenchmarkError>> = JoinSet::new();
+        let mut set: JoinSet<Result<Price<CoinWithoutDecimalPlaces>, BenchmarkError>> =
+            JoinSet::new();
 
         for index in (0..prices.len()).rev() {
-            let price: &Price = &prices[index];
+            let price: &Price<CoinWithDecimalPlaces> = &prices[index];
 
             let Some(mappings): Option<Mappings> = self.get_mappings(price) else {
-                let _: Price = prices.remove(index);
+                let _: Price<CoinWithDecimalPlaces> = prices.remove(index);
 
                 continue;
             };
@@ -315,7 +316,7 @@ impl ComparisonProvider for SanityCheck {
                 result
                     .map_err(BenchmarkError::JoinQueryTask)
                     .and_then(identity)
-                    .map(|price: Price| comparison_prices.push(price))
+                    .map(|price: Price<CoinWithoutDecimalPlaces>| comparison_prices.push(price))
                     .map_err(|error: BenchmarkError| {
                         PriceComparisonGuardError::ComparisonProviderSpecific(Box::new(error))
                     })?;
@@ -369,8 +370,7 @@ impl FromConfig<true> for SanityCheck {
     async fn from_config<Config>(
         id: &str,
         mut config: Config,
-        _: &Arc<str>,
-        _: &Arc<NodeClient>,
+        _: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<true>,

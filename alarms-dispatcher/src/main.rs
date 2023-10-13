@@ -286,7 +286,7 @@ async fn dispatch_alarm<'r>(
 
     loop {
         let response: StatusResponse = client
-            .with_grpc(|rpc: TonicChannel| query_wasm(rpc, contract.address(), query))
+            .with_grpc(|rpc: TonicChannel| query_wasm(rpc, contract.address().to_string(), query))
             .await?;
 
         return Ok(if response.remaining_for_dispatch() {

@@ -4,18 +4,21 @@ use bnum::BUint;
 
 use crate::{
     config::Ticker,
-    price::{Coin, Price},
+    price::{Coin, CoinWithDecimalPlaces, Price},
     provider::PriceComparisonGuardError,
 };
 
 /// Capable of storing integers with precision of 320 bits.
 pub(crate) type UInt = BUint<5>;
 
-pub(crate) async fn compare_prices(
-    prices: &[Price],
-    comparison_prices: &[Price],
+pub(crate) async fn compare_prices<C>(
+    prices: &[Price<CoinWithDecimalPlaces>],
+    comparison_prices: &[Price<C>],
     max_deviation_exclusive: u64,
-) -> Result<(), PriceComparisonGuardError> {
+) -> Result<(), PriceComparisonGuardError>
+where
+    C: Coin,
+{
     const HUNDRED: UInt = UInt::from_digit(100);
 
     const fn to_big_uint(n: u128) -> UInt {
@@ -27,9 +30,9 @@ pub(crate) async fn compare_prices(
 
     for (price, inverted) in comparison_prices
         .iter()
-        .flat_map(|price: &Price| [(price, false), (price, true)])
+        .flat_map(|price: &Price<C>| [(price, false), (price, true)])
     {
-        let (base, quote): (&Coin, &Coin) = if inverted {
+        let (base, quote): (&C, &C) = if inverted {
             (price.amount_quote(), price.amount())
         } else {
             (price.amount(), price.amount_quote())

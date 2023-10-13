@@ -12,7 +12,7 @@ use tokio::{
 };
 use tracing::{info, info_span};
 
-use chain_comms::client::Client;
+use chain_comms::client::Client as NodeClient;
 
 use crate::{
     config::{
@@ -22,7 +22,7 @@ use crate::{
     },
     error,
     messages::ExecuteMsg,
-    price::Price,
+    price::{Coin, CoinWithDecimalPlaces, Price},
     provider::{
         ComparisonProvider, FromConfig, PriceComparisonGuardError, Provider, ProviderError,
     },
@@ -35,16 +35,22 @@ const MAX_SEQ_ERRORS: u8 = 5;
 
 const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 
+type PriceDataPacket = (usize, Instant, Vec<u8>);
+type PriceDataSender = UnboundedSender<PriceDataPacket>;
+type PriceDataReceiver = UnboundedReceiver<PriceDataPacket>;
+type PriceDataSenders = BTreeMap<Arc<str>, PriceDataSender>;
+type PriceDataReceivers = BTreeMap<Arc<str>, PriceDataReceiver>;
+
 pub(crate) struct SpawnWorkersReturn {
     pub set: JoinSet<Result<(), error::Worker>>,
-    pub receiver: UnboundedReceiver<(usize, Instant, String)>,
+    pub receivers: PriceDataReceivers,
 }
 
 pub(crate) async fn spawn(
-    nolus_node: Arc<Client>,
-    providers: BTreeMap<String, ProviderWithComparisonConfig>,
-    price_comparison_providers: BTreeMap<String, ComparisonProviderConfig>,
-    oracle_addr: Arc<str>,
+    nolus_node: NodeClient,
+    oracles: Vec<Arc<str>>,
+    providers: BTreeMap<Arc<str>, ProviderWithComparisonConfig>,
+    price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
     tick_time: Duration,
     recovery_mode: watch::Receiver<bool>,
 ) -> AppResult<SpawnWorkersReturn> {
@@ -54,11 +60,27 @@ pub(crate) async fn spawn(
         block_in_place(|| {
             price_comparison_providers
                 .into_iter()
-                .map(construct_comparison_provider_f(&oracle_addr, &nolus_node))
+                .map(construct_comparison_provider_f(&nolus_node))
                 .collect::<Result<_, _>>()
         })?;
 
-    let (sender, receiver): UnboundedChannel<(usize, Instant, String)> = unbounded_channel();
+    let mut senders: PriceDataSenders = BTreeMap::new();
+    let mut receivers: PriceDataReceivers = BTreeMap::new();
+
+    for oracle in oracles {
+        if !senders.contains_key(&oracle) {
+            let (sender, receiver): UnboundedChannel<(usize, Instant, Vec<u8>)> =
+                unbounded_channel();
+
+            if senders.insert(oracle.clone(), sender).is_some() {
+                unreachable!()
+            }
+
+            if receivers.insert(oracle, receiver).is_some() {
+                unreachable!()
+            }
+        }
+    }
 
     block_in_place(move || {
         providers
@@ -70,30 +92,24 @@ pub(crate) async fn spawn(
                 tick_time,
                 recovery_mode,
                 nolus_node,
-                sender,
-                oracle_addr,
+                senders,
             ))
-            .map(|()| SpawnWorkersReturn { set, receiver })
+            .map(|()| SpawnWorkersReturn { set, receivers })
     })
 }
 
 fn construct_comparison_provider_f(
-    oracle_addr: &Arc<str>,
-    nolus_node: &Arc<Client>,
-) -> impl Fn((String, ComparisonProviderConfig)) -> AppResult<(Arc<str>, Arc<dyn ComparisonProvider>)>
+    nolus_node: &NodeClient,
+) -> impl Fn((Arc<str>, ComparisonProviderConfig)) -> AppResult<(Arc<str>, Arc<dyn ComparisonProvider>)>
 {
-    let nolus_node: Arc<Client> = nolus_node.clone();
-    let oracle_addr: Arc<str> = oracle_addr.clone();
+    let nolus_node: NodeClient = nolus_node.clone();
 
-    move |(id, config): (String, ComparisonProviderConfig)| {
-        let id: Arc<str> = id.into();
-
+    move |(id, config): (Arc<str>, ComparisonProviderConfig)| {
         if let Some(result) = providers::Providers::visit_comparison_provider(
             &config.provider.name().clone(),
             PriceComparisonProviderVisitor {
                 provider_id: id.clone(),
                 provider_config: config,
-                oracle_addr: &oracle_addr,
                 nolus_node: &nolus_node,
             },
         ) {
@@ -111,11 +127,10 @@ fn try_for_each_provider_f(
     set: &mut JoinSet<Result<(), error::Worker>>,
     tick_time: Duration,
     recovery_mode: watch::Receiver<bool>,
-    nolus_node: Arc<Client>,
-    sender: UnboundedSender<(usize, Instant, String)>,
-    oracle_addr: Arc<str>,
-) -> impl FnMut((usize, (String, ProviderWithComparisonConfig))) -> AppResult<()> + '_ {
-    move |(monotonic_id, (id, config)): (usize, (String, ProviderWithComparisonConfig))| {
+    nolus_node: NodeClient,
+    price_data_senders: PriceDataSenders,
+) -> impl FnMut((usize, (Arc<str>, ProviderWithComparisonConfig))) -> AppResult<()> + '_ {
+    move |(monotonic_id, (id, config)): (usize, (Arc<str>, ProviderWithComparisonConfig))| {
         config
             .comparison
             .map(
@@ -123,24 +138,28 @@ fn try_for_each_provider_f(
                      provider_id,
                      max_deviation_exclusive,
                  }: ComparisonProviderIdAndMaxDeviation| {
-                    price_comparison_providers
-                        .get(provider_id.as_str())
-                        .map_or_else(
-                            || {
-                                Err(error::Application::UnknownPriceComparisonProviderId(
-                                    provider_id.into(),
-                                ))
-                            },
-                            |provider: &Arc<dyn ComparisonProvider>| {
-                                Ok((provider, max_deviation_exclusive))
-                            },
-                        )
+                    price_comparison_providers.get(&provider_id).map_or_else(
+                        || {
+                            Err(error::Application::UnknownPriceComparisonProviderId(
+                                provider_id,
+                            ))
+                        },
+                        |provider: &Arc<dyn ComparisonProvider>| {
+                            Ok((provider, max_deviation_exclusive))
+                        },
+                    )
                 },
             )
             .transpose()
             .and_then(
                 |price_comparison_provider: Option<(&Arc<dyn ComparisonProvider>, u64)>| {
                     let provider_name: Arc<str> = config.provider.name().clone();
+
+                    let Some(sender): Option<&PriceDataSender> =
+                        price_data_senders.get(config.provider.oracle_addr())
+                    else {
+                        unreachable!()
+                    };
 
                     providers::Providers::visit_provider(
                         &provider_name,
@@ -156,8 +175,7 @@ fn try_for_each_provider_f(
                             provider_config: config.provider,
                             time_before_feeding: config.time_before_feeding,
                             nolus_node: &nolus_node,
-                            sender: &sender,
-                            oracle_addr: &oracle_addr,
+                            sender,
                         },
                     )
                     .ok_or(error::Application::UnknownProviderId(provider_name))
@@ -178,8 +196,7 @@ struct TaskSpawnerConfig<'r> {
 struct PriceComparisonProviderVisitor<'r> {
     provider_id: Arc<str>,
     provider_config: ComparisonProviderConfig,
-    oracle_addr: &'r Arc<str>,
-    nolus_node: &'r Arc<Client>,
+    nolus_node: &'r NodeClient,
 }
 
 impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
@@ -193,7 +210,6 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
             .block_on(FromConfig::<true>::from_config(
                 &self.provider_id,
                 self.provider_config.provider,
-                self.oracle_addr,
                 self.nolus_node,
             ))
             .map(|provider: P| Arc::new(provider) as Arc<dyn ComparisonProvider>)
@@ -208,9 +224,8 @@ struct TaskSpawningProviderVisitor<'r> {
     provider_id: &'r str,
     provider_config: ProviderConfig,
     time_before_feeding: Duration,
-    nolus_node: &'r Arc<Client>,
-    sender: &'r UnboundedSender<(usize, Instant, String)>,
-    oracle_addr: &'r Arc<str>,
+    nolus_node: &'r NodeClient,
+    sender: &'r PriceDataSender,
 }
 
 impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
@@ -223,7 +238,6 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
         match Handle::current().block_on(<P as FromConfig<false>>::from_config(
             self.provider_id,
             self.provider_config,
-            self.oracle_addr,
             self.nolus_node,
         )) {
             Ok(provider) => {
@@ -232,7 +246,8 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                     .spawn(perform_check_and_enter_loop(
                         (
                             provider,
-                            format!("Provider \"{}\" [{}]", self.provider_id, P::ID),
+                            format!("Provider \"{}\" [{}]", self.provider_id, P::ID)
+                                .into_boxed_str(),
                         ),
                         self.worker_task_spawner_config
                             .price_comparison_provider
@@ -259,17 +274,17 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
 }
 
 async fn perform_check_and_enter_loop<P>(
-    (provider, provider_name): (P, String),
+    (provider, provider_name): (P, Box<str>),
     comparison_provider_and_deviation: Option<(Arc<dyn ComparisonProvider>, u64)>,
     time_before_feeding: Duration,
-    sender: UnboundedSender<(usize, Instant, String)>,
+    sender: UnboundedSender<(usize, Instant, Vec<u8>)>,
     (monotonic_id, tick_time): (usize, Duration),
     recovery_mode: watch::Receiver<bool>,
 ) -> Result<(), error::Worker>
 where
     P: Provider,
 {
-    let prices: Box<[Price]> =
+    let prices: Box<[Price<CoinWithDecimalPlaces>]> =
         provider
             .get_prices(false)
             .await
@@ -284,25 +299,16 @@ where
             .await?;
     }
 
-    info_span!("Prices comparison guard", provider = provider.instance_id()).in_scope(|| {
-        info!("Prices to be fed:");
-
-        for price in prices.iter() {
-            info!(
-                "\t1 {}\t~ {} {}",
-                price.amount().ticker(),
-                (price.amount_quote().amount() as f64) / (price.amount().amount() as f64),
-                price.amount_quote().ticker()
-            );
-        }
-    });
+    print_prices_pretty(&provider, &prices);
 
     sleep(time_before_feeding).await;
 
     provider_main_loop(
         provider,
-        move |instant: Instant, data: String| {
-            sender.send((monotonic_id, instant, data)).map_err(|_| ())
+        move |data: Vec<u8>| {
+            sender
+                .send((monotonic_id, Instant::now(), data))
+                .map_err(|_| ())
         },
         provider_name,
         tick_time,
@@ -311,15 +317,51 @@ where
     .await
 }
 
+fn print_prices_pretty<P>(provider: &P, prices: &[Price<CoinWithDecimalPlaces>])
+where
+    P: Provider,
+{
+    info_span!("Prices comparison guard", provider = provider.instance_id()).in_scope(|| {
+        info!("Prices to be fed:");
+
+        for price in prices.iter() {
+            let base_f64: f64 = (price.amount_quote().amount()
+                * 10_u128.pow(
+                    price
+                        .amount()
+                        .decimal_places()
+                        .saturating_sub(price.amount_quote().decimal_places())
+                        .into(),
+                )) as f64;
+
+            let quote_f64: f64 = (price.amount().amount()
+                * 10_u128.pow(
+                    price
+                        .amount_quote()
+                        .decimal_places()
+                        .saturating_sub(price.amount().decimal_places())
+                        .into(),
+                )) as f64;
+
+            info!(
+                "\t1 {}\t~ {} {}",
+                price.amount().ticker(),
+                base_f64 / quote_f64,
+                price.amount_quote().ticker()
+            );
+        }
+    });
+}
+
 async fn provider_main_loop<SenderFn, P>(
     provider: P,
     sender: SenderFn,
-    provider_name: String,
+    provider_name: Box<str>,
     tick_time: Duration,
     mut recovery_mode: watch::Receiver<bool>,
 ) -> Result<(), error::Worker>
 where
-    SenderFn: Fn(Instant, String) -> Result<(), ()>,
+    SenderFn: Fn(Vec<u8>) -> Result<(), ()>,
     P: Provider,
 {
     let mut interval: Interval = interval(tick_time);
@@ -346,10 +388,11 @@ where
             Ok(prices) => {
                 seq_error_counter = 0;
 
-                let price_feed_json: String =
-                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?;
-
-                if sender(Instant::now(), price_feed_json).is_err() {
+                if sender(
+                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?.into_bytes(),
+                )
+                .is_err()
+                {
                     info!(
                         provider_name = %provider_name,
                         "Communication channel has been closed! Exiting worker task..."

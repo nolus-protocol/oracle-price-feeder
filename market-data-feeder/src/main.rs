@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeMap,
     io,
-    result::Result as StdResult,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -13,10 +12,11 @@ use std::{
 use futures::future::poll_fn;
 use tokio::{
     sync::{
-        mpsc::{UnboundedReceiver, UnboundedSender},
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
         watch,
     },
-    time::{error::Elapsed, sleep, timeout, Instant},
+    task::JoinSet,
+    time::{sleep, timeout, Instant},
 };
 use tracing::{error, info, info_span};
 use tracing_appender::{
@@ -26,7 +26,7 @@ use tracing_appender::{
 
 use chain_comms::{
     build_tx::ContractTx,
-    client::Client,
+    client::Client as NodeClient,
     interact::{
         commit_tx_with_gas_estimation, error::GasEstimatingTxCommit, query_wasm, CommitResponse,
     },
@@ -103,8 +103,6 @@ async fn app_main() -> Result<()> {
 
     check_compatibility(&config, &nolus_node).await?;
 
-    let nolus_node: Arc<Client> = Arc::new(nolus_node);
-
     info!("Starting workers...");
 
     let tick_time: Duration = Duration::from_secs(config.tick_time);
@@ -112,13 +110,13 @@ async fn app_main() -> Result<()> {
     let (recovery_mode_sender, recovery_mode_receiver): WatchChannel<bool> = watch::channel(false);
 
     let workers::SpawnWorkersReturn {
-        mut set,
-        mut receiver,
+        set: mut price_fetchers_set,
+        receivers,
     }: workers::SpawnWorkersReturn = workers::spawn(
         nolus_node.clone(),
+        config.oracles,
         config.providers,
         config.comparison_providers,
-        config.oracle_addr.clone(),
         tick_time,
         recovery_mode_receiver,
     )
@@ -126,14 +124,34 @@ async fn app_main() -> Result<()> {
 
     info!("Entering broadcasting loop...");
 
+    let mut price_feeders_set: JoinSet<()> = JoinSet::new();
+
+    let node_config = Arc::new(config.node);
+
+    let (tx_sender, mut tx_receiver): UnboundedChannel<(Instant, ContractTx)> = unbounded_channel();
+
+    for (oracle, price_data_receiver) in receivers {
+        price_feeders_set.spawn(price_feeder(
+            oracle,
+            tick_time,
+            price_data_receiver,
+            tx_sender.clone(),
+        ));
+    }
+
+    drop(tx_sender);
+
     let mut fallback_gas_limit: Option<u64> = None;
 
-    'feeder_loop: while !set.is_empty() {
-        if let Some(result) = poll_fn(|cx: &mut Context| match set.poll_join_next(cx) {
-            Poll::Pending => Poll::Ready(None),
-            result => result,
-        })
-        .await
+    'outer_loop: while !price_fetchers_set.is_empty() && !price_feeders_set.is_empty() {
+        if let Some(result) =
+            poll_fn(
+                |cx: &mut Context| match price_fetchers_set.poll_join_next(cx) {
+                    Poll::Pending => Poll::Ready(None),
+                    result => result,
+                },
+            )
+            .await
         {
             match result {
                 Ok(Ok(())) => unreachable!(),
@@ -146,32 +164,33 @@ async fn app_main() -> Result<()> {
             }
         }
 
-        let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
-
-        let _: StdResult<(), Elapsed> = timeout(tick_time, async {
-            while let Some((id, instant, data)) = receiver.recv().await {
-                if Instant::now().duration_since(instant) < tick_time {
-                    messages.insert(id, Vec::from(data));
+        if let Some(result) =
+            poll_fn(
+                |cx: &mut Context| match price_feeders_set.poll_join_next(cx) {
+                    Poll::Pending => Poll::Ready(None),
+                    result => result,
+                },
+            )
+            .await
+        {
+            match result {
+                Ok(()) => info!("Oracle feeder task exited"),
+                Err(error) => {
+                    error!(error = ?error, "Provider exitted prematurely and was unable to be joined! Probable cause is a panic! Error: {error}", error = error)
                 }
             }
-        })
-        .await;
-
-        if messages.is_empty() {
-            continue 'feeder_loop;
         }
+
+        let Some((tx_time, tx)): Option<(Instant, ContractTx)> = tx_receiver.recv().await else {
+            break;
+        };
+
+        let mut tx: Option<ContractTx> = Some(tx);
 
         let mut is_retry: bool = false;
 
-        let mut tx: Option<ContractTx> = Some(messages.into_values().fold(
-            ContractTx::new(config.oracle_addr.to_string()),
-            |tx: ContractTx, msg: Vec<u8>| tx.add_message(msg, Vec::new()),
-        ));
-
-        let first_try_timestamp: Instant = Instant::now();
-
         while let Some(tx) = if is_retry {
-            if first_try_timestamp.elapsed() < tick_time {
+            if tx_time.elapsed() < tick_time {
                 tx.take()
             } else {
                 None
@@ -184,7 +203,7 @@ async fn app_main() -> Result<()> {
             let successful: bool = commit_tx_with_gas_estimation(
                 &mut signer,
                 &nolus_node,
-                &config.node,
+                &node_config,
                 config.gas_limit,
                 tx,
                 fallback_gas_limit,
@@ -215,20 +234,62 @@ async fn app_main() -> Result<()> {
             );
 
             if successful {
-                continue 'feeder_loop;
+                continue 'outer_loop;
             } else if signer.needs_update()
                 && recovery_loop(&mut signer, &recovery_mode_sender, &nolus_node)
                     .await
                     .is_error()
             {
-                break 'feeder_loop;
+                break 'outer_loop;
             }
         }
     }
 
-    drop(receiver);
-
     Ok(())
+}
+
+async fn price_feeder(
+    oracle: Arc<str>,
+    tick_time: Duration,
+    mut price_data_receiver: UnboundedReceiver<(usize, Instant, Vec<u8>)>,
+    tx_sender: UnboundedSender<(Instant, ContractTx)>,
+) {
+    loop {
+        let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
+
+        let channel_closed: bool = timeout(tick_time, async {
+            while let Some((id, instant, data)) = price_data_receiver.recv().await {
+                if Instant::now().duration_since(instant) < tick_time {
+                    messages.insert(id, data);
+                }
+            }
+
+            true
+        })
+        .await
+        .unwrap_or_default();
+
+        if messages.is_empty() {
+            if channel_closed {
+                break;
+            } else {
+                continue;
+            }
+        }
+
+        let tx: ContractTx = messages.into_values().fold(
+            ContractTx::new(oracle.to_string()),
+            |tx: ContractTx, msg: Vec<u8>| {
+                error!(tx = %String::from_utf8_lossy(&msg));
+
+                tx.add_message(msg, Vec::new())
+            },
+        );
+
+        if tx_sender.send((Instant::now(), tx)).is_err() {
+            break;
+        }
+    }
 }
 
 enum RecoveryStatus {
@@ -245,7 +306,7 @@ impl RecoveryStatus {
 async fn recovery_loop(
     signer: &mut Signer,
     recovery_mode_sender: &watch::Sender<bool>,
-    client: &Arc<Client>,
+    client: &NodeClient,
 ) -> RecoveryStatus {
     let set_in_recovery = info_span!("recover-after-error").in_scope(|| {
         info!("After-error recovery needed!");
@@ -261,17 +322,14 @@ async fn recovery_loop(
         }
     });
 
-    let recovered: RecoveryStatus = recover_after_error(signer, client.as_ref()).await;
+    let recovered: RecoveryStatus = recover_after_error(signer, client).await;
 
     if recovered.is_error() {
         if set_in_recovery(true) {
             return RecoveryStatus::Error;
         }
 
-        while recover_after_error(signer, client.as_ref())
-            .await
-            .is_error()
-        {
+        while recover_after_error(signer, client).await.is_error() {
             sleep(Duration::from_secs(15)).await;
         }
 
@@ -314,7 +372,7 @@ async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()>
 }
 
 #[must_use]
-async fn recover_after_error(signer: &mut Signer, client: &Client) -> RecoveryStatus {
+async fn recover_after_error(signer: &mut Signer, client: &NodeClient) -> RecoveryStatus {
     if let Err(error) = signer.update_account(client).await {
         error!("{error}");
 

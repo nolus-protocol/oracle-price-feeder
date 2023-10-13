@@ -1,4 +1,4 @@
-use std::{convert::identity, sync::Arc};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use reqwest::{
@@ -17,9 +17,11 @@ use chain_comms::{
 };
 
 use crate::{
-    config::{Currencies, EnvError, ProviderConfigExt, Symbol, Ticker},
+    config::{
+        Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces, SymbolUnsized, Ticker,
+    },
     messages::{PoolId, QueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
-    price::{Price, Ratio},
+    price::{CoinWithDecimalPlaces, Price, Ratio},
     provider::{FromConfig, Provider, ProviderError},
 };
 
@@ -27,7 +29,7 @@ pub(crate) struct Osmosis {
     instance_id: String,
     http_client: ReqwestClient,
     prices_rpc_url: Url,
-    nolus_node: Arc<NodeClient>,
+    nolus_node: NodeClient,
     oracle_addr: Arc<str>,
     currencies: Currencies,
 }
@@ -43,11 +45,10 @@ impl Osmosis {
     async fn query_supported_currencies(
         &self,
         rpc: TonicChannel,
-        oracle_addr: &str,
     ) -> Result<impl Iterator<Item = Route> + '_, error::WasmQuery> {
         query_wasm::<SupportedCurrencyPairsResponse>(
             rpc,
-            oracle_addr,
+            self.oracle_addr.to_string(),
             QueryMsg::SUPPORTED_CURRENCY_PAIRS,
         )
         .await
@@ -55,18 +56,37 @@ impl Osmosis {
             swap_legs
                 .into_iter()
                 .filter_map(|swap: SwapLeg| -> Option<Route> {
-                    let from_symbol: String = self.currencies.get(&swap.from).cloned()?;
-                    let to_symbol: String = self.currencies.get(&swap.to.target).cloned()?;
+                    let (from_symbol, from_decimal_places): (Arc<SymbolUnsized>, u8) = self
+                        .currencies
+                        .get(&swap.from)
+                        .map(|symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
+                            (
+                                symbol_and_decimal_places.denom().clone(),
+                                symbol_and_decimal_places.decimal_places(),
+                            )
+                        })?;
+
+                    let (to_symbol, to_decimal_places): (Arc<SymbolUnsized>, u8) = self
+                        .currencies
+                        .get(&swap.to.target)
+                        .map(|symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
+                            (
+                                symbol_and_decimal_places.denom().clone(),
+                                symbol_and_decimal_places.decimal_places(),
+                            )
+                        })?;
 
                     Some(Route {
                         pool_id: swap.to.pool_id,
-                        from: TickerSymbol {
+                        from: TickerSymbolDecimalPlaces {
                             ticker: swap.from,
                             symbol: from_symbol,
+                            decimal_places: from_decimal_places,
                         },
-                        to: TickerSymbol {
+                        to: TickerSymbolDecimalPlaces {
                             ticker: swap.to.target,
                             symbol: to_symbol,
+                            decimal_places: to_decimal_places,
                         },
                     })
                 })
@@ -75,8 +95,8 @@ impl Osmosis {
 
     async fn query_price(
         request_builder: RequestBuilder,
-        from_symbol: Symbol,
-        to_symbol: Symbol,
+        from_symbol: &SymbolUnsized,
+        to_symbol: &SymbolUnsized,
     ) -> Result<ReqwestResponse, ProviderError> {
         request_builder
             .query(&[
@@ -91,12 +111,21 @@ impl Osmosis {
     async fn unwrap_response(
         response: ReqwestResponse,
         from_ticker: Ticker,
+        from_decimal_places: u8,
         to_ticker: Ticker,
-    ) -> Result<Price, ReqwestError> {
+        to_decimal_places: u8,
+    ) -> Result<Price<CoinWithDecimalPlaces>, ReqwestError> {
         response
             .json()
             .await
-            .map(|AssetPrice { spot_price }| spot_price.to_price(from_ticker, to_ticker))
+            .map(|AssetPrice { spot_price }: AssetPrice| {
+                spot_price.to_price_with_decimal_places(
+                    from_ticker,
+                    from_decimal_places,
+                    to_ticker,
+                    to_decimal_places,
+                )
+            })
     }
 }
 
@@ -106,64 +135,59 @@ impl Provider for Osmosis {
         &self.instance_id
     }
 
-    async fn get_prices(&self, fault_tolerant: bool) -> Result<Box<[Price]>, ProviderError> {
-        let mut prices: Vec<Price> = Vec::new();
+    async fn get_prices(
+        &self,
+        fault_tolerant: bool,
+    ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError> {
+        let mut set: JoinSet<Result<Price<CoinWithDecimalPlaces>, ProviderError>> = JoinSet::new();
 
+        for Route {
+            pool_id,
+            from:
+                TickerSymbolDecimalPlaces {
+                    ticker: from_ticker,
+                    symbol: from_symbol,
+                    decimal_places: from_decimal_places,
+                },
+            to:
+                TickerSymbolDecimalPlaces {
+                    ticker: to_ticker,
+                    symbol: to_symbol,
+                    decimal_places: to_decimal_places,
+                },
+        } in self
+            .nolus_node
+            .with_grpc(|rpc: TonicChannel| self.query_supported_currencies(rpc))
+            .await?
         {
-            let mut set: JoinSet<Result<Price, ProviderError>> = JoinSet::new();
+            let request_builder_result: Result<RequestBuilder, ProviderError> =
+                self.get_request_builder(format!("pools/{pool_id}/prices").as_str());
 
-            for Route {
-                pool_id,
-                from:
-                    TickerSymbol {
-                        ticker: from_ticker,
-                        symbol: from_symbol,
-                    },
-                to:
-                    TickerSymbol {
-                        ticker: to_ticker,
-                        symbol: to_symbol,
-                    },
-            } in self
-                .nolus_node
-                .with_grpc(|rpc: TonicChannel| {
-                    self.query_supported_currencies(rpc, &self.oracle_addr)
-                })
-                .await?
-            {
-                let request_builder_result: Result<RequestBuilder, ProviderError> =
-                    self.get_request_builder(format!("pools/{pool_id}/prices").as_str());
+            set.spawn(async move {
+                let response: ReqwestResponse =
+                    Self::query_price(request_builder_result?, &from_symbol, &to_symbol).await?;
 
-                set.spawn(async {
-                    let response: ReqwestResponse =
-                        Self::query_price(request_builder_result?, from_symbol, to_symbol).await?;
-
-                    if response.status().is_success() {
-                        Self::unwrap_response(response, from_ticker, to_ticker)
-                            .await
-                            .map_err(ProviderError::DeserializePoolPrice)
-                    } else {
-                        Err(ProviderError::ServerResponse(
-                            from_ticker,
-                            to_ticker,
-                            response.status().as_u16(),
-                        ))
-                    }
-                });
-            }
-
-            while let Some(result) = set.join_next().await {
-                match result.map_err(From::from).and_then(identity) {
-                    Ok(price) => prices.push(price),
-                    Err(error) if fault_tolerant => {
-                        tracing::error!(error = %error, "Couldn't resolve price!")
-                    }
-                    Err(error) => return Err(error),
+                if response.status().is_success() {
+                    Self::unwrap_response(
+                        response,
+                        from_ticker,
+                        from_decimal_places,
+                        to_ticker,
+                        to_decimal_places,
+                    )
+                    .await
+                    .map_err(ProviderError::DeserializePoolPrice)
+                } else {
+                    Err(ProviderError::ServerResponse(
+                        from_ticker,
+                        to_ticker,
+                        response.status().as_u16(),
+                    ))
                 }
-            }
+            });
         }
 
-        Ok(prices.into_boxed_slice())
+        super::collect_prices_from_task_set(set, fault_tolerant).await
     }
 }
 
@@ -176,8 +200,7 @@ impl FromConfig<false> for Osmosis {
     async fn from_config<Config>(
         id: &str,
         mut config: Config,
-        oracle_addr: &Arc<str>,
-        nolus_node: &Arc<NodeClient>,
+        nolus_node: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<false>,
@@ -192,6 +215,8 @@ impl FromConfig<false> for Osmosis {
                 })
             })
             .and_then(|currencies: Currencies| {
+                let oracle_addr: Arc<str> = config.oracle_addr().clone();
+
                 if let Some(fields) =
                     config
                         .into_misc()
@@ -218,7 +243,7 @@ impl FromConfig<false> for Osmosis {
                             http_client: ReqwestClient::new(),
                             prices_rpc_url,
                             nolus_node: nolus_node.clone(),
-                            oracle_addr: oracle_addr.clone(),
+                            oracle_addr,
                             currencies,
                         })
                 }
@@ -242,13 +267,14 @@ pub(crate) enum ConstructError {
 
 struct Route {
     pool_id: PoolId,
-    from: TickerSymbol,
-    to: TickerSymbol,
+    from: TickerSymbolDecimalPlaces,
+    to: TickerSymbolDecimalPlaces,
 }
 
-struct TickerSymbol {
+struct TickerSymbolDecimalPlaces {
     ticker: Ticker,
-    symbol: Symbol,
+    symbol: Arc<SymbolUnsized>,
+    decimal_places: u8,
 }
 
 #[derive(Debug, Deserialize)]
