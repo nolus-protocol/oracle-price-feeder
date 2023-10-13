@@ -324,30 +324,71 @@ where
     info_span!("Prices comparison guard", provider = provider.instance_id()).in_scope(|| {
         info!("Prices to be fed:");
 
-        for price in prices.iter() {
-            let base_f64: f64 = (price.amount_quote().amount()
-                * 10_u128.pow(
-                    price
-                        .amount()
-                        .decimal_places()
-                        .saturating_sub(price.amount_quote().decimal_places())
-                        .into(),
-                )) as f64;
+        let Some(max_base_denom_width): Option<usize> = prices
+            .iter()
+            .map(|price: &Price<CoinWithDecimalPlaces>| price.amount().ticker().len())
+            .max()
+        else {
+            return;
+        };
 
-            let quote_f64: f64 = (price.amount().amount()
-                * 10_u128.pow(
-                    price
-                        .amount_quote()
-                        .decimal_places()
-                        .saturating_sub(price.amount().decimal_places())
-                        .into(),
-                )) as f64;
+        let mut prices: Vec<(&Price<CoinWithDecimalPlaces>, String)> = prices
+            .iter()
+            .map(|price: &Price<CoinWithDecimalPlaces>| {
+                let base_f64: f64 = (price.amount_quote().amount()
+                    * 10_u128.pow(
+                        price
+                            .amount()
+                            .decimal_places()
+                            .saturating_sub(price.amount_quote().decimal_places())
+                            .into(),
+                    )) as f64;
 
+                let quote_f64: f64 = (price.amount().amount()
+                    * 10_u128.pow(
+                        price
+                            .amount_quote()
+                            .decimal_places()
+                            .saturating_sub(price.amount().decimal_places())
+                            .into(),
+                    )) as f64;
+
+                (price, (base_f64 / quote_f64).to_string())
+            })
+            .collect();
+
+        let Some(max_quote_width): Option<usize> = prices
+            .iter()
+            .map(|(_, quote): &(&Price<CoinWithDecimalPlaces>, String)| quote.len())
+            .max()
+        else {
+            return;
+        };
+
+        prices.sort_unstable_by(
+            |&(left_price, _): &(&Price<CoinWithDecimalPlaces>, String),
+             &(right_price, _): &(&Price<CoinWithDecimalPlaces>, String)| {
+                left_price
+                    .amount_quote()
+                    .ticker()
+                    .cmp(right_price.amount_quote().ticker())
+                    .then_with(|| {
+                        left_price
+                            .amount()
+                            .ticker()
+                            .cmp(right_price.amount().ticker())
+                    })
+            },
+        );
+
+        for (price, quote) in prices {
             info!(
-                "\t1 {}\t~ {} {}",
+                "\t1 {:<base_denom_width$} ~ {:>quote_width$} {}",
                 price.amount().ticker(),
-                base_f64 / quote_f64,
-                price.amount_quote().ticker()
+                quote,
+                price.amount_quote().ticker(),
+                base_denom_width = max_base_denom_width,
+                quote_width = max_quote_width,
             );
         }
     });
