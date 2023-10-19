@@ -10,7 +10,7 @@ use tokio::{
     task::{block_in_place, JoinSet},
     time::{interval, sleep, Instant, Interval},
 };
-use tracing::{info, info_span};
+use tracing::info;
 
 use chain_comms::client::Client as NodeClient;
 
@@ -22,7 +22,7 @@ use crate::{
     },
     error,
     messages::ExecuteMsg,
-    price::{Coin, CoinWithDecimalPlaces, Price},
+    price::{CoinWithDecimalPlaces, Price},
     provider::{
         ComparisonProvider, FromConfig, PriceComparisonGuardError, Provider, ProviderError,
     },
@@ -30,6 +30,8 @@ use crate::{
     result::Result as AppResult,
     UnboundedChannel,
 };
+
+mod print_prices_pretty;
 
 const MAX_SEQ_ERRORS: u8 = 5;
 
@@ -299,7 +301,7 @@ where
             .await?;
     }
 
-    print_prices_pretty(&provider, &prices);
+    print_prices_pretty::print(&provider, &prices);
 
     sleep(time_before_feeding).await;
 
@@ -315,83 +317,6 @@ where
         recovery_mode,
     )
     .await
-}
-
-fn print_prices_pretty<P>(provider: &P, prices: &[Price<CoinWithDecimalPlaces>])
-where
-    P: Provider,
-{
-    info_span!("Prices comparison guard", provider = provider.instance_id()).in_scope(|| {
-        info!("Prices to be fed:");
-
-        let Some(max_base_denom_width): Option<usize> = prices
-            .iter()
-            .map(|price: &Price<CoinWithDecimalPlaces>| price.amount().ticker().len())
-            .max()
-        else {
-            return;
-        };
-
-        let mut prices: Vec<(&Price<CoinWithDecimalPlaces>, String)> = prices
-            .iter()
-            .map(|price: &Price<CoinWithDecimalPlaces>| {
-                let base_f64: f64 = (price.amount_quote().amount()
-                    * 10_u128.pow(
-                        price
-                            .amount()
-                            .decimal_places()
-                            .saturating_sub(price.amount_quote().decimal_places())
-                            .into(),
-                    )) as f64;
-
-                let quote_f64: f64 = (price.amount().amount()
-                    * 10_u128.pow(
-                        price
-                            .amount_quote()
-                            .decimal_places()
-                            .saturating_sub(price.amount().decimal_places())
-                            .into(),
-                    )) as f64;
-
-                (price, (base_f64 / quote_f64).to_string())
-            })
-            .collect();
-
-        let Some(max_quote_width): Option<usize> = prices
-            .iter()
-            .map(|(_, quote): &(&Price<CoinWithDecimalPlaces>, String)| quote.len())
-            .max()
-        else {
-            return;
-        };
-
-        prices.sort_unstable_by(
-            |&(left_price, _): &(&Price<CoinWithDecimalPlaces>, String),
-             &(right_price, _): &(&Price<CoinWithDecimalPlaces>, String)| {
-                left_price
-                    .amount_quote()
-                    .ticker()
-                    .cmp(right_price.amount_quote().ticker())
-                    .then_with(|| {
-                        left_price
-                            .amount()
-                            .ticker()
-                            .cmp(right_price.amount().ticker())
-                    })
-            },
-        );
-
-        for (price, quote) in prices {
-            info!(
-                "\t1 {:<base_denom_width$} ~ {:>quote_width$} {}",
-                price.amount().ticker(),
-                quote,
-                price.amount_quote().ticker(),
-                base_denom_width = max_base_denom_width,
-                quote_width = max_quote_width,
-            );
-        }
-    });
 }
 
 async fn provider_main_loop<SenderFn, P>(

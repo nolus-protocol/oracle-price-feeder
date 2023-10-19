@@ -35,6 +35,10 @@ impl ContractTx {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty()
+    }
+
     pub fn add_message(mut self, message: Vec<u8>, funds: Vec<Coin>) -> Self {
         self.messages.push(Msg { message, funds });
 

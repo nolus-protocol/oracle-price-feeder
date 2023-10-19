@@ -175,7 +175,9 @@ async fn app_main() -> Result<()> {
         }
 
         let Some((tx_time, tx)): Option<(Instant, ContractTx)> = tx_receiver.recv().await else {
-            break;
+            warn!("Transaction receiving channel is closed!");
+
+            continue;
         };
 
         let mut tx: Option<ContractTx> = Some(tx);
@@ -211,18 +213,13 @@ async fn app_main() -> Result<()> {
                 |response: CommitResponse| {
                     log::commit_response(&response);
 
-                    if response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok() {
-                        let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
+                    let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
 
-                        let fallback_gas_limit: &mut u64 =
-                            fallback_gas_limit.get_or_insert(used_gas);
+                    let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(used_gas);
 
-                        *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
+                    *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
 
-                        true
-                    } else {
-                        false
-                    }
+                    response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok()
                 },
             );
 
@@ -264,6 +261,8 @@ async fn price_feeder(
 
         if messages.is_empty() {
             if channel_closed {
+                warn!("Price fetcher's channel closed! Exiting feeding task.");
+
                 break;
             } else {
                 continue;
@@ -272,14 +271,14 @@ async fn price_feeder(
 
         let tx: ContractTx = messages.into_values().fold(
             ContractTx::new(oracle.to_string()),
-            |tx: ContractTx, msg: Vec<u8>| {
-                error!(tx = %String::from_utf8_lossy(&msg));
-
-                tx.add_message(msg, Vec::new())
-            },
+            |tx: ContractTx, msg: Vec<u8>| tx.add_message(msg, Vec::new()),
         );
 
-        if tx_sender.send((Instant::now(), tx)).is_err() {
+        if tx.is_empty() {
+            warn!("Transaction contains no messages. Discarding transaction.");
+        } else if let Err(error) = tx_sender.send((Instant::now(), tx)) {
+            error!(error = %error, "Error occurred while trying to send transaction back to main task! Cause: {error}");
+
             break;
         }
     }
