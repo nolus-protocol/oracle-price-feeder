@@ -35,15 +35,21 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
                 unreachable!()
             };
 
-            if max_quote_whole_width < quote_whole.len() {
-                max_quote_whole_width = quote_whole.len();
-            }
-
             if max_quote_fraction_width < quote_fraction.len() {
                 max_quote_fraction_width = quote_fraction.len();
             }
 
-            (price, quote_whole.to_owned(), quote_fraction.to_owned())
+            let quote_whole_owned: String = if quote_whole.len() > 3 {
+                format_large(quote_whole, &mut max_quote_whole_width)
+            } else {
+                if max_quote_whole_width < quote_whole.len() {
+                    max_quote_whole_width = quote_whole.len();
+                }
+
+                quote_whole.to_owned()
+            };
+
+            (price, quote_whole_owned, quote_fraction.to_owned())
         })
         .collect();
 
@@ -61,6 +67,36 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
         quote_fraction_width = max_quote_fraction_width,
     );
     }
+}
+
+fn format_large(quote_whole: &str, max_quote_whole_width: &mut usize) -> String {
+    let divided_len: usize = quote_whole.len() / 3;
+
+    if *max_quote_whole_width < quote_whole.len() {
+        *max_quote_whole_width = quote_whole.len() + divided_len;
+    }
+
+    let mut quote_whole_owned: String = String::with_capacity(quote_whole.len() + divided_len);
+
+    let mut index: usize = quote_whole.len() % 3;
+
+    if let leading_digits @ 1.. = index {
+        quote_whole_owned.push_str(&quote_whole[..leading_digits]);
+
+        quote_whole_owned.push_str(" ");
+    }
+
+    while index < quote_whole.len() {
+        quote_whole_owned.push_str(&quote_whole[index..][..3]);
+
+        index += 3;
+
+        if index < quote_whole.len() {
+            quote_whole_owned.push_str(" ");
+        }
+    }
+
+    quote_whole_owned
 }
 
 fn cmp_price_tickers(
