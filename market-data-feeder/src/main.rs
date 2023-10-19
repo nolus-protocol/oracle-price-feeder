@@ -1,10 +1,7 @@
 use std::{
     collections::BTreeMap,
     io,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -19,11 +16,12 @@ use tokio::{
     task::JoinSet,
     time::{sleep, timeout, Instant},
 };
-use tracing::{error, info, info_span};
+use tracing::{error, info, info_span, warn};
 use tracing_appender::{
-    non_blocking::{NonBlocking, WorkerGuard},
-    rolling::RollingFileAppender,
+    non_blocking::{self, NonBlocking},
+    rolling,
 };
+use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
 use chain_comms::{
     build_tx::ContractTx,
@@ -67,15 +65,10 @@ type WatchChannel<T> = (watch::Sender<T>, watch::Receiver<T>);
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    static LOGGER_ON_DROP: AtomicBool = AtomicBool::new(false);
+    let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
+        NonBlocking::new(rolling::hourly("./feeder-logs", "log"));
 
-    let log_writer: RollingFileAppender = tracing_appender::rolling::hourly("./feeder-logs", "log");
-
-    let (log_writer, log_guard): (NonBlocking, WorkerGuard) = tracing_appender::non_blocking(
-        log::CombinedWriter::new(io::stdout(), log_writer, &LOGGER_ON_DROP),
-    );
-
-    log::setup(log_writer)?;
+    log::setup(io::stdout.and(log_writer));
 
     info!(concat!(
         "Running version built on: ",
@@ -89,10 +82,6 @@ async fn main() -> Result<()> {
     }
 
     drop(log_guard);
-
-    while !LOGGER_ON_DROP.load(Ordering::Acquire) {
-        tokio::task::yield_now().await;
-    }
 
     result
 }

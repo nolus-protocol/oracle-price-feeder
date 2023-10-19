@@ -1,83 +1,32 @@
-use std::{
-    io::{Result as IoResult, Write},
-    sync::atomic::{AtomicBool, Ordering},
-};
-
-use tracing::{
-    debug,
-    dispatcher::{set_global_default, SetGlobalDefaultError},
-    error, info, Dispatch,
-};
+use tracing::{debug, error, info};
 
 use crate::{build_tx::TxResponse, interact::CommitResponse};
 
-pub struct CombinedWriter<T, U>(T, U, &'static AtomicBool)
-where
-    T: Write + Send + Sync + 'static,
-    U: Write + Send + Sync + 'static;
-
-impl<T, U> Drop for CombinedWriter<T, U>
-where
-    T: Write + Send + Sync + 'static,
-    U: Write + Send + Sync + 'static,
-{
-    fn drop(&mut self) {
-        self.2.store(true, Ordering::Release)
-    }
-}
-
-impl<T, U> CombinedWriter<T, U>
-where
-    T: Write + Send + Sync + 'static,
-    U: Write + Send + Sync + 'static,
-{
-    pub fn new(first: T, second: U, on_drop: &'static AtomicBool) -> Self {
-        Self(first, second, on_drop)
-    }
-}
-
-impl<T, U> Write for CombinedWriter<T, U>
-where
-    T: Write + Send + Sync + 'static,
-    U: Write + Send + Sync + 'static,
-{
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        self.0.write(buf).and(self.1.write(buf))
-    }
-
-    fn flush(&mut self) -> IoResult<()> {
-        self.0.flush().and(self.1.flush())
-    }
-}
-
-pub fn setup<W>(writer: W) -> Result<(), SetGlobalDefaultError>
+pub fn setup<W>(writer: W)
 where
     W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
 {
-    set_global_default(Dispatch::new(
-        tracing_subscriber::fmt()
-            .with_level(true)
-            .with_ansi(true)
-            .with_file(false)
-            .with_line_number(false)
-            .with_writer(writer)
-            .with_max_level({
-                use std::{env::var_os, ffi::OsStr};
+    tracing_subscriber::fmt()
+        .with_level(true)
+        .with_ansi(true)
+        .with_file(false)
+        .with_line_number(false)
+        .with_writer(writer)
+        .with_max_level({
+            use std::{env::var_os, ffi::OsStr};
 
-                if var_os("DEBUG_LOGGING")
-                    .map(|value| {
-                        [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
-                            .contains(&value.as_os_str())
-                    })
-                    .unwrap_or(cfg!(debug_assertions))
-                {
-                    tracing::level_filters::LevelFilter::DEBUG
-                } else {
-                    tracing::level_filters::LevelFilter::INFO
-                }
-            })
-            .finish(),
-    ))
+            if var_os("DEBUG_LOGGING")
+                .map(|value| {
+                    [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")].contains(&value.as_os_str())
+                })
+                .unwrap_or(cfg!(debug_assertions))
+            {
+                tracing::level_filters::LevelFilter::DEBUG
+            } else {
+                tracing::level_filters::LevelFilter::INFO
+            }
+        })
+        .init();
 }
 
 pub fn commit_response(response: &CommitResponse) {

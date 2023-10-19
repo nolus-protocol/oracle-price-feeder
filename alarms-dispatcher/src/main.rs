@@ -1,11 +1,17 @@
-use std::{
-    sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
-};
+use std::{io, time::Duration};
 
+use semver::{
+    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
+    Prerelease as SemVerPrerelease, Version,
+};
 use serde::Deserialize;
 use tokio::time::sleep;
 use tracing::{debug, error, info, info_span, span::EnteredSpan};
+use tracing_appender::{
+    non_blocking::{self, NonBlocking},
+    rolling,
+};
+use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
 use chain_comms::{
     build_tx::ContractTx,
@@ -13,15 +19,11 @@ use chain_comms::{
     config::Node,
     decode,
     interact::{commit_tx_with_gas_estimation, query_wasm, CommitResponse},
-    log::{self, commit_response, setup},
+    log::{self, commit_response},
     reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signer::Signer,
     signing_key::DEFAULT_COSMOS_HD_PATH,
-};
-use semver::{
-    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
-    Prerelease as SemVerPrerelease, Version,
 };
 
 use self::{
@@ -53,17 +55,10 @@ pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
-    static LOGGER_ON_DROP: AtomicBool = AtomicBool::new(false);
+    let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
+        NonBlocking::new(rolling::hourly("./dispatcher-logs", "log"));
 
-    let log_writer = tracing_appender::rolling::hourly("./dispatcher-logs", "log");
-
-    let (log_writer, _guard) = tracing_appender::non_blocking(log::CombinedWriter::new(
-        std::io::stdout(),
-        log_writer,
-        &LOGGER_ON_DROP,
-    ));
-
-    setup(log_writer)?;
+    log::setup(io::stdout.and(log_writer));
 
     info!(concat!(
         "Running version built on: ",
@@ -76,9 +71,7 @@ async fn main() -> AppResult<()> {
         error!(error = ?error, "{}", error);
     }
 
-    while !LOGGER_ON_DROP.load(Ordering::Acquire) {
-        tokio::task::yield_now().await;
-    }
+    drop(log_guard);
 
     result
 }
