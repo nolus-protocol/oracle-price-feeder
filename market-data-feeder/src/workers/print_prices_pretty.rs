@@ -83,7 +83,7 @@ fn format_large(quote_whole: &str, max_quote_whole_width: &mut usize) -> String 
     if let leading_digits @ 1.. = index {
         quote_whole_owned.push_str(&quote_whole[..leading_digits]);
 
-        quote_whole_owned.push_str(" ");
+        quote_whole_owned.push(' ');
     }
 
     while index < quote_whole.len() {
@@ -92,7 +92,7 @@ fn format_large(quote_whole: &str, max_quote_whole_width: &mut usize) -> String 
         index += 3;
 
         if index < quote_whole.len() {
-            quote_whole_owned.push_str(" ");
+            quote_whole_owned.push(' ');
         }
     }
 
