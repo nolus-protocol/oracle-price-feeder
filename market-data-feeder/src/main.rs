@@ -199,9 +199,9 @@ async fn app_main() -> Result<()> {
                 &mut signer,
                 &nolus_node,
                 &node_config,
-                config.gas_limit,
+                config.hard_gas_limit,
                 tx,
-                fallback_gas_limit,
+                fallback_gas_limit.unwrap_or(config.hard_gas_limit),
             )
             .await
             .map_or_else(

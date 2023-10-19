@@ -145,23 +145,21 @@ pub async fn commit_tx_with_gas_estimation(
     signer: &mut Signer,
     client: &Client,
     node_config: &Node,
-    gas_limit: u64,
+    hard_gas_limit: u64,
     unsigned_tx: ContractTx,
-    fallback_gas_limit: Option<u64>,
+    fallback_gas_limit: u64,
 ) -> Result<CommitResponse, error::GasEstimatingTxCommit> {
     let tx_gas_limit: u64 = match simulate_tx(
         signer,
         client,
         node_config,
-        gas_limit,
+        hard_gas_limit,
         unsigned_tx.clone(),
     )
     .await
     {
         Ok(gas_info) => gas_info.gas_used,
         Err(error) => {
-            let fallback_gas_limit: u64 = fallback_gas_limit.unwrap_or(gas_limit);
-
             error!(
                 error = %error,
                 "Failed to simulate transaction! Falling back to provided gas limit. Fallback gas limit: {gas_limit}.",
@@ -177,9 +175,10 @@ pub async fn commit_tx_with_gas_estimation(
         .and_then(|result: u128| {
             result.checked_div(node_config.gas_adjustment_denominator().get().into())
         })
-        .map_or(tx_gas_limit, |result| {
+        .map_or(tx_gas_limit, |result: u128| {
             u64::try_from(result).unwrap_or(u64::MAX)
-        });
+        })
+        .max(hard_gas_limit);
 
     commit_tx(signer, client, node_config, unsigned_tx, adjusted_gas_limit)
         .await

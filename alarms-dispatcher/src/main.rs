@@ -344,22 +344,24 @@ async fn commit_dispatch_tx(
     contract: &Contract,
     fallback_gas_limit: Option<u64>,
 ) -> Result<CommitResult, error::CommitDispatchTx> {
-    let unsigned_tx = ContractTx::new(contract.address().into()).add_message(
+    let unsigned_tx: ContractTx = ContractTx::new(contract.address().into()).add_message(
         serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
             max_count: contract.max_alarms_group(),
         })?,
         Vec::new(),
     );
 
+    let gas_limit: u64 = contract
+        .gas_limit_per_alarm()
+        .saturating_mul(contract.max_alarms_group().into());
+
     let tx_commit_response: CommitResponse = commit_tx_with_gas_estimation(
         signer,
         client,
         config,
-        contract
-            .gas_limit_per_alarm()
-            .saturating_mul(contract.max_alarms_group().into()),
+        gas_limit,
         unsigned_tx,
-        fallback_gas_limit,
+        fallback_gas_limit.unwrap_or(gas_limit),
     )
     .await?;
 

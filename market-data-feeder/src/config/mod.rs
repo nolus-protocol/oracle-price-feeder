@@ -53,7 +53,7 @@ pub(crate) struct Config {
     pub oracles: Vec<Arc<str>>,
     pub providers: BTreeMap<Arc<str>, ProviderWithComparison>,
     pub comparison_providers: BTreeMap<Arc<str>, ComparisonProvider>,
-    pub gas_limit: u64,
+    pub hard_gas_limit: u64,
     pub node: Node,
 }
 
@@ -69,7 +69,7 @@ impl<'de> Deserialize<'de> for Config {
             oracles: raw_oracles,
             providers: raw_providers,
             comparison_providers: raw_comparison_providers,
-            gas_limit,
+            hard_gas_limit,
             node,
         }: raw::Config = raw::Config::deserialize(deserializer)?;
 
@@ -100,7 +100,7 @@ impl<'de> Deserialize<'de> for Config {
             oracles: oracles.into_values().collect(),
             providers,
             comparison_providers,
-            gas_limit,
+            hard_gas_limit,
             node,
         })
     }

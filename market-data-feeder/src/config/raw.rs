@@ -43,7 +43,7 @@ pub(super) struct ComparisonProvider {
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(super) struct Config {
     pub tick_time: u64,
-    pub gas_limit: u64,
+    pub hard_gas_limit: u64,
     pub node: NodeConfig,
     pub oracles: BTreeMap<String, String>,
     pub providers: BTreeMap<String, ProviderWithComparison>,

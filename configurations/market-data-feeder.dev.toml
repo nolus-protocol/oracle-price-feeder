@@ -1,5 +1,5 @@
 tick_time = 60
-gas_limit = 550_000
+hard_gas_limit = 550_000
 
 [node]
 address_prefix = "nolus"
