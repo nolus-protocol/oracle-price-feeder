@@ -1,11 +1,7 @@
 [workspace]
-members = [
-    "chain-comms",
-    "market-data-feeder",
-    "alarms-dispatcher",
-]
-
 resolver = "2"
+
+members = ["chain-comms", "market-data-feeder", "alarms-dispatcher"]
 
 [workspace.package]
 edition = "2021"
@@ -14,12 +10,59 @@ license = "Apache-2.0"
 [workspace.dependencies]
 chain-comms = { path = "./chain-comms" }
 
+async-trait = "0.1.74"
+base64 = "0.21.4"
+bnum = "0.9"
+bytes = "1.5"
+cosmrs = { version = "0.14", default-features = false, features = [
+    "rpc",
+    "grpc",
+    "bip32",
+    "cosmwasm",
+] }
+futures = "0.3.28"
+http = { version = "0.2.9", default-features = false }
+prost = "0.12.1"
+prost-types = "0.12.1"
+regex = "1.10"
+reqwest = { version = "0.11.22", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
 semver = { version = "1", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde-json-wasm = "1"
+time = { version = "0.3.30", default-features = false, features = [
+    "std",
+    "formatting",
+] }
+thiserror = "1"
+tokio = { version = "1.33", default-features = false, features = [
+    "rt-multi-thread",
+    "macros",
+] }
+toml = "0.8.2"
+tonic = { version = "0.9.2", default_features = false, features = [
+    "tls",
+    "tls-roots",
+    "gzip",
+] }
+tracing = "0.1.40"
+tracing-appender = "0.2.2"
+tracing-subscriber = "0.3.17"
+url = { version = "2.4.1", default-features = false }
 
-[patch.crates-io]
-tendermint = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
-tendermint-proto = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
-tendermint-rpc = { git = "https://github.com/nolus-protocol/tendermint-rs.git", branch = "feat-set-origin-header" }
+[patch.crates-io.tendermint]
+git = "https://github.com/nolus-protocol/tendermint-rs.git"
+branch = "feat-set-origin-header"
+
+[patch.crates-io.tendermint-proto]
+git = "https://github.com/nolus-protocol/tendermint-rs.git"
+branch = "feat-set-origin-header"
+
+[patch.crates-io.tendermint-rpc]
+git = "https://github.com/nolus-protocol/tendermint-rs.git"
+branch = "feat-set-origin-header"
 
 [profile.release]
 overflow-checks = true

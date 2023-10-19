@@ -9,33 +9,27 @@ path = "src/main.rs"
 name = "feeder"
 
 [dependencies]
-semver = { workspace = true }
 chain-comms = { workspace = true }
 
-reqwest = { version = "0.11.20", default-features = false, features = ["json", "rustls-tls"] }
-url = { version = "2.4.1", default-features = false }
-http = { version = "0.2.9", default-features = false }
-tokio = { version = "1.32", features = ["macros", "rt-multi-thread", "fs", "signal"] }
-futures = "0.3.28"
-tracing = "0.1.37"
-tracing-subscriber = "0.3.17"
-tracing-appender = "0.2.2"
-
-regex = "1.9"
-bytes = "1.5"
-serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "1"
-toml = "0.7.1"
-thiserror = "1"
-async-trait = "0.1.73"
-prost = "0.12"
-prost-types = "0.12"
-bnum = "0.8"
-
-[dev-dependencies]
-tokio = { version = "1", features = ["rt", "macros"] }
-wiremock = "0.5.2"
-actix-rt = "2.7"
+async-trait = { workspace = true }
+bnum = { workspace = true }
+bytes = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+prost = { workspace = true }
+prost-types = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde-json-wasm = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "signal"] }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
 
 [build-dependencies]
-time = { version = "0.3.28", default-features = false, features = ["std", "formatting"] }
+time = { workspace = true }

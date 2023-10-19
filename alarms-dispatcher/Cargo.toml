@@ -7,17 +7,18 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-semver = { workspace = true }
 chain-comms = { workspace = true }
 
-base64 = "0.21.4"
-prost = "0.12"
-serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "1"
-thiserror = "1"
-tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros", "io-std", "io-util", "time", "fs"] }
-tracing = "0.1.37"
-tracing-appender = "0.2.2"
+base64 = { workspace = true }
+prost = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde-json-wasm = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-std", "io-util", "time", "fs"] }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [build-dependencies]
-time = { version = "0.3.28", default-features = false, features = ["std", "formatting"] }
+time = { workspace = true }
