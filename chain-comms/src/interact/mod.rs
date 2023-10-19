@@ -178,7 +178,7 @@ pub async fn commit_tx_with_gas_estimation(
         .map_or(tx_gas_limit, |result: u128| {
             u64::try_from(result).unwrap_or(u64::MAX)
         })
-        .max(hard_gas_limit);
+        .min(hard_gas_limit);
 
     commit_tx(signer, client, node_config, unsigned_tx, adjusted_gas_limit)
         .await
