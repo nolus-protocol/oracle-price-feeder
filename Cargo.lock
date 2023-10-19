@@ -1918,8 +1918,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#304504a438e9d78523de0d25c6b4341cc45c663c"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#c8bfe772f2255172bb4f6006adb9571cddaea12b"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -1948,8 +1948,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint-config"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#304504a438e9d78523de0d25c6b4341cc45c663c"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#c8bfe772f2255172bb4f6006adb9571cddaea12b"
 dependencies = [
  "flex-error",
  "serde",
@@ -1961,8 +1961,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint-proto"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#304504a438e9d78523de0d25c6b4341cc45c663c"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#c8bfe772f2255172bb4f6006adb9571cddaea12b"
 dependencies = [
  "bytes",
  "flex-error",
@@ -1978,8 +1978,8 @@ dependencies = [
 
 [[package]]
 name = "tendermint-rpc"
-version = "0.32.2"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#304504a438e9d78523de0d25c6b4341cc45c663c"
+version = "0.32.0"
+source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=feat-set-origin-header#c8bfe772f2255172bb4f6006adb9571cddaea12b"
 dependencies = [
  "async-trait",
  "bytes",
