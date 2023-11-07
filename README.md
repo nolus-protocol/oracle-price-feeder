@@ -107,7 +107,8 @@ enable = true
 
 * Editing the `market-data-feeder.toml` file:
 
-  !!!!!! On local network - remove the [providers.osmosis_lcd.comparison], [comparison_providers.sanity_check] and [comparison_providers.sanity_check.ticker_mapping] sections from the configuration file.
+  * When running through `bash` - replace all instances of entries containing a dash, e.g. `osmosis-lcd`, with their counterpart that uses an underscore, e.g. `osmosis_lcd`.
+  * When desired to run without a sanity check - remove the [providers.osmosis_lcd.comparison], [comparison_providers.sanity_check] and [comparison_providers.sanity_check.ticker_mapping] sections from the configuration file.
 
    |      Key       |            Value             | Default | Description                                                                                                                                       |
    |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
