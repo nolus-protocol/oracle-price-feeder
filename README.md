@@ -107,6 +107,8 @@ enable = true
 
 * Editing the `market-data-feeder.toml` file:
 
+  !!!!!! On local network - remove the [providers.osmosis_lcd.comparison], [comparison_providers.sanity_check] and [comparison_providers.sanity_check.ticker_mapping] sections from the configuration file.
+
    |      Key       |            Value             | Default | Description                                                                                                                                       |
    |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
    | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
@@ -146,16 +148,29 @@ enable = true
     gRPC endpoint's URL.
 
 * For feeder:
-  * `PROVIDER_OSMOSIS_BASE_ADDRESS`
+  * `PROVIDER_OSMOSIS_LCD_RPC_URL`
     Osmosis' GAMM module API endpoint's URL.
-    Current configuration:
-    * For dev-net: `https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/`
-    * For test-net: `https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/`
 
-For local network:
+  * `PROVIDER_OSMOSIS_LCD_SECONDS_BEFORE_FEEDING`
+
+  * `PROVIDER_OSMOSIS_LCD_MAX_DEVIATION`
+
+  * `SIGNING_KEY_MNEMONIC`
+
+  * `COMPARISON_PROVIDER_SANITY_CHECK_API_KEY`
+
+On local network:
+
+Feeder:
 
 ```shell
-export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ; export PROVIDER_OSMOSIS_BASE_ADDRESS="https://osmo-net.nolus.io:1317/osmosis/gamm/v1beta1/"
+export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ; export PROVIDER_OSMOSIS_LCD_SECONDS_BEFORE_FEEDING=0 ; export PROVIDER_OSMOSIS_LCD_MAX_DEVIATION=1000 ; export PROVIDER_OSMOSIS_LCD_RPC_URL="https://lcd.osmotest5.osmosis.zone/osmosis/poolmanager/" ;
+```
+
+Dispatcher:
+
+```shell
+export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ;
 ```
 
 ### Start feeder service
