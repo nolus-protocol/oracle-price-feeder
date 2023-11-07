@@ -25,9 +25,7 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
     let mut prices: Vec<(&Price<CoinWithDecimalPlaces>, String, String)> = prices
         .iter()
         .map(|price: &Price<CoinWithDecimalPlaces>| {
-            if max_base_denom_width < price.amount().ticker().len() {
-                max_base_denom_width = price.amount().ticker().len();
-            }
+            assign_max(&mut max_base_denom_width, price.amount().ticker().len());
 
             let quote_amount: String = normalize_and_stringify_quote(price);
 
@@ -35,9 +33,7 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
                 unreachable!()
             };
 
-            if max_quote_fraction_width < quote_fraction.len() {
-                max_quote_fraction_width = quote_fraction.len();
-            }
+            assign_max(&mut max_quote_fraction_width, quote_fraction.len());
 
             let quote_whole_owned: String = if quote_whole.len() > 3 {
                 format_large(quote_whole, &mut max_quote_whole_width)
@@ -57,24 +53,22 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
 
     for (price, quote_whole, quote_fraction) in prices {
         info!(
-        "\t1 {base_denom:<base_denom_width$} ~ {quote_whole:>quote_whole_width$}.{quote_fraction:<quote_fraction_width$} {quote_denom}",
-        base_denom = price.amount().ticker(),
-        quote_whole = quote_whole,
-        quote_fraction = quote_fraction,
-        quote_denom = price.amount_quote().ticker(),
-        base_denom_width = max_base_denom_width,
-        quote_whole_width = max_quote_whole_width,
-        quote_fraction_width = max_quote_fraction_width,
-    );
+            "\t1 {base_denom:<base_denom_width$} ~ {quote_whole:>quote_whole_width$}.{quote_fraction:<quote_fraction_width$} {quote_denom}",
+            base_denom = price.amount().ticker(),
+            quote_whole = quote_whole,
+            quote_fraction = quote_fraction,
+            quote_denom = price.amount_quote().ticker(),
+            base_denom_width = max_base_denom_width,
+            quote_whole_width = max_quote_whole_width,
+            quote_fraction_width = max_quote_fraction_width,
+        );
     }
 }
 
 fn format_large(quote_whole: &str, max_quote_whole_width: &mut usize) -> String {
     let divided_len: usize = quote_whole.len() / 3;
 
-    if *max_quote_whole_width < quote_whole.len() {
-        *max_quote_whole_width = quote_whole.len() + divided_len;
-    }
+    assign_max(max_quote_whole_width, quote_whole.len() + divided_len);
 
     let mut quote_whole_owned: String = String::with_capacity(quote_whole.len() + divided_len);
 
@@ -97,6 +91,12 @@ fn format_large(quote_whole: &str, max_quote_whole_width: &mut usize) -> String 
     }
 
     quote_whole_owned
+}
+
+fn assign_max(var: &mut usize, value: usize) {
+    if *var < value {
+        *var = value;
+    }
 }
 
 fn cmp_price_tickers(
