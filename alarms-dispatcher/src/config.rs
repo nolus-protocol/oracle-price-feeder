@@ -33,8 +33,8 @@ impl Contract {
 pub struct Config {
     poll_period_seconds: u64,
     node: Node,
-    time_alarms: Contract,
-    market_price_oracle: Contract,
+    time_alarms: Vec<Contract>,
+    market_price_oracle: Vec<Contract>,
 }
 
 impl Config {
@@ -47,11 +47,11 @@ impl Config {
         &self.node
     }
 
-    pub const fn time_alarms(&self) -> &Contract {
+    pub fn time_alarms(&self) -> &[Contract] {
         &self.time_alarms
     }
 
-    pub const fn market_price_oracle(&self) -> &Contract {
+    pub fn market_price_oracle(&self) -> &[Contract] {
         &self.market_price_oracle
     }
 }

@@ -5,7 +5,7 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 use serde::Deserialize;
-use tokio::time::sleep;
+use tokio::time::{sleep, sleep_until, Instant};
 use tracing::{debug, error, info, info_span, span::EnteredSpan};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
@@ -105,18 +105,19 @@ async fn check_comparibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
         patch: u64,
     }
 
-    for (contract, name, compatible) in [
-        (
-            rpc_setup.config.time_alarms(),
-            "timealarms",
-            TIME_ALARMS_COMPATIBLE_VERSION,
-        ),
-        (
-            rpc_setup.config.market_price_oracle(),
-            "oracle",
-            ORACLE_COMPATIBLE_VERSION,
-        ),
-    ] {
+    for (contract, name, compatible) in rpc_setup
+        .config
+        .time_alarms()
+        .iter()
+        .map(|contract: &Contract| (contract, "timealarms", TIME_ALARMS_COMPATIBLE_VERSION))
+        .chain(
+            rpc_setup
+                .config
+                .market_price_oracle()
+                .iter()
+                .map(|contract: &Contract| (contract, "oracle", ORACLE_COMPATIBLE_VERSION)),
+        )
+    {
         let version: JsonVersion = rpc_setup
             .nolus_node
             .with_grpc(|rpc: TonicChannel| {
@@ -162,33 +163,32 @@ async fn dispatch_alarms(
         ..
     }: RpcSetup<Config>,
 ) -> Result<(), error::DispatchAlarms> {
-    type Contracts<'r> = [(
-        &'r Contract,
-        &'static str,
-        fn(error::DispatchAlarm) -> error::DispatchAlarms,
-    ); 2];
-
     let poll_period: Duration = Duration::from_secs(config.poll_period_seconds());
 
     let mut fallback_gas_limit: Option<u64> = None;
 
-    let contracts: Contracts<'_> = [
-        (
-            config.market_price_oracle(),
-            "market price",
-            error::DispatchAlarms::DispatchPriceAlarm
-                as fn(error::DispatchAlarm) -> error::DispatchAlarms,
-        ),
-        (
-            config.time_alarms(),
-            "time",
-            error::DispatchAlarms::DispatchTimeAlarm
-                as fn(error::DispatchAlarm) -> error::DispatchAlarms,
-        ),
-    ];
+    let contracts = config
+        .market_price_oracle()
+        .iter()
+        .map(|contract: &Contract| {
+            (
+                contract,
+                "market price",
+                error::DispatchAlarms::DispatchPriceAlarm as _,
+            )
+        })
+        .chain(config.time_alarms().iter().map(|contract: &Contract| {
+            (
+                contract,
+                "time",
+                error::DispatchAlarms::DispatchPriceAlarm as _,
+            )
+        }));
 
     loop {
-        for contract in contracts {
+        let next_iteration: Option<Instant> = Instant::now().checked_add(poll_period);
+
+        for contract in contracts.clone() {
             let mut is_retry: bool = false;
 
             'dispatch_alarm: loop {
@@ -214,7 +214,13 @@ async fn dispatch_alarms(
             }
         }
 
-        sleep(poll_period).await;
+        if let Some(instant) = next_iteration {
+            if Instant::now() < instant {
+                sleep_until(instant).await
+            }
+        } else {
+            sleep(poll_period).await;
+        }
     }
 }
 
