@@ -246,48 +246,50 @@ over time. These are provided as a guide.*
 * Feeder - one of the following options:
 
   * ```shell
-      echo $MNEMONIC | docker run -i -a stdin --add-host \
+      echo $MNEMONIC | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
-      host.docker.internal:host-gateway market-data-feeder
+      market-data-feeder
     ```
 
   * ```shell
-      cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+      cat $MNEMONIC_FILE | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
-      host.docker.internal:host-gateway market-data-feeder
+      market-data-feeder
     ```
 
   * ```shell
-      docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
+      docker run -i -a stdin --add-host host.docker.internal:host-gateway \
+      --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
-      host.docker.internal:host-gateway market-data-feeder
+      market-data-feeder
     ```
 
 * Dispatcher - one of the following options:
 
   * ```shell
-      echo $MNEMONIC | docker run -i -a stdin --add-host \
+      echo $MNEMONIC | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
-      host.docker.internal:host-gateway alarms-dispatcher
+      alarms-dispatcher
     ```
 
   * ```shell
-      cat $MNEMONIC_FILE | docker run -i -a stdin --add-host \
+      cat $MNEMONIC_FILE | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
-      host.docker.internal:host-gateway alarms-dispatcher
+      alarms-dispatcher
     ```
 
   * ```shell
-      docker run -i -a stdin --add-host --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
+      docker run -i -a stdin --add-host host.docker.internal:host-gateway \
+      --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
       --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
       --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
-      host.docker.internal:host-gateway alarms-dispatcher
+      alarms-dispatcher
     ```
