@@ -76,15 +76,15 @@ impl<'de> Deserialize<'de> for Config {
         let mut oracles: BTreeMap<Arc<str>, Arc<str>> = BTreeMap::new();
 
         for (raw_oracle_id, raw_oracle_addr) in raw_oracles {
-            #[cfg(debug_assertions)]
-            let None: Option<Arc<str>> = oracles.insert(
+            let result = oracles.insert(
                 str_pool.get_or_insert(raw_oracle_id),
                 str_pool.get_or_insert(raw_oracle_addr),
-            ) else {
+            );
+
+            #[cfg(debug_assertions)]
+            if result.is_some() {
                 unreachable!()
-            };
-            #[cfg(not(debug_assertions))]
-            oracles.insert(raw_oracle_id, str_pool.get_or_insert(raw_oracle_addr));
+            }
         }
 
         let comparison_providers: BTreeMap<Arc<str>, ComparisonProvider> =
