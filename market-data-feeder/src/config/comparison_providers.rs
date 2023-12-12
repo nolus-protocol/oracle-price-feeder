@@ -10,7 +10,7 @@ use super::{get_oracle, raw, str_pool::StrPool, ComparisonProvider, Provider};
 pub(super) fn reconstruct<'r, 'de, D>(
     raw_comparison_providers: BTreeMap<String, raw::ComparisonProvider>,
     str_pool: &'r mut StrPool,
-    oracles: &'r BTreeMap<String, Arc<str>>,
+    oracles: &'r BTreeMap<Arc<str>, Arc<str>>,
 ) -> Result<BTreeMap<Arc<str>, ComparisonProvider>, D::Error>
 where
     D: Deserializer<'de>,

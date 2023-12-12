@@ -10,7 +10,7 @@ use tokio::{
     task::{block_in_place, JoinSet},
     time::{interval, sleep, Instant, Interval},
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use chain_comms::client::Client as NodeClient;
 
@@ -40,8 +40,14 @@ const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 type PriceDataPacket = (usize, Instant, Vec<u8>);
 type PriceDataSender = UnboundedSender<PriceDataPacket>;
 type PriceDataReceiver = UnboundedReceiver<PriceDataPacket>;
+
+pub(crate) struct OracleAddressReceiverPair {
+    pub oracle_address: Arc<str>,
+    pub receiver: PriceDataReceiver,
+}
+
 type PriceDataSenders = BTreeMap<Arc<str>, PriceDataSender>;
-type PriceDataReceivers = BTreeMap<Arc<str>, PriceDataReceiver>;
+type PriceDataReceivers = BTreeMap<Arc<str>, OracleAddressReceiverPair>;
 
 pub(crate) struct SpawnWorkersReturn {
     pub set: JoinSet<Result<(), error::Worker>>,
@@ -50,7 +56,7 @@ pub(crate) struct SpawnWorkersReturn {
 
 pub(crate) async fn spawn(
     nolus_node: NodeClient,
-    oracles: Vec<Arc<str>>,
+    oracles: BTreeMap<Arc<str>, Arc<str>>,
     providers: BTreeMap<Arc<str>, ProviderWithComparisonConfig>,
     price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
     tick_time: Duration,
@@ -69,16 +75,25 @@ pub(crate) async fn spawn(
     let mut senders: PriceDataSenders = BTreeMap::new();
     let mut receivers: PriceDataReceivers = BTreeMap::new();
 
-    for oracle in oracles {
-        if !senders.contains_key(&oracle) {
+    for (oracle_name, oracle_address) in oracles {
+        if !senders.contains_key(&*oracle_address) {
             let (sender, receiver): UnboundedChannel<(usize, Instant, Vec<u8>)> =
                 unbounded_channel();
 
-            if senders.insert(oracle.clone(), sender).is_some() {
+            if senders.insert(oracle_address.clone(), sender).is_some() {
                 unreachable!()
             }
 
-            if receivers.insert(oracle, receiver).is_some() {
+            if receivers
+                .insert(
+                    oracle_name.clone(),
+                    OracleAddressReceiverPair {
+                        oracle_address,
+                        receiver,
+                    },
+                )
+                .is_some()
+            {
                 unreachable!()
             }
         }
@@ -294,11 +309,21 @@ where
                 error::Worker::PriceComparisonGuard(PriceComparisonGuardError::FetchPrices(error))
             })?;
 
+    if prices.is_empty() {
+        warn!(
+            r#"Price list returned for provider "{provider_name}" is empty! Exiting providing task."#
+        );
+
+        return Ok(());
+    }
+
     if let Some((comparison_provider, max_deviation_exclusive)) = comparison_provider_and_deviation
     {
         comparison_provider
             .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
             .await?;
+    } else {
+        info!(r#"Provider "{provider_name}" isn't associated with a comparison provider."#);
     }
 
     print_prices_pretty::print(&provider, &prices);

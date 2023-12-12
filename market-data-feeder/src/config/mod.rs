@@ -50,7 +50,7 @@ impl SymbolAndDecimalPlaces {
 #[must_use]
 pub(crate) struct Config {
     pub tick_time: u64,
-    pub oracles: Vec<Arc<str>>,
+    pub oracles: BTreeMap<Arc<str>, Arc<str>>,
     pub providers: BTreeMap<Arc<str>, ProviderWithComparison>,
     pub comparison_providers: BTreeMap<Arc<str>, ComparisonProvider>,
     pub hard_gas_limit: u64,
@@ -73,13 +73,14 @@ impl<'de> Deserialize<'de> for Config {
             node,
         }: raw::Config = raw::Config::deserialize(deserializer)?;
 
-        let mut oracles: BTreeMap<String, Arc<str>> = BTreeMap::new();
+        let mut oracles: BTreeMap<Arc<str>, Arc<str>> = BTreeMap::new();
 
         for (raw_oracle_id, raw_oracle_addr) in raw_oracles {
             #[cfg(debug_assertions)]
-            let None: Option<Arc<str>> =
-                oracles.insert(raw_oracle_id, str_pool.get_or_insert(raw_oracle_addr))
-            else {
+            let None: Option<Arc<str>> = oracles.insert(
+                str_pool.get_or_insert(raw_oracle_id),
+                str_pool.get_or_insert(raw_oracle_addr),
+            ) else {
                 unreachable!()
             };
             #[cfg(not(debug_assertions))]
@@ -97,7 +98,7 @@ impl<'de> Deserialize<'de> for Config {
 
         Ok(Config {
             tick_time,
-            oracles: oracles.into_values().collect(),
+            oracles,
             providers,
             comparison_providers,
             hard_gas_limit,
@@ -107,7 +108,7 @@ impl<'de> Deserialize<'de> for Config {
 }
 
 fn get_oracle<'r, 'de, D>(
-    oracles: &'r BTreeMap<String, Arc<str>>,
+    oracles: &'r BTreeMap<Arc<str>, Arc<str>>,
     oracle_id: &str,
 ) -> Result<Arc<str>, D::Error>
 where

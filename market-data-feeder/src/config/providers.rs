@@ -14,7 +14,7 @@ use super::{
 pub(super) fn reconstruct<'r, 'de, D>(
     raw_providers: BTreeMap<String, raw::ProviderWithComparison>,
     mut str_pool: StrPool,
-    oracles: &'r BTreeMap<String, Arc<str>>,
+    oracles: &'r BTreeMap<Arc<str>, Arc<str>>,
 ) -> Result<BTreeMap<Arc<str>, ProviderWithComparison>, D::Error>
 where
     D: Deserializer<'de>,

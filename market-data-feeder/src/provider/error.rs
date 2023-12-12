@@ -30,7 +30,7 @@ pub enum Provider {
 
 #[derive(Debug, Error)]
 pub(crate) enum PriceComparisonGuard {
-    #[error("Failed to fetch prices for price comparison guard! Cause: {0}")]
+    #[error("Failed to fetch prices from provider for price comparison guard! Cause: {0}")]
     FetchPrices(Provider),
     #[error("Price comparison guard failed due to a duplicated price! Duplicated pair: {0}/{1}")]
     DuplicatePrice(String, String),

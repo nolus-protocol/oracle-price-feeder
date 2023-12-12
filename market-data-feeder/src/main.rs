@@ -40,7 +40,9 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 
-use self::{config::Config, messages::QueryMsg, result::Result};
+use self::{
+    config::Config, messages::QueryMsg, result::Result, workers::OracleAddressReceiverPair,
+};
 
 mod config;
 mod deviation;
@@ -123,9 +125,17 @@ async fn app_main() -> Result<()> {
 
     let (tx_sender, mut tx_receiver): UnboundedChannel<(Instant, ContractTx)> = unbounded_channel();
 
-    for (oracle, price_data_receiver) in receivers {
+    for (
+        oracle_name,
+        OracleAddressReceiverPair {
+            oracle_address: oracle_addr,
+            receiver: price_data_receiver,
+        },
+    ) in receivers
+    {
         price_feeders_set.spawn(price_feeder(
-            oracle,
+            oracle_name,
+            oracle_addr,
             tick_time,
             price_data_receiver,
             tx_sender.clone(),
@@ -174,63 +184,72 @@ async fn app_main() -> Result<()> {
             }
         }
 
-        let Some((tx_time, tx)): Option<(Instant, ContractTx)> = tx_receiver.recv().await else {
-            warn!("Transaction receiving channel is closed!");
-
-            continue;
-        };
-
-        let mut tx: Option<ContractTx> = Some(tx);
-
-        let mut is_retry: bool = false;
-
-        while let Some(tx) = if is_retry {
-            if tx_time.elapsed() < tick_time {
-                tx.take()
-            } else {
-                None
-            }
-        } else {
-            is_retry = true;
-
-            tx.clone()
-        } {
-            let successful: bool = commit_tx_with_gas_estimation(
-                &mut signer,
-                &nolus_node,
-                &node_config,
-                config.hard_gas_limit,
-                tx,
-                fallback_gas_limit.unwrap_or(config.hard_gas_limit),
-            )
+        if let Some(tx_receiver_result) =
+            poll_fn(|cx: &mut Context| match tx_receiver.poll_recv(cx) {
+                Poll::Pending => Poll::Ready(None),
+                result => result.map(Some),
+            })
             .await
-            .map_or_else(
-                |error: GasEstimatingTxCommit| {
-                    error!("Failed to feed data into oracle! Cause: {error}");
+        {
+            let Some((tx_time, tx)): Option<(Instant, ContractTx)> = tx_receiver_result else {
+                warn!("Transaction receiving channel is closed!");
 
-                    false
-                },
-                |response: CommitResponse| {
-                    log::commit_response(&response);
+                continue;
+            };
 
-                    let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
+            let mut tx: Option<ContractTx> = Some(tx);
 
-                    let fallback_gas_limit: &mut u64 = fallback_gas_limit.get_or_insert(used_gas);
+            let mut is_retry: bool = false;
 
-                    *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
+            while let Some(tx) = if is_retry {
+                if tx_time.elapsed() < tick_time {
+                    tx.take()
+                } else {
+                    None
+                }
+            } else {
+                is_retry = true;
 
-                    response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok()
-                },
-            );
+                tx.clone()
+            } {
+                let successful: bool = commit_tx_with_gas_estimation(
+                    &mut signer,
+                    &nolus_node,
+                    &node_config,
+                    config.hard_gas_limit,
+                    tx,
+                    fallback_gas_limit.unwrap_or(config.hard_gas_limit),
+                )
+                .await
+                .map_or_else(
+                    |error: GasEstimatingTxCommit| {
+                        error!("Failed to feed data into oracle! Cause: {error}");
 
-            if successful {
-                continue 'outer_loop;
-            } else if signer.needs_update()
-                && recovery_loop(&mut signer, &recovery_mode_sender, &nolus_node)
-                    .await
-                    .is_error()
-            {
-                break 'outer_loop;
+                        false
+                    },
+                    |response: CommitResponse| {
+                        log::commit_response(&response);
+
+                        let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
+
+                        let fallback_gas_limit: &mut u64 =
+                            fallback_gas_limit.get_or_insert(used_gas);
+
+                        *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
+
+                        response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok()
+                    },
+                );
+
+                if successful {
+                    continue 'outer_loop;
+                } else if signer.needs_update()
+                    && recovery_loop(&mut signer, &recovery_mode_sender, &nolus_node)
+                        .await
+                        .is_error()
+                {
+                    break 'outer_loop;
+                }
             }
         }
     }
@@ -239,7 +258,8 @@ async fn app_main() -> Result<()> {
 }
 
 async fn price_feeder(
-    oracle: Arc<str>,
+    oracle_name: Arc<str>,
+    oracle_addr: Arc<str>,
     tick_time: Duration,
     mut price_data_receiver: UnboundedReceiver<(usize, Instant, Vec<u8>)>,
     tx_sender: UnboundedSender<(Instant, ContractTx)>,
@@ -261,7 +281,10 @@ async fn price_feeder(
 
         if messages.is_empty() {
             if channel_closed {
-                warn!("Price fetcher's channel closed! Exiting feeding task.");
+                warn!(
+                    oracle = &*oracle_name,
+                    "Price fetcher's channel closed! Exiting feeding task."
+                );
 
                 break;
             } else {
@@ -270,7 +293,7 @@ async fn price_feeder(
         }
 
         let tx: ContractTx = messages.into_values().fold(
-            ContractTx::new(oracle.to_string()),
+            ContractTx::new(oracle_addr.to_string()),
             |tx: ContractTx, msg: Vec<u8>| tx.add_message(msg, Vec::new()),
         );
 
@@ -343,10 +366,10 @@ async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()>
 
     info!("Checking compatibility with contract version...");
 
-    for oracle in config.oracles.iter() {
+    for (oracle_name, oracle_address) in config.oracles.iter() {
         let version: JsonVersion = client
             .with_grpc(|rpc: TonicChannel| {
-                query_wasm(rpc, oracle.to_string(), QueryMsg::CONTRACT_VERSION)
+                query_wasm(rpc, oracle_address.to_string(), QueryMsg::CONTRACT_VERSION)
             })
             .await?;
 
@@ -360,14 +383,14 @@ async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()>
 
         if !COMPATIBLE_VERSION.matches(&version) {
             error!(
-                oracle = %oracle,
+                oracle = %oracle_name,
                 compatible = %COMPATIBLE_VERSION,
                 actual = %version,
                 "Feeder version is incompatible with contract version!"
             );
 
             return Err(error::Application::IncompatibleContractVersion {
-                oracle_addr: oracle.clone(),
+                oracle_addr: oracle_address.clone(),
                 compatible: COMPATIBLE_VERSION,
                 actual: version,
             });
