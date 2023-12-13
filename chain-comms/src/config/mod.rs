@@ -36,7 +36,7 @@ pub struct Node {
 
 impl Node {
     #[must_use]
-    pub fn http2_concurrency_limit(&self) -> Option<NonZeroUsize> {
+    pub const fn http2_concurrency_limit(&self) -> Option<NonZeroUsize> {
         self.file.http2_concurrency_limit
     }
 
@@ -66,23 +66,33 @@ impl Node {
     }
 
     #[must_use]
-    pub fn gas_adjustment_numerator(&self) -> NonZeroU64 {
+    pub const fn gas_adjustment_numerator(&self) -> NonZeroU64 {
         self.file.gas_adjustment_numerator
     }
 
     #[must_use]
-    pub fn gas_adjustment_denominator(&self) -> NonZeroU64 {
+    pub const fn gas_adjustment_denominator(&self) -> NonZeroU64 {
         self.file.gas_adjustment_denominator
     }
 
     #[must_use]
-    pub fn gas_price_numerator(&self) -> NonZeroU64 {
+    pub const fn gas_price_numerator(&self) -> NonZeroU64 {
         self.file.gas_price_numerator
     }
 
     #[must_use]
-    pub fn gas_price_denominator(&self) -> NonZeroU64 {
+    pub const fn gas_price_denominator(&self) -> NonZeroU64 {
         self.file.gas_price_denominator
+    }
+
+    #[must_use]
+    pub const fn fee_adjustment_numerator(&self) -> NonZeroU64 {
+        self.file.fee_adjustment_numerator
+    }
+
+    #[must_use]
+    pub const fn fee_adjustment_denominator(&self) -> NonZeroU64 {
+        self.file.fee_adjustment_denominator
     }
 }
 
@@ -123,6 +133,8 @@ struct File {
     gas_adjustment_denominator: NonZeroU64,
     gas_price_numerator: NonZeroU64,
     gas_price_denominator: NonZeroU64,
+    fee_adjustment_numerator: NonZeroU64,
+    fee_adjustment_denominator: NonZeroU64,
 }
 
 #[derive(Debug, Clone)]

@@ -190,7 +190,9 @@ fn calculate_fee(config: &Node, gas_limit: u64) -> Result<Fee, error::FeeCalcula
         Coin::new(
             u128::from(gas_limit)
                 .saturating_mul(config.gas_price_numerator().get().into())
-                .saturating_div(config.gas_price_denominator().get().into()),
+                .saturating_div(config.gas_price_denominator().get().into())
+                .saturating_mul(config.fee_adjustment_numerator().get().into())
+                .saturating_div(config.fee_adjustment_denominator().get().into()),
             config.fee_denom(),
         )?,
         gas_limit,
