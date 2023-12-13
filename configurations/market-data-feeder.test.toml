@@ -9,6 +9,8 @@ gas_adjustment_numerator = 11025
 gas_adjustment_denominator = 10000
 gas_price_numerator = 1
 gas_price_denominator = 390
+fee_adjustment_numerator = 5
+fee_adjustment_denominator = 1
 
 [oracles]
 osmosis_oracle = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
