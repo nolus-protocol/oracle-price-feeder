@@ -11,8 +11,6 @@ use cosmrs::{
     tx::{Body, Fee, Raw, SignerInfo},
 };
 
-use crate::{client::Client, interact::query_account_data};
-
 use self::error::Result as ModuleResult;
 
 pub mod error;
@@ -76,32 +74,7 @@ impl Signer {
     }
 
     #[inline]
-    pub async fn update_account(
-        &mut self,
-        client: &Client,
-    ) -> Result<(), crate::interact::error::AccountQuery> {
-        query_account_data(client, &self.account.address)
-            .await
-            .map(|account: BaseAccount| {
-                self.needs_update = false;
-
-                self.account = account;
-            })
-    }
-
-    #[inline]
-    #[must_use]
-    pub const fn needs_update(&self) -> bool {
-        self.needs_update
-    }
-
-    #[inline]
     pub(crate) fn tx_confirmed(&mut self) {
         self.account.sequence += 1;
-    }
-
-    #[inline]
-    pub(crate) fn set_needs_update(&mut self) {
-        self.needs_update = true;
     }
 }
