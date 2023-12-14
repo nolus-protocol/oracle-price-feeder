@@ -6,7 +6,7 @@ use semver::{
 };
 use serde::Deserialize;
 use tokio::time::{sleep, sleep_until, Instant};
-use tracing::{debug, error, info, info_span, span::EnteredSpan};
+use tracing::{debug, error, info, info_span};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
     rolling,
@@ -262,39 +262,11 @@ async fn handle_alarms_dispatch<'r>(
             DispatchResult::Success
         }
         Err(error) => {
-            let span: EnteredSpan = info_span!("dispatch-error").entered();
-
-            error!("{error}");
-
-            if signer.needs_update() {
-                drop(span);
-
-                let recovered: bool = recover_after_error(signer, client).await;
-
-                if !recovered {
-                    while !recover_after_error(signer, client).await {
-                        sleep(Duration::from_secs(15)).await;
-                    }
-                }
-            }
+            info_span!("dispatch-error").in_scope(|| error!("{error}"));
 
             DispatchResult::DispatchFailed
         }
     }
-}
-
-async fn recover_after_error(signer: &mut Signer, client: &Client) -> bool {
-    if let Err(error) = signer.update_account(client).await {
-        error!("{error}");
-
-        return false;
-    }
-
-    info!("Successfully updated local copy of account data.");
-
-    info!("Continuing normal workflow...");
-
-    true
 }
 
 async fn dispatch_alarm<'r>(
