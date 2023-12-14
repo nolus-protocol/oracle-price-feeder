@@ -19,7 +19,6 @@ pub mod error;
 
 pub struct Signer {
     needs_update: bool,
-    address: String,
     key: SigningKey,
     chain_id: ChainId,
     account: BaseAccount,
@@ -28,10 +27,9 @@ pub struct Signer {
 impl Signer {
     #[inline]
     #[must_use]
-    pub fn new(address: String, key: SigningKey, chain_id: ChainId, account: BaseAccount) -> Self {
+    pub const fn new(key: SigningKey, chain_id: ChainId, account: BaseAccount) -> Self {
         Self {
             needs_update: false,
-            address,
             key,
             chain_id,
             account,
@@ -40,7 +38,7 @@ impl Signer {
 
     #[must_use]
     pub fn signer_address(&self) -> &str {
-        &self.address
+        &self.account.address
     }
 
     pub fn sign(&self, body: Body, fee: Fee) -> ModuleResult<Raw> {
@@ -82,7 +80,7 @@ impl Signer {
         &mut self,
         client: &Client,
     ) -> Result<(), crate::interact::error::AccountQuery> {
-        query_account_data(client, &self.address)
+        query_account_data(client, &self.account.address)
             .await
             .map(|account: BaseAccount| {
                 self.needs_update = false;

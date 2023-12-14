@@ -40,15 +40,16 @@ where
 
     info!("Fetching account data from network...");
 
-    let address: String = account::id(config.as_ref(), &signing_key)?.to_string();
-
-    let account_data: BaseAccount = query_account_data(&nolus_node, &address).await?;
+    let account_data: BaseAccount = query_account_data(
+        &nolus_node,
+        account::id(config.as_ref(), &signing_key)?.as_ref(),
+    )
+    .await?;
 
     info!("Successfully fetched account data from network.");
 
     Ok(RpcSetup {
         signer: Signer::new(
-            address,
             signing_key,
             config.as_ref().chain_id().clone(),
             account_data,
