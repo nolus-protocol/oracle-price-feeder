@@ -44,6 +44,4 @@ pub(crate) enum Worker {
     PriceComparisonGuard(#[from] PriceComparisonGuardError),
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
-    #[error("Recovery mode state watch closed!")]
-    RecoveryModeWatchClosed,
 }

@@ -9,14 +9,11 @@ use std::{
 use futures::future::poll_fn;
 use serde::Deserialize;
 use tokio::{
-    sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        watch,
-    },
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinSet,
-    time::{sleep, timeout, Instant},
+    time::{timeout, Instant},
 };
-use tracing::{error, info, info_span, warn};
+use tracing::{error, info, warn};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
     rolling,
@@ -32,7 +29,6 @@ use chain_comms::{
     log,
     reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
-    signer::Signer,
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 use semver::{
@@ -63,7 +59,6 @@ const COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
 };
 
 type UnboundedChannel<T> = (UnboundedSender<T>, UnboundedReceiver<T>);
-type WatchChannel<T> = (watch::Sender<T>, watch::Receiver<T>);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -102,8 +97,6 @@ async fn app_main() -> Result<()> {
 
     let tick_time: Duration = Duration::from_secs(config.tick_time);
 
-    let (recovery_mode_sender, recovery_mode_receiver): WatchChannel<bool> = watch::channel(false);
-
     let workers::SpawnWorkersReturn {
         set: mut price_fetchers_set,
         receivers,
@@ -113,7 +106,6 @@ async fn app_main() -> Result<()> {
         config.providers,
         config.comparison_providers,
         tick_time,
-        recovery_mode_receiver,
     )
     .await?;
 
@@ -203,8 +195,12 @@ async fn app_main() -> Result<()> {
 
             while let Some(tx) = if is_retry {
                 if tx_time.elapsed() < tick_time {
+                    info!("Retrying transaction...");
+
                     tx.take()
                 } else {
+                    info!("Transaction data timed out.");
+
                     None
                 }
             } else {
@@ -243,12 +239,6 @@ async fn app_main() -> Result<()> {
 
                 if successful {
                     continue 'outer_loop;
-                } else if signer.needs_update()
-                    && recovery_loop(&mut signer, &recovery_mode_sender, &nolus_node)
-                        .await
-                        .is_error()
-                {
-                    break 'outer_loop;
                 }
             }
         }
@@ -307,55 +297,6 @@ async fn price_feeder(
     }
 }
 
-enum RecoveryStatus {
-    Success,
-    Error,
-}
-
-impl RecoveryStatus {
-    const fn is_error(&self) -> bool {
-        matches!(self, Self::Error)
-    }
-}
-
-async fn recovery_loop(
-    signer: &mut Signer,
-    recovery_mode_sender: &watch::Sender<bool>,
-    client: &NodeClient,
-) -> RecoveryStatus {
-    let set_in_recovery = info_span!("recover-after-error").in_scope(|| {
-        info!("After-error recovery needed!");
-
-        |in_recovery: bool| {
-            let is_error: bool = recovery_mode_sender.send(in_recovery).is_err();
-
-            if is_error {
-                error!("Recovery mode state watch closed! Exiting broadcasting loop...");
-            }
-
-            is_error
-        }
-    });
-
-    let recovered: RecoveryStatus = recover_after_error(signer, client).await;
-
-    if recovered.is_error() {
-        if set_in_recovery(true) {
-            return RecoveryStatus::Error;
-        }
-
-        while recover_after_error(signer, client).await.is_error() {
-            sleep(Duration::from_secs(15)).await;
-        }
-
-        if set_in_recovery(false) {
-            return RecoveryStatus::Error;
-        }
-    }
-
-    RecoveryStatus::Success
-}
-
 async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
@@ -400,19 +341,4 @@ async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()>
     info!("Contract is compatible with feeder version.");
 
     Ok(())
-}
-
-#[must_use]
-async fn recover_after_error(signer: &mut Signer, client: &NodeClient) -> RecoveryStatus {
-    if let Err(error) = signer.update_account(client).await {
-        error!("{error}");
-
-        return RecoveryStatus::Error;
-    }
-
-    info!("Successfully updated local copy of account data.");
-
-    info!("Continuing normal workflow...");
-
-    RecoveryStatus::Success
 }
