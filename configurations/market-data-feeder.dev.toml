@@ -1,4 +1,6 @@
-tick_time = 60
+tick_seconds = 60
+between_tx_margin_seconds = 2
+query_delivered_tx_tick_seconds = 15
 hard_gas_limit = 550_000
 
 [node]
