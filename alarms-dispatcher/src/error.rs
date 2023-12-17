@@ -1,6 +1,7 @@
+use semver::Version;
 use thiserror::Error as ThisError;
 
-use semver::Version;
+use chain_comms::reexport::cosmrs::proto::prost::EncodeError;
 
 #[derive(Debug, ThisError)]
 pub enum Application {
@@ -26,12 +27,10 @@ pub type AppResult<T> = Result<T, Application>;
 
 #[derive(Debug, ThisError)]
 pub enum DispatchAlarms {
+    #[error("Failed to pre-encode commit message in the Protobuf format! Cause: {0}")]
+    PreEncodeCommitMessage(#[from] EncodeError),
     #[error("Failed to serialize query message as JSON! Cause: {0}")]
     SerializeQueryMessage(#[from] serde_json_wasm::ser::Error),
-    #[error("Failed to dispatch time alarm! Cause: {0}")]
-    DispatchTimeAlarm(DispatchAlarm),
-    #[error("Failed to dispatch price alarm! Cause: {0}")]
-    DispatchPriceAlarm(DispatchAlarm),
 }
 
 #[derive(Debug, ThisError)]
@@ -52,8 +51,4 @@ pub enum CommitDispatchTx {
     CommitTx(#[from] chain_comms::interact::error::GasEstimatingTxCommit),
     #[error("Failed to deserialize response data! Cause: {0}")]
     DeserializeTxData(#[from] chain_comms::decode::error::Error),
-    #[error(r#"Failed to deserialize dispatch response! Cause: {0}; Data: "{1}""#)]
-    DeserializeDispatchResponse(serde_json_wasm::de::Error, String),
-    #[error(r#"Transaction failed! Cause: {0}"#)]
-    TxFailed(String),
 }
