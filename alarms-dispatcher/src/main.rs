@@ -11,7 +11,7 @@ use tokio::{
     task::JoinSet,
     time::{sleep as tokio_sleep, sleep_until as tokio_sleep_until, Instant},
 };
-use tracing::{error, error_span, info, warn};
+use tracing::{error, error_span, info, warn, warn_span};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
     rolling,
@@ -231,7 +231,8 @@ async fn dispatch_alarms(
 
                         let hash = response.hash;
                         let client = nolus_node.clone();
-                        let retry_sender = tx_sender.clone();
+                        let tx_sender = tx_sender.clone();
+                        let contract_address = contract_address.clone();
 
                         delivered_tx_fetchers_set.spawn(async move {
                             tokio_sleep(config.query_delivered_tx_tick_time).await;
@@ -239,6 +240,53 @@ async fn dispatch_alarms(
                             match get_tx_response(&client, response.hash).await {
                                 Ok(response) => {
                                     self::log::tx_response(contract_type, &contract_address, &hash, &response);
+
+                                    let should_resend = match client.with_grpc(|rpc| async { query_wasm::<StatusResponse>(rpc, contract_address.to_string(), QueryMsg::ALARMS_STATUS).await }).await {
+                                        Ok(status_response) => status_response.remaining_for_dispatch(),
+                                        Err(error) => {
+                                            error_span!(
+                                                "Query remaining",
+                                                contract_type = contract_type,
+                                                contract_address = contract_address.as_ref(),
+                                            ).in_scope(||
+                                                error!(
+                                                    error = ?error,
+                                                    "Failed to determine whether there are remaining alarms to be dispatched! Cause: {error}"
+                                                )
+                                            );
+
+                                            true
+                                        },
+                                    };
+
+                                    if should_resend {
+                                        info!("Resending message for further processing of remaining alarms.");
+
+                                        let channel_closed = tx_sender
+                                            .upgrade()
+                                            .and_then(|tx_sender| {
+                                                tx_sender
+                                                    .send((
+                                                        message,
+                                                        hard_gas_limit,
+                                                        tx_time,
+                                                        contract_type,
+                                                        contract_address.clone(),
+                                                    ))
+                                                    .err()
+                                            })
+                                            .is_some();
+
+                                        if channel_closed {
+                                            warn_span!(
+                                                "Resend for remaning",
+                                                contract_type = contract_type,
+                                                contract_address = contract_address.as_ref(),
+                                            ).in_scope(|| {
+                                                warn!("Sending for further processing failed. Channel is closed.");
+                                            });
+                                        }
+                                    }
 
                                     NonZeroU64::new(response.gas_used.unsigned_abs())
                                         .map(|gas_limit| gas_limit.min(hard_gas_limit))
@@ -258,23 +306,26 @@ async fn dispatch_alarms(
                                         info!("Sending transaction for retry.");
 
                                         if tx_time.elapsed() >= config.poll_period {
-                                            warn!("Transaction timed-out.");
-                                        } else if retry_sender
-                                            .upgrade()
-                                            .and_then(|tx_sender| {
-                                                tx_sender
-                                                    .send((
-                                                        message,
-                                                        hard_gas_limit,
-                                                        tx_time,
-                                                        contract_type,
-                                                        contract_address,
-                                                    ))
-                                                    .err()
-                                            })
-                                            .is_some()
-                                        {
-                                            warn!("Sending for retry failed. Channel is closed.");
+                                            warn_span!("Transaction timed-out.");
+                                        } else {
+                                            let channel_closed = tx_sender
+                                                .upgrade()
+                                                .and_then(|tx_sender| {
+                                                    tx_sender
+                                                        .send((
+                                                            message,
+                                                            hard_gas_limit,
+                                                            tx_time,
+                                                            contract_type,
+                                                            contract_address,
+                                                        ))
+                                                        .err()
+                                                })
+                                                .is_some();
+
+                                            if channel_closed {
+                                                warn!("Sending for retry failed. Channel is closed.");
+                                            }
                                         }
                                     });
 
