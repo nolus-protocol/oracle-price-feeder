@@ -1,8 +1,7 @@
 use std::{error::Error as StdError, sync::Arc};
 
-use thiserror::Error as ThisError;
-
 use semver::Version;
+use thiserror::Error as ThisError;
 
 use crate::provider::PriceComparisonGuardError;
 
@@ -36,8 +35,10 @@ pub(crate) enum Application {
 
 #[derive(Debug, ThisError)]
 pub(crate) enum Worker {
+    #[error("Failed to instantiate provider with id: {0}! Returned price list is empty!")]
+    EmptyPriceList(Arc<str>),
     #[error("Failed to instantiate provider with id: {0}! Cause: {1}")]
-    InstantiateProvider(String, Box<dyn StdError + Send + 'static>),
+    InstantiateProvider(Arc<str>, Box<dyn StdError + Send + 'static>),
     #[error("Failed to instantiate price comparison provider with id: {0}! Cause: {1}")]
     InstantiatePriceComparisonProvider(Arc<str>, Box<dyn StdError + Send + 'static>),
     #[error("Price comparison guard failure! Cause: {0}")]

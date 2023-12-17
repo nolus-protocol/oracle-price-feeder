@@ -6,7 +6,7 @@ use tokio::{
     task::{block_in_place, JoinSet},
     time::{interval, sleep, Instant, Interval},
 };
-use tracing::{info, warn};
+use tracing::info;
 
 use chain_comms::client::Client as NodeClient;
 
@@ -33,26 +33,29 @@ const MAX_SEQ_ERRORS: u8 = 5;
 
 const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
 
-type PriceDataPacket = (usize, Instant, Vec<u8>);
+#[derive(Clone)]
+pub(crate) struct PriceDataMessage {
+    pub oracle: Arc<str>,
+    pub execute_message: Arc<[u8]>,
+}
+
+pub(crate) struct PriceDataPacket {
+    pub provider_id: usize,
+    pub tx_time: Instant,
+    pub message: PriceDataMessage,
+}
+
 type PriceDataSender = UnboundedSender<PriceDataPacket>;
 type PriceDataReceiver = UnboundedReceiver<PriceDataPacket>;
 
-pub(crate) struct OracleAddressReceiverPair {
-    pub oracle_address: Arc<str>,
-    pub receiver: PriceDataReceiver,
-}
-
-type PriceDataSenders = BTreeMap<Arc<str>, PriceDataSender>;
-type PriceDataReceivers = BTreeMap<Arc<str>, OracleAddressReceiverPair>;
-
 pub(crate) struct SpawnWorkersReturn {
     pub set: JoinSet<Result<(), error::Worker>>,
-    pub receivers: PriceDataReceivers,
+    pub id_to_name_mapping: BTreeMap<usize, Arc<str>>,
+    pub receiver: PriceDataReceiver,
 }
 
 pub(crate) async fn spawn(
     nolus_node: NodeClient,
-    oracles: BTreeMap<Arc<str>, Arc<str>>,
     providers: BTreeMap<Arc<str>, ProviderWithComparisonConfig>,
     price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
     tick_time: Duration,
@@ -67,32 +70,9 @@ pub(crate) async fn spawn(
                 .collect::<Result<_, _>>()
         })?;
 
-    let mut senders: PriceDataSenders = BTreeMap::new();
-    let mut receivers: PriceDataReceivers = BTreeMap::new();
+    let mut id_to_name_mapping = BTreeMap::new();
 
-    for (oracle_name, oracle_address) in oracles {
-        if !senders.contains_key(&*oracle_address) {
-            let (sender, receiver): UnboundedChannel<(usize, Instant, Vec<u8>)> =
-                unbounded_channel();
-
-            if senders.insert(oracle_address.clone(), sender).is_some() {
-                unreachable!()
-            }
-
-            if receivers
-                .insert(
-                    oracle_name.clone(),
-                    OracleAddressReceiverPair {
-                        oracle_address,
-                        receiver,
-                    },
-                )
-                .is_some()
-            {
-                unreachable!()
-            }
-        }
-    }
+    let (sender, receiver): UnboundedChannel<PriceDataPacket> = unbounded_channel();
 
     block_in_place(move || {
         providers
@@ -101,11 +81,16 @@ pub(crate) async fn spawn(
             .try_for_each(try_for_each_provider_f(
                 price_comparison_providers,
                 &mut set,
+                &mut id_to_name_mapping,
                 tick_time,
                 nolus_node,
-                senders,
+                sender,
             ))
-            .map(|()| SpawnWorkersReturn { set, receivers })
+            .map(|()| SpawnWorkersReturn {
+                set,
+                id_to_name_mapping,
+                receiver,
+            })
     })
 }
 
@@ -133,43 +118,43 @@ fn construct_comparison_provider_f(
     }
 }
 
-fn try_for_each_provider_f(
+fn try_for_each_provider_f<'r>(
     price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>>,
-    set: &mut JoinSet<Result<(), error::Worker>>,
+    set: &'r mut JoinSet<Result<(), error::Worker>>,
+    id_to_name_mapping: &'r mut BTreeMap<usize, Arc<str>>,
     tick_time: Duration,
     nolus_node: NodeClient,
-    price_data_senders: PriceDataSenders,
-) -> impl FnMut((usize, (Arc<str>, ProviderWithComparisonConfig))) -> AppResult<()> + '_ {
-    move |(monotonic_id, (id, config)): (usize, (Arc<str>, ProviderWithComparisonConfig))| {
+    price_data_sender: PriceDataSender,
+) -> impl FnMut((usize, (Arc<str>, ProviderWithComparisonConfig))) -> AppResult<()> + 'r {
+    move |(monotonic_id, (provider_id, config)): (
+        usize,
+        (Arc<str>, ProviderWithComparisonConfig),
+    )| {
         config
             .comparison
             .map(
                 |ComparisonProviderIdAndMaxDeviation {
-                     provider_id,
+                     provider_id: comparison_provider_id,
                      max_deviation_exclusive,
                  }: ComparisonProviderIdAndMaxDeviation| {
-                    price_comparison_providers.get(&provider_id).map_or_else(
-                        || {
-                            Err(error::Application::UnknownPriceComparisonProviderId(
-                                provider_id,
-                            ))
-                        },
-                        |provider: &Arc<dyn ComparisonProvider>| {
-                            Ok((provider, max_deviation_exclusive))
-                        },
-                    )
+                    price_comparison_providers
+                        .get(&comparison_provider_id)
+                        .map_or_else(
+                            || {
+                                Err(error::Application::UnknownPriceComparisonProviderId(
+                                    comparison_provider_id,
+                                ))
+                            },
+                            |provider: &Arc<dyn ComparisonProvider>| {
+                                Ok((provider, max_deviation_exclusive))
+                            },
+                        )
                 },
             )
             .transpose()
             .and_then(
                 |price_comparison_provider: Option<(&Arc<dyn ComparisonProvider>, u64)>| {
                     let provider_name: Arc<str> = config.provider.name().clone();
-
-                    let Some(sender): Option<&PriceDataSender> =
-                        price_data_senders.get(config.provider.oracle_addr())
-                    else {
-                        unreachable!()
-                    };
 
                     providers::Providers::visit_provider(
                         &provider_name,
@@ -180,11 +165,12 @@ fn try_for_each_provider_f(
                                 tick_time,
                                 price_comparison_provider,
                             },
-                            provider_id: &id,
+                            id_to_name_mapping,
+                            provider_id,
                             provider_config: config.provider,
                             time_before_feeding: config.time_before_feeding,
                             nolus_node: &nolus_node,
-                            sender,
+                            sender: &price_data_sender,
                         },
                     )
                     .ok_or(error::Application::UnknownProviderId(provider_name))
@@ -229,7 +215,8 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
 
 struct TaskSpawningProviderVisitor<'r> {
     worker_task_spawner_config: TaskSpawnerConfig<'r>,
-    provider_id: &'r str,
+    id_to_name_mapping: &'r mut BTreeMap<usize, Arc<str>>,
+    provider_id: Arc<str>,
     provider_config: ProviderConfig,
     time_before_feeding: Duration,
     nolus_node: &'r NodeClient,
@@ -243,26 +230,33 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
     where
         P: Provider + FromConfig<false>,
     {
+        let oracle_address = self.provider_config.oracle_addr().clone();
+
         match Handle::current().block_on(<P as FromConfig<false>>::from_config(
-            self.provider_id,
+            &self.provider_id,
             self.provider_config,
             self.nolus_node,
         )) {
             Ok(provider) => {
+                let provider_friendly_name =
+                    format!("Provider \"{}\" [{}]", self.provider_id, P::ID).into_boxed_str();
+
+                self.id_to_name_mapping.insert(
+                    self.worker_task_spawner_config.monotonic_id,
+                    self.provider_id.clone(),
+                );
+
                 self.worker_task_spawner_config
                     .set
                     .spawn(perform_check_and_enter_loop(
-                        (
-                            provider,
-                            format!("Provider \"{}\" [{}]", self.provider_id, P::ID)
-                                .into_boxed_str(),
-                        ),
+                        (provider, self.provider_id.clone(), provider_friendly_name),
                         self.worker_task_spawner_config
                             .price_comparison_provider
                             .map(|(comparison_provider, max_deviation_exclusive)| {
                                 (comparison_provider.clone(), max_deviation_exclusive)
                             }),
                         self.time_before_feeding,
+                        oracle_address,
                         self.sender.clone(),
                         self.worker_task_spawner_config.monotonic_id,
                         self.worker_task_spawner_config.tick_time,
@@ -271,7 +265,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                 Ok(())
             }
             Err(error) => Err(error::Worker::InstantiateProvider(
-                self.provider_id.to_string(),
+                self.provider_id,
                 Box::new(error),
             )),
         }
@@ -279,10 +273,11 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
 }
 
 async fn perform_check_and_enter_loop<P>(
-    (provider, provider_name): (P, Box<str>),
+    (provider, provider_id, provider_friendly_name): (P, Arc<str>, Box<str>),
     comparison_provider_and_deviation: Option<(Arc<dyn ComparisonProvider>, u64)>,
     time_before_feeding: Duration,
-    sender: UnboundedSender<(usize, Instant, Vec<u8>)>,
+    oracle_address: Arc<str>,
+    sender: PriceDataSender,
     monotonic_id: usize,
     tick_time: Duration,
 ) -> Result<(), error::Worker>
@@ -298,12 +293,14 @@ where
             })?;
 
     if prices.is_empty() {
-        warn!(
-            r#"Price list returned for provider "{provider_name}" is empty! Exiting providing task."#
+        error!(
+            r#"Price list returned for provider "{provider_friendly_name}" is empty! Exiting providing task."#
         );
 
-        return Ok(());
+        return Err(error::Worker::EmptyPriceList(provider_id));
     }
+
+    drop(provider_id);
 
     if let Some((comparison_provider, max_deviation_exclusive)) = comparison_provider_and_deviation
     {
@@ -311,7 +308,9 @@ where
             .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
             .await?;
     } else {
-        info!(r#"Provider "{provider_name}" isn't associated with a comparison provider."#);
+        info!(
+            r#"Provider "{provider_friendly_name}" isn't associated with a comparison provider."#
+        );
     }
 
     print_prices_pretty::print(&provider, &prices);
@@ -320,12 +319,19 @@ where
 
     provider_main_loop(
         provider,
-        move |data: Vec<u8>| {
+        move |message: Arc<[u8]>| {
             sender
-                .send((monotonic_id, Instant::now(), data))
+                .send(PriceDataPacket {
+                    provider_id: monotonic_id,
+                    tx_time: Instant::now(),
+                    message: PriceDataMessage {
+                        oracle: oracle_address.clone(),
+                        execute_message: message,
+                    },
+                })
                 .map_err(|_| ())
         },
-        provider_name,
+        provider_friendly_name,
         tick_time,
     )
     .await
@@ -338,7 +344,7 @@ async fn provider_main_loop<SenderFn, P>(
     tick_time: Duration,
 ) -> Result<(), error::Worker>
 where
-    SenderFn: Fn(Vec<u8>) -> Result<(), ()>,
+    SenderFn: Fn(Arc<[u8]>) -> Result<(), ()>,
     P: Provider,
 {
     let mut interval: Interval = interval(tick_time);
@@ -353,7 +359,9 @@ where
                 seq_error_counter = 0;
 
                 if sender(
-                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?.into_bytes(),
+                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?
+                        .into_bytes()
+                        .into(),
                 )
                 .is_err()
                 {

@@ -111,6 +111,10 @@ impl<Config: ProviderConfigExt<true>> ProviderConfig for ProviderConfigWrapper<C
         self.0.name()
     }
 
+    fn oracle_name(&self) -> &Arc<str> {
+        self.0.oracle_name()
+    }
+
     fn oracle_addr(&self) -> &Arc<str> {
         self.0.oracle_addr()
     }

@@ -49,7 +49,9 @@ impl SymbolAndDecimalPlaces {
 #[derive(Debug)]
 #[must_use]
 pub(crate) struct Config {
-    pub tick_time: u64,
+    pub tick_time: Duration,
+    pub between_tx_margin_time: Duration,
+    pub retry_tick_time: Duration,
     pub oracles: BTreeMap<Arc<str>, Arc<str>>,
     pub providers: BTreeMap<Arc<str>, ProviderWithComparison>,
     pub comparison_providers: BTreeMap<Arc<str>, ComparisonProvider>,
@@ -65,7 +67,9 @@ impl<'de> Deserialize<'de> for Config {
         let mut str_pool: StrPool = StrPool::new();
 
         let raw::Config {
-            tick_time,
+            tick_seconds,
+            between_tx_margin_seconds,
+            query_delivered_tx_tick_seconds,
             oracles: raw_oracles,
             providers: raw_providers,
             comparison_providers: raw_comparison_providers,
@@ -81,8 +85,7 @@ impl<'de> Deserialize<'de> for Config {
                 str_pool.get_or_insert(raw_oracle_addr),
             );
 
-            #[cfg(debug_assertions)]
-            if result.is_some() {
+            if cfg!(debug_assertions) && result.is_some() {
                 unreachable!()
             }
         }
@@ -97,7 +100,9 @@ impl<'de> Deserialize<'de> for Config {
         let providers = providers::reconstruct::<D>(raw_providers, str_pool, &oracles)?;
 
         Ok(Config {
-            tick_time,
+            tick_time: Duration::from_secs(tick_seconds),
+            between_tx_margin_time: Duration::from_secs(between_tx_margin_seconds),
+            retry_tick_time: Duration::from_secs(query_delivered_tx_tick_seconds),
             oracles,
             providers,
             comparison_providers,
@@ -130,6 +135,8 @@ impl AsRef<Node> for Config {
 
 pub(crate) trait ProviderConfig: Sync + Send {
     fn name(&self) -> &Arc<str>;
+
+    fn oracle_name(&self) -> &Arc<str>;
 
     fn oracle_addr(&self) -> &Arc<str>;
 
@@ -167,7 +174,8 @@ pub(crate) struct EnvError(String, env::VarError);
 #[must_use]
 pub(crate) struct Provider {
     name: Arc<str>,
-    oracle_addr: Arc<str>,
+    oracle_id: Arc<str>,
+    oracle_address: Arc<str>,
     misc: BTreeMap<String, toml::Value>,
 }
 
@@ -176,8 +184,12 @@ impl ProviderConfig for Provider {
         &self.name
     }
 
+    fn oracle_name(&self) -> &Arc<str> {
+        &self.oracle_id
+    }
+
     fn oracle_addr(&self) -> &Arc<str> {
-        &self.oracle_addr
+        &self.oracle_address
     }
 
     fn misc(&self) -> &BTreeMap<String, toml::Value> {

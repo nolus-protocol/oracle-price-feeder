@@ -1,13 +1,17 @@
-use std::{collections::BTreeMap, io, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, future::poll_fn, io, num::NonZeroU64, sync::Arc, task::Poll};
 
+use semver::{
+    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
+    Prerelease as SemVerPrerelease, Version,
+};
 use serde::Deserialize;
 use tokio::{
     select,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinSet,
-    time::{timeout, Instant},
+    time::{sleep as tokio_sleep, sleep_until as tokio_sleep_until, Instant},
 };
-use tracing::{error, info, warn};
+use tracing::{error, error_span, info, warn};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
     rolling,
@@ -17,26 +21,19 @@ use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 use chain_comms::{
     build_tx::ContractTx,
     client::Client as NodeClient,
-    interact::{
-        commit_tx_with_gas_estimation, error::GasEstimatingTxCommit, query_wasm, CommitResponse,
-    },
-    log,
+    config::Node as NodeConfig,
+    interact::{commit_tx_with_gas_estimation, get_tx_response, query_wasm},
     reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
-use semver::{
-    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
-    Prerelease as SemVerPrerelease, Version,
-};
 
-use self::{
-    config::Config, messages::QueryMsg, result::Result, workers::OracleAddressReceiverPair,
-};
+use self::{config::Config, messages::QueryMsg, result::Result, workers::PriceDataPacket};
 
 mod config;
 mod deviation;
 mod error;
+mod log;
 mod messages;
 mod price;
 mod provider;
@@ -59,7 +56,7 @@ async fn main() -> Result<()> {
     let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
         NonBlocking::new(rolling::hourly("./feeder-logs", "log"));
 
-    log::setup(io::stdout.and(log_writer));
+    chain_comms::log::setup(io::stdout.and(log_writer));
 
     info!(concat!(
         "Running version built on: ",
@@ -89,187 +86,180 @@ async fn app_main() -> Result<()> {
 
     info!("Starting workers...");
 
-    let tick_time: Duration = Duration::from_secs(config.tick_time);
-
     let workers::SpawnWorkersReturn {
         set: mut price_fetchers_set,
-        receivers,
+        id_to_name_mapping,
+        receiver: mut price_data_receiver,
     }: workers::SpawnWorkersReturn = workers::spawn(
         nolus_node.clone(),
-        config.oracles,
         config.providers,
         config.comparison_providers,
-        tick_time,
+        config.tick_time,
     )
     .await?;
 
     info!("Entering broadcasting loop...");
 
-    let mut price_feeders_set: JoinSet<()> = JoinSet::new();
+    let node_config: Arc<NodeConfig> = Arc::new(config.node);
 
-    let node_config = Arc::new(config.node);
+    let (retry_sender, mut retry_receiver): UnboundedChannel<PriceDataPacket> = unbounded_channel();
 
-    let (tx_sender, mut tx_receiver): UnboundedChannel<(Instant, ContractTx)> = unbounded_channel();
+    let mut delivered_tx_fetchers_set: JoinSet<Option<NonZeroU64>> = JoinSet::new();
 
-    for (
-        oracle_name,
-        OracleAddressReceiverPair {
-            oracle_address: oracle_addr,
-            receiver: price_data_receiver,
-        },
-    ) in receivers
-    {
-        price_feeders_set.spawn(price_feeder(
-            oracle_name,
-            oracle_addr,
-            tick_time,
-            price_data_receiver,
-            tx_sender.clone(),
-        ));
-    }
+    let mut latest_timestamps: BTreeMap<usize, Instant> = BTreeMap::new();
 
-    drop(tx_sender);
+    let mut fallback_gas_limit: Option<NonZeroU64> = None;
 
-    let mut fallback_gas_limit: Option<u64> = None;
+    let mut next_signing_timestamp = Instant::now();
 
-    'outer_loop: while !price_fetchers_set.is_empty() && !price_feeders_set.is_empty() {
+    'outer_loop: loop {
         select! {
             Some(result) = price_fetchers_set.join_next(), if !price_fetchers_set.is_empty() => {
                 match result {
-                    Ok(Ok(())) => unreachable!(),
-                    Ok(Err(error)) => {
-                        error!(error = ?error, "Provider exitted prematurely! Error: {error}", error = error)
-                    }
-                    Err(error) => {
-                        error!(error = ?error, "Provider exitted prematurely and was unable to be joined! Probable cause is a panic! Error: {error}", error = error)
-                    },
+                    Ok(Ok(())) => {},
+                    Ok(Err(error)) => error!(
+                        error = ?error,
+                        "Provider exitted prematurely! Error: {error}",
+                    ),
+                    Err(error) => error!(
+                        error = ?error,
+                        "Provider exitted prematurely and was unable to be joined! Probable cause is a panic! Error: {error}",
+                    ),
                 }
-            },
-            Some(result) = price_feeders_set.join_next(), if !price_feeders_set.is_empty() => {
+            }
+            Some(result) = delivered_tx_fetchers_set.join_next(), if !delivered_tx_fetchers_set.is_empty() => {
                 match result {
-                    Ok(()) => info!("Oracle feeder task exited"),
-                    Err(error) => {
-                        error!(error = ?error, "Provider exitted prematurely and was unable to be joined! Probable cause is a panic! Error: {error}", error = error)
-                    }
+                    Ok(Some(gas_used)) => fallback_gas_limit = Some(fallback_gas_limit.unwrap_or(gas_used).max(gas_used)),
+                    Ok(None) => {}
+                    Err(error) => error!(
+                        error = ?error,
+                        "Failure reported back from delivered transaction logger! Probable cause is a panic! Error: {error}",
+                    ),
                 }
             }
-            result = tx_receiver.recv() => {
-                if let Some((tx_time, tx)) = result {
-                    let mut tx: Option<ContractTx> = Some(tx);
-
-                    let mut is_retry: bool = false;
-
-                    while let Some(tx) = if is_retry {
-                        if tx_time.elapsed() < tick_time {
-                            info!("Retrying transaction...");
-
-                            tx.take()
-                        } else {
-                            info!("Transaction data timed out.");
-
-                            None
-                        }
-                    } else {
-                        is_retry = true;
-
-                        tx.clone()
-                    } {
-                        let successful: bool = commit_tx_with_gas_estimation(
-                            &mut signer,
-                            &nolus_node,
-                            &node_config,
-                            config.hard_gas_limit,
-                            tx,
-                            fallback_gas_limit.unwrap_or(config.hard_gas_limit),
-                        )
-                        .await
-                        .map_or_else(
-                            |error: GasEstimatingTxCommit| {
-                                error!("Failed to feed data into oracle! Cause: {error}");
-
-                                false
-                            },
-                            |response: CommitResponse| {
-                                log::commit_response(&response);
-
-                                let used_gas: u64 = response.deliver_tx.gas_used.unsigned_abs();
-
-                                let fallback_gas_limit: &mut u64 =
-                                    fallback_gas_limit.get_or_insert(used_gas);
-
-                                *fallback_gas_limit = used_gas.max(*fallback_gas_limit);
-
-                                response.check_tx.code.is_ok() && response.deliver_tx.code.is_ok()
-                            },
-                        );
-
-                        if successful {
-                            continue 'outer_loop;
-                        }
+            Some(price_data_packet) = poll_fn(|cx| {
+                if let Poll::Ready(packet) = price_data_receiver.poll_recv(cx) {
+                    if packet.is_some() {
+                        return Poll::Ready(packet);
                     }
-                } else {
-                    warn!("Transaction receiving channel is closed!");
 
-                    break 'outer_loop;
+                    retry_receiver.close();
+                }
+
+                retry_receiver.poll_recv(cx)
+            }) => {
+                let PriceDataPacket {
+                    provider_id,
+                    tx_time,
+                    ..
+                } = price_data_packet;
+
+                if tx_time.elapsed() >= config.tick_time {
+                    warn!(
+                        provider = id_to_name_mapping[&provider_id].as_ref(),
+                        "Transaction data timed out."
+                    );
+
+                    continue;
+                }
+
+                let saved_timestamp = latest_timestamps.entry(provider_id).or_insert(tx_time);
+
+                if *saved_timestamp < tx_time {
+                    *saved_timestamp = tx_time;
+                } else if *saved_timestamp != tx_time {
+                    warn!(
+                        provider = id_to_name_mapping[&provider_id].as_ref(),
+                        "Transaction data already superceded."
+                    );
+
+                    continue;
+                }
+
+                if next_signing_timestamp.elapsed() < config.between_tx_margin_time {
+                    tokio_sleep_until(next_signing_timestamp).await;
+                }
+
+                let result = commit_tx_with_gas_estimation(
+                    &mut signer,
+                    &nolus_node,
+                    &node_config,
+                    config.hard_gas_limit,
+                    fallback_gas_limit.map_or(config.hard_gas_limit, NonZeroU64::get),
+                    ContractTx::new(price_data_packet.message.oracle.as_ref().into()).add_message(
+                        price_data_packet.message.execute_message.to_vec(),
+                        Vec::new(),
+                    ),
+                )
+                .await;
+
+                next_signing_timestamp = Instant::now() + config.between_tx_margin_time;
+
+                match result {
+                    Ok(response) => {
+                        self::log::commit_response(&id_to_name_mapping[&provider_id], &response);
+
+                        let hash = response.hash;
+                        let nolus_node = nolus_node.clone();
+                        let retry_sender = retry_sender.clone();
+                        let provider_id = id_to_name_mapping[&provider_id].clone();
+
+                        delivered_tx_fetchers_set.spawn(async move {
+                            tokio_sleep(config.retry_tick_time).await;
+
+                            match get_tx_response(&nolus_node, hash).await {
+                                Ok(response) => {
+                                    self::log::tx_response(&{ provider_id }, &hash, &response);
+
+                                    NonZeroU64::new(
+                                        response.gas_used.unsigned_abs().min(config.hard_gas_limit),
+                                    )
+                                }
+                                Err(error) => {
+                                    error_span!(
+                                        "Delivered Tx",
+                                        provider_id = { provider_id }.as_ref(),
+                                    )
+                                    .in_scope(|| {
+                                        info!("Hash: {hash}");
+
+                                        error!(
+                                            error = ?error,
+                                            "Failed to fetch transaction response! Cause: {error}",
+                                        );
+
+                                        info!("Sending transaction for retry.");
+
+                                        if retry_sender.send(price_data_packet).is_err() {
+                                            warn!("Sending for retry failed. Channel is closed.");
+                                        }
+                                    });
+
+                                    None
+                                }
+                            }
+                        });
+                    }
+                    Err(error) => error!(
+                        error = ?error,
+                        "Failed to feed data into oracle! Cause: {error}",
+                    ),
                 }
             }
-        };
+            else => {
+                warn!("Transaction receiving channel is closed!");
+
+                retry_receiver.close();
+
+                break 'outer_loop;
+            }
+        }
     }
 
-    price_fetchers_set.shutdown().await;
-    price_feeders_set.shutdown().await;
+    assert!(price_fetchers_set.is_empty());
+    assert!(delivered_tx_fetchers_set.is_empty());
 
     Ok(())
-}
-
-async fn price_feeder(
-    oracle_name: Arc<str>,
-    oracle_addr: Arc<str>,
-    tick_time: Duration,
-    mut price_data_receiver: UnboundedReceiver<(usize, Instant, Vec<u8>)>,
-    tx_sender: UnboundedSender<(Instant, ContractTx)>,
-) {
-    loop {
-        let mut messages: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
-
-        let channel_closed: bool = timeout(tick_time, async {
-            while let Some((id, instant, data)) = price_data_receiver.recv().await {
-                if Instant::now().duration_since(instant) < tick_time {
-                    messages.insert(id, data);
-                }
-            }
-
-            true
-        })
-        .await
-        .unwrap_or_default();
-
-        if messages.is_empty() {
-            if channel_closed {
-                warn!(
-                    oracle = &*oracle_name,
-                    "Price fetcher's channel closed! Exiting feeding task."
-                );
-
-                break;
-            } else {
-                continue;
-            }
-        }
-
-        let tx: ContractTx = messages.into_values().fold(
-            ContractTx::new(oracle_addr.to_string()),
-            |tx: ContractTx, msg: Vec<u8>| tx.add_message(msg, Vec::new()),
-        );
-
-        if tx.is_empty() {
-            warn!("Transaction contains no messages. Discarding transaction.");
-        } else if let Err(error) = tx_sender.send((Instant::now(), tx)) {
-            error!(error = %error, "Error occurred while trying to send transaction back to main task! Cause: {error}");
-
-            break;
-        }
-    }
 }
 
 async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()> {
