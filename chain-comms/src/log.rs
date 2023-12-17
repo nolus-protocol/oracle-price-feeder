@@ -1,7 +1,3 @@
-use tracing::{debug, error, info};
-
-use crate::{build_tx::TxResponse, interact::CommitResponse};
-
 pub fn setup<W>(writer: W)
 where
     W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
@@ -27,46 +23,4 @@ where
             }
         })
         .init();
-}
-
-pub fn commit_response(response: &CommitResponse) {
-    info!("Hash: {}", response.hash);
-
-    for (tx_name, tx_result) in [
-        ("Check", &response.check_tx as &dyn TxResponse),
-        ("Tx", &response.deliver_tx as &dyn TxResponse),
-    ] {
-        {
-            let (code, log) = (tx_result.code(), tx_result.log());
-
-            if code.is_ok() {
-                debug!("[{}] Log: {}", tx_name, log);
-            } else {
-                error!(
-                    log = %log,
-                    "[{}] Error with code {} has occurred!",
-                    tx_name,
-                    code.value(),
-                );
-            }
-        }
-
-        {
-            let (gas_wanted, gas_used) = (tx_result.gas_wanted(), tx_result.gas_used());
-
-            if gas_wanted < gas_used {
-                error!(
-                    wanted = %gas_wanted,
-                    used = %gas_used,
-                    "[{}] Out of gas!",
-                    tx_name,
-                );
-            } else {
-                info!(
-                    "[{}] Gas used: {}; Gas limit for transacion: {}",
-                    tx_name, gas_used, gas_wanted
-                );
-            }
-        }
-    }
 }

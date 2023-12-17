@@ -10,5 +10,6 @@ pub mod signer;
 pub mod signing_key;
 
 pub mod reexport {
+    pub use cosmrs;
     pub use tonic;
 }

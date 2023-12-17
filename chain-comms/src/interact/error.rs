@@ -24,6 +24,8 @@ pub struct FeeCalculation(#[from] cosmrs::ErrorReport);
 
 #[derive(Debug, ThisError)]
 pub enum SimulateTx {
+    #[error("Failed signing execution message! Cause: {0}")]
+    Signing(#[from] crate::signer::error::Error),
     #[error("Failed committing and signing execution message! Cause: {0}")]
     Commit(#[from] crate::build_tx::error::Error),
     #[error("Failed serializing transaction as bytes! Cause: {0}")]
@@ -42,10 +44,14 @@ pub enum SimulateTx {
 pub enum CommitTx {
     #[error("Failed to calculate and construct fee object! Cause: {0}")]
     FeeCalculation(#[from] FeeCalculation),
+    #[error("Failed signing execution message! Cause: {0}")]
+    Signing(#[from] crate::signer::error::Error),
     #[error("Failed committing and signing execution message! Cause: {0}")]
     Commit(#[from] crate::build_tx::error::Error),
-    #[error("Failed to broadcast committed message! Cause: {0}")]
-    Broadcast(#[from] cosmrs::ErrorReport),
+    #[error("Failed to serialize committed transaction! Cause: {0}")]
+    Serialize(cosmrs::ErrorReport),
+    #[error("Failed to broadcast committed transaction! Cause: {0}")]
+    Broadcast(cosmrs::ErrorReport),
 }
 
 #[derive(Debug, ThisError)]
@@ -54,4 +60,10 @@ pub enum GasEstimatingTxCommit {
     SimulationFailed(#[from] SimulateTx),
     #[error("Transaction committing and broadcasting failed! Cause: {0}")]
     CommitFailed(#[from] CommitTx),
+}
+
+#[derive(Debug, ThisError)]
+pub enum GetTxResponse {
+    #[error("Error occured while communicating with RPC endpoint!")]
+    Rpc(#[from] cosmrs::rpc::Error),
 }

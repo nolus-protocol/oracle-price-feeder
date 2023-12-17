@@ -12,9 +12,10 @@ use cosmrs::{
         },
         prost,
     },
-    rpc::HttpClient as RpcHttpClient,
-    tx::{Fee, Raw as RawTx},
-    Coin,
+    rpc::{Client as _, HttpClient as RpcHttpClient},
+    tendermint::{abci::response::DeliverTx, Hash},
+    tx::{Body as TxBody, Fee, Raw as RawTx},
+    Any, Coin,
 };
 use serde::de::DeserializeOwned;
 use tonic::transport::Channel as TonicChannel;
@@ -24,7 +25,7 @@ use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
 
 pub mod error;
 
-pub type CommitResponse = cosmrs::rpc::endpoint::broadcast::tx_commit::Response;
+pub type CommitResponse = cosmrs::rpc::endpoint::broadcast::tx_sync::Response;
 
 pub async fn query_account_data(
     client: &Client,
@@ -83,10 +84,155 @@ pub async fn simulate_tx(
     gas_limit: u64,
     unsigned_tx: ContractTx,
 ) -> Result<GasInfo, error::SimulateTx> {
-    let simulation_tx: Vec<u8> = unsigned_tx
-        .commit(signer, calculate_fee(config, gas_limit)?, None, None)?
-        .to_bytes()?;
+    simulate_tx_with_signed_body(
+        client,
+        unsigned_tx
+            .commit(signer, calculate_fee(config, gas_limit)?, None, None)?
+            .to_bytes()?,
+        gas_limit,
+    )
+    .await
+}
 
+pub async fn simulate_tx_with_serialized_messages(
+    signer: &mut Signer,
+    client: &Client,
+    config: &Node,
+    gas_limit: u64,
+    unsigned_tx: Vec<Any>,
+) -> Result<GasInfo, error::SimulateTx> {
+    simulate_tx_with_signed_body(
+        client,
+        signer
+            .sign(
+                TxBody::new(unsigned_tx, String::new(), 0_u32),
+                calculate_fee(config, gas_limit)?,
+            )?
+            .to_bytes()?,
+        gas_limit,
+    )
+    .await
+}
+
+pub fn adjust_gas_limit(node_config: &Node, gas_limit: u64, hard_gas_limit: u64) -> u64 {
+    u128::from(gas_limit)
+        .checked_mul(node_config.gas_adjustment_numerator().get().into())
+        .and_then(|result: u128| {
+            result.checked_div(node_config.gas_adjustment_denominator().get().into())
+        })
+        .map_or(gas_limit, |result: u128| {
+            u64::try_from(result).unwrap_or(u64::MAX)
+        })
+        .min(hard_gas_limit)
+}
+
+pub async fn commit_tx(
+    signer: &mut Signer,
+    client: &Client,
+    node_config: &Node,
+    gas_limit: u64,
+    unsigned_tx: ContractTx,
+) -> Result<CommitResponse, error::CommitTx> {
+    let signed_tx = unsigned_tx
+        .commit(signer, calculate_fee(node_config, gas_limit)?, None, None)
+        .map_err(From::from)
+        .and_then(|signed_tx: RawTx| signed_tx.to_bytes().map_err(error::CommitTx::Serialize))?;
+
+    commit_tx_with_signed_body(client, signed_tx, signer).await
+}
+
+pub async fn commit_tx_with_serialized_message(
+    signer: &mut Signer,
+    client: &Client,
+    node_config: &Node,
+    gas_limit: u64,
+    unsigned_tx: Vec<Any>,
+) -> Result<CommitResponse, error::CommitTx> {
+    let signed_tx = signer
+        .sign(
+            TxBody::new(unsigned_tx, String::new(), 0_u32),
+            calculate_fee(node_config, gas_limit)?,
+        )
+        .map_err(From::from)
+        .and_then(|signed_tx: RawTx| signed_tx.to_bytes().map_err(error::CommitTx::Serialize))?;
+
+    commit_tx_with_signed_body(client, signed_tx, signer).await
+}
+
+pub async fn commit_tx_with_gas_estimation(
+    signer: &mut Signer,
+    client: &Client,
+    node_config: &Node,
+    hard_gas_limit: u64,
+    fallback_gas_limit: u64,
+    unsigned_tx: ContractTx,
+) -> Result<CommitResponse, error::GasEstimatingTxCommit> {
+    let gas_limit = adjust_gas_limit(
+        node_config,
+        process_simulation_result(
+            simulate_tx(
+                signer,
+                client,
+                node_config,
+                hard_gas_limit,
+                unsigned_tx.clone(),
+            )
+            .await,
+            fallback_gas_limit,
+        ),
+        hard_gas_limit,
+    );
+
+    commit_tx(signer, client, node_config, gas_limit, unsigned_tx)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn commit_tx_with_gas_estimation_and_serialized_message(
+    signer: &mut Signer,
+    client: &Client,
+    node_config: &Node,
+    hard_gas_limit: u64,
+    fallback_gas_limit: u64,
+    unsigned_tx: Vec<Any>,
+) -> Result<CommitResponse, error::GasEstimatingTxCommit> {
+    let gas_limit = adjust_gas_limit(
+        node_config,
+        process_simulation_result(
+            simulate_tx_with_serialized_messages(
+                signer,
+                client,
+                node_config,
+                hard_gas_limit,
+                unsigned_tx.clone(),
+            )
+            .await,
+            fallback_gas_limit,
+        ),
+        hard_gas_limit,
+    );
+
+    commit_tx_with_serialized_message(signer, client, node_config, gas_limit, unsigned_tx)
+        .await
+        .map_err(Into::into)
+}
+
+pub async fn get_tx_response(
+    client: &Client,
+    tx_hash: Hash,
+) -> Result<DeliverTx, error::GetTxResponse> {
+    client
+        .with_json_rpc(move |rpc| async move { rpc.tx(tx_hash, false).await })
+        .await
+        .map(|response| response.tx_result)
+        .map_err(From::from)
+}
+
+async fn simulate_tx_with_signed_body(
+    client: &Client,
+    simulation_tx: Vec<u8>,
+    gas_limit: u64,
+) -> Result<GasInfo, error::SimulateTx> {
     let gas_info: GasInfo = client
         .with_grpc(move |channel: TonicChannel| async move {
             ServiceClient::new(channel)
@@ -110,46 +256,11 @@ pub async fn simulate_tx(
     Ok(gas_info)
 }
 
-pub async fn commit_tx(
-    signer: &mut Signer,
-    client: &Client,
-    node_config: &Node,
-    unsigned_tx: ContractTx,
-    gas_limit: u64,
-) -> Result<CommitResponse, error::CommitTx> {
-    let signed_tx: RawTx =
-        unsigned_tx.commit(signer, calculate_fee(node_config, gas_limit)?, None, None)?;
-
-    client
-        .with_json_rpc(|rpc: RpcHttpClient| async move { signed_tx.broadcast_commit(&rpc).await })
-        .await
-        .map(|response| {
-            if response.check_tx.code.is_ok() {
-                signer.tx_confirmed();
-            };
-
-            response
-        })
-        .map_err(From::from)
-}
-
-pub async fn commit_tx_with_gas_estimation(
-    signer: &mut Signer,
-    client: &Client,
-    node_config: &Node,
-    hard_gas_limit: u64,
-    unsigned_tx: ContractTx,
+fn process_simulation_result(
+    simulated_tx_result: Result<GasInfo, error::SimulateTx>,
     fallback_gas_limit: u64,
-) -> Result<CommitResponse, error::GasEstimatingTxCommit> {
-    let tx_gas_limit: u64 = match simulate_tx(
-        signer,
-        client,
-        node_config,
-        hard_gas_limit,
-        unsigned_tx.clone(),
-    )
-    .await
-    {
+) -> u64 {
+    match simulated_tx_result {
         Ok(gas_info) => gas_info.gas_used,
         Err(error) => {
             error!(
@@ -160,21 +271,31 @@ pub async fn commit_tx_with_gas_estimation(
 
             fallback_gas_limit
         }
-    };
+    }
+}
 
-    let adjusted_gas_limit: u64 = u128::from(tx_gas_limit)
-        .checked_mul(node_config.gas_adjustment_numerator().get().into())
-        .and_then(|result: u128| {
-            result.checked_div(node_config.gas_adjustment_denominator().get().into())
-        })
-        .map_or(tx_gas_limit, |result: u128| {
-            u64::try_from(result).unwrap_or(u64::MAX)
-        })
-        .min(hard_gas_limit);
+async fn commit_tx_with_signed_body(
+    client: &Client,
+    signed_tx: Vec<u8>,
+    signer: &mut Signer,
+) -> Result<CommitResponse, error::CommitTx> {
+    const COSMWASM_WASM_CODESPACE_ERROR_CODE: u32 = 5;
 
-    commit_tx(signer, client, node_config, unsigned_tx, adjusted_gas_limit)
+    client
+        .with_json_rpc(|rpc: RpcHttpClient| async move { rpc.broadcast_tx_sync(signed_tx).await })
         .await
-        .map_err(Into::into)
+        .map_err(From::from)
+        .map(|response| {
+            if response.code.is_ok()
+                || (response.code.is_err()
+                    && matches!(response.code.value(), COSMWASM_WASM_CODESPACE_ERROR_CODE))
+            {
+                signer.tx_confirmed();
+            }
+
+            response
+        })
+        .map_err(error::CommitTx::Broadcast)
 }
 
 fn calculate_fee(config: &Node, gas_limit: u64) -> Result<Fee, error::FeeCalculation> {
