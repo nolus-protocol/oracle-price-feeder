@@ -44,7 +44,7 @@ oracle_id = "neutron_astroport_axlusdc"
 comparison.provider_id = "neutron_astroport_axlusdc_sanity_check"
 [providers.neutron_astroport_axlusdc.currencies]
 ATOM = { denom = "ibc/C4CFF46FD6DE35CA4CF4CE031E643C8FDC9BA4B99AE598E9B0ED98FE3A2319F9", decimal_places = 6 }
-NLS = { denom = "ibc/830F6CA3E33406586DFAADB25908769CB111046755EDAAD1D8D6A6E72A5E0C87", decimal_places = 6 }
+NLS = { denom = "ibc/C9F36A5FCF5FBD26661F9A09900301755C8B042696E4F456ACD73FAA7AFA6551", decimal_places = 6 }
 NTRN = { denom = "untrn", decimal_places = 6 }
 USDC_AXELAR = { denom = "ibc/F91EA2C0A23697A1048E08C2F787E3A58AC6F706A1CD2257A504925158CFC0F3", decimal_places = 6 }
 
