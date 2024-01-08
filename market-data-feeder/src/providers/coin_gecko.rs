@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
 use http::{HeaderMap, HeaderValue};
-use regex::bytes::{Captures, Match, Regex, RegexBuilder};
+use regex::{Captures, Regex, RegexBuilder};
 use reqwest::{Client as ReqwestClient, Error as ReqwestError, Response as ReqwestResponse};
 use thiserror::Error;
 use tokio::task::JoinSet;
@@ -210,23 +210,26 @@ impl SanityCheck {
             })
             .map(|result: Result<Bytes, BenchmarkError>| {
                 result.and_then(|body: Bytes| {
-                    regex
-                        .captures(&body)
-                        .and_then(|captures: Captures<'_>| captures.name("price"))
-                        .ok_or(BenchmarkError::PriceNotFoundInResponse)
-                        .and_then(|price: Match<'_>| {
-                            String::from_utf8(price.as_bytes().to_vec())
-                                .map_err(BenchmarkError::InvalidUtf8)
-                        })
-                        .and_then(|price: String| {
-                            Ratio::parse_string(price)
-                                .map(|price| {
-                                    price.to_price(
-                                        mappings.base.ticker.to_string(),
-                                        mappings.quote.ticker.to_string(),
-                                    )
-                                })
-                                .map_err(BenchmarkError::ParsePrice)
+                    String::from_utf8({ body }.to_vec())
+                        .map_err(BenchmarkError::InvalidUtf8)
+                        .and_then(|body| {
+                            if let Some(price_decimal) = regex
+                                .captures(&body)
+                                .and_then(|captures: Captures<'_>| captures.get(1))
+                            {
+                                price_decimal
+                                    .as_str()
+                                    .parse()
+                                    .map(|price_ratio: Ratio| {
+                                        price_ratio.to_price(
+                                            mappings.base.ticker.to_string(),
+                                            mappings.quote.ticker.to_string(),
+                                        )
+                                    })
+                                    .map_err(BenchmarkError::ParsePrice)
+                            } else {
+                                Err(BenchmarkError::PriceNotFoundInResponse(body))
+                            }
                         })
                 })
             })
@@ -238,7 +241,7 @@ impl SanityCheck {
 
         REGEX.get_or_init(|| {
             let Ok(regex): Result<Regex, regex::Error> = RegexBuilder::new(
-                r#"^\{\s*"\w+"\s*:\s*\{\s*"\w*"\s*:\s*(?<price>\d+(?:\.\d+)?)\s*\}\s*\}$"#,
+                r#"^\s*\{\s*"[\w\-]+"\s*:\s*\{\s*"[\w\-]*"\s*:\s*(\d+(?:\.\d+)?)\s*\}\s*\}\s*$"#,
             )
             .case_insensitive(true)
             .ignore_whitespace(false)
@@ -349,8 +352,8 @@ enum BenchmarkError {
     SendQuery(ReqwestError),
     #[error("Failed to receive price query response body! Cause: {0}")]
     ReceiveResponseBody(ReqwestError),
-    #[error("Failed to retrieve price from response! No price found!")]
-    PriceNotFoundInResponse,
+    #[error("Failed to retrieve price from response! No price found! Raw response: {0}")]
+    PriceNotFoundInResponse(String),
     #[error("Failed to parse response body as string! Cause: {0}")]
     InvalidUtf8(FromUtf8Error),
     #[error("Failed to parse price! Cause: {0}")]
