@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use http::Uri;
 use thiserror::Error;
 use tokio::task::JoinSet;
-use tracing::error;
+use tracing::{debug, error};
 
 use chain_comms::{
     client::Client as NodeClient,
@@ -117,31 +117,31 @@ impl Provider for Astroport {
             let max_decimal_places: u8 = base_decimal_places.max(quote_decimal_places);
 
             set.spawn(async move {
-                query_wasm(
-                    channel,
-                    router_contract.to_string(),
-                    &Self::query_message(&base_dex_denom, &quote_dex_denom, max_decimal_places)?,
-                )
-                .await
-                .map(
-                    |SimulateSwapOperationsResponse {
-                         amount: quote_amount,
-                     }: SimulateSwapOperationsResponse| {
-                        Price::new(
-                            CoinWithDecimalPlaces::new(
-                                10_u128.pow(max_decimal_places.into()),
-                                base_ticker,
-                                base_decimal_places,
-                            ),
-                            CoinWithDecimalPlaces::new(
-                                quote_amount,
-                                quote_ticker,
-                                quote_decimal_places,
-                            ),
-                        )
-                    },
-                )
-                .map_err(ProviderError::WasmQuery)
+                let query_message =
+                    Self::query_message(&base_dex_denom, &quote_dex_denom, max_decimal_places)?;
+
+                debug!(query_message = %String::from_utf8_lossy(&query_message), "Query message");
+
+                match query_wasm(channel, router_contract.to_string(), &{ query_message }).await {
+                    Ok(astroport::router::SimulateSwapOperationsResponse {
+                        amount: quote_amount,
+                    }) => Ok(Price::new(
+                        CoinWithDecimalPlaces::new(
+                            10_u128.pow(max_decimal_places.into()),
+                            base_ticker,
+                            base_decimal_places,
+                        ),
+                        CoinWithDecimalPlaces::new(
+                            quote_amount.u128(),
+                            quote_ticker,
+                            quote_decimal_places,
+                        ),
+                    )),
+                    Err(error) => Err(ProviderError::WasmQuery(
+                        format!(r#"currency pair = "{}/{}""#, base_ticker, quote_ticker),
+                        error,
+                    )),
+                }
             });
         }
 

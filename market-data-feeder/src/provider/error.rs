@@ -13,19 +13,23 @@ pub enum Provider {
     #[error("Failed to fetch price from pool! Cause: {0}")]
     FetchPoolPrice(reqwest::Error),
 
-    #[error(
-        "Failed to fetch price from pool for pair \"{0}/{1}\" because server responded with an error! Returned status code: {2}"
-    )]
+    #[error(r#"Failed to fetch price from pool for pair "{0}/{1}" because server responded with an error! Returned status code: {2}"#)]
     ServerResponse(String, String, u16),
 
     #[error("Failed to deserialize fetched price from response's body! Cause: {0}")]
     DeserializePoolPrice(reqwest::Error),
 
-    #[error("Failed to query WASM contract! Cause: {0}")]
-    WasmQuery(#[from] chain_comms::interact::error::WasmQuery),
+    #[error(r#"Failed to query WASM contract!{}{}{} Cause: {}"#, if _0.is_empty() { "" } else { " Additional context: " }, _0, if _0.is_empty() { "" } else { ";" }, _1)]
+    WasmQuery(String, chain_comms::interact::error::WasmQuery),
 
     #[error("Serialization failed! Cause: {0}")]
     Serialization(#[from] serde_json_wasm::ser::Error),
+}
+
+impl From<chain_comms::interact::error::WasmQuery> for Provider {
+    fn from(error: chain_comms::interact::error::WasmQuery) -> Self {
+        Self::WasmQuery(String::new(), error)
+    }
 }
 
 #[derive(Debug, Error)]
