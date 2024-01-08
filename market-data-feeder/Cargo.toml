@@ -11,6 +11,7 @@ name = "feeder"
 [dependencies]
 chain-comms = { workspace = true }
 
+astroport = { workspace = true }
 async-trait = { workspace = true }
 bnum = { workspace = true }
 bytes = { workspace = true }

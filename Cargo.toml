@@ -10,6 +10,7 @@ license = "Apache-2.0"
 [workspace.dependencies]
 chain-comms = { path = "./chain-comms" }
 
+astroport = "3.6.1"
 async-trait = "0.1.74"
 base64 = "0.21.4"
 bnum = "0.9"

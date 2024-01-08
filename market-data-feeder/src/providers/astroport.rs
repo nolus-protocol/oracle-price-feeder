@@ -1,11 +1,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use astroport::{
+    asset::AssetInfo,
+    router::{QueryMsg, SwapOperation},
+};
 use async_trait::async_trait;
 use http::Uri;
-use serde::{
-    de::{Deserializer, Error as DeserializeError},
-    Deserialize, Serialize,
-};
 use thiserror::Error;
 use tokio::task::JoinSet;
 use tracing::error;
@@ -39,10 +39,12 @@ impl Astroport {
         decimal_places: u8,
     ) -> Result<Vec<u8>, ProviderError> {
         serde_json_wasm::to_vec(&QueryMsg::SimulateSwapOperations {
-            offer_amount: 10_u128.pow(decimal_places.into()).to_string(),
+            offer_amount: 10_u128.pow(decimal_places.into()).into(),
             operations: Vec::from([SwapOperation::AstroSwap {
-                offer_asset_info: AssetInfo::NativeToken { denom: base },
-                ask_asset_info: AssetInfo::NativeToken { denom: quote },
+                offer_asset_info: AssetInfo::NativeToken { denom: base.into() },
+                ask_asset_info: AssetInfo::NativeToken {
+                    denom: quote.into(),
+                },
             }]),
         })
         .map_err(Into::into)
@@ -85,7 +87,7 @@ impl Astroport {
                         )
                     })
             })
-            .map_err(ProviderError::WasmQuery)
+            .map_err(From::from)
     }
 }
 
@@ -228,43 +230,4 @@ pub(crate) enum ConstructError {
     FetchRouterContract(EnvError),
     #[error("Failed to connect RPC's URI! Cause: {0}")]
     ConnectToGrpc(#[from] TonicError),
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum QueryMsg<'r> {
-    SimulateSwapOperations {
-        offer_amount: String,
-        operations: Vec<SwapOperation<'r>>,
-    },
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SwapOperation<'r> {
-    AstroSwap {
-        offer_asset_info: AssetInfo<'r>,
-        ask_asset_info: AssetInfo<'r>,
-    },
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AssetInfo<'r> {
-    NativeToken { denom: &'r SymbolUnsized },
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct SimulateSwapOperationsResponse {
-    #[serde(deserialize_with = "deserialize_str_as_u128")]
-    pub amount: u128,
-}
-
-fn deserialize_str_as_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    <&'de str>::deserialize(deserializer)
-        .and_then(|value: &'de str| value.parse().map_err(DeserializeError::custom))
 }
