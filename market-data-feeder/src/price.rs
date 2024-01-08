@@ -12,39 +12,6 @@ pub(crate) struct Ratio {
 }
 
 impl Ratio {
-    pub fn parse_string(mut price: String) -> Result<Self, Error> {
-        let point: usize;
-
-        let price: String = {
-            point = price
-                .find('.')
-                .map_or(price.len(), |point: usize| -> usize {
-                    price = price.trim_end_matches('0').into();
-
-                    price.remove(point);
-
-                    point
-                });
-
-            price
-        };
-
-        (price.len() - point)
-            .try_into()
-            .map_err(Error::from)
-            .and_then(|exp: u32| 10_u128.checked_pow(exp).ok_or(Error::ExponentTooBig))
-            .and_then(|denominator: u128| {
-                price
-                    .trim_start_matches('0')
-                    .parse()
-                    .map(|numerator: u128| Self {
-                        numerator,
-                        denominator,
-                    })
-                    .map_err(Error::ParseNumerator)
-            })
-    }
-
     pub const fn to_price(self, base: Ticker, quote: Ticker) -> Price<CoinWithoutDecimalPlaces> {
         Price::new(
             CoinWithoutDecimalPlaces::new(self.denominator, base),
@@ -71,16 +38,55 @@ impl<'de> Deserialize<'de> for Ratio {
     where
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)
-            .and_then(|price: String| Self::parse_string(price).map_err(DeserializeError::custom))
+        <&str>::deserialize(deserializer)
+            .and_then(|price: &str| Self::from_str(price).map_err(DeserializeError::custom))
     }
 }
 
 impl FromStr for Ratio {
     type Err = Error;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse_string(String::from(s))
+        let s = s.trim_start_matches('0').trim_end_matches('0');
+
+        let point: usize = s.find('.').unwrap_or(s.len());
+
+        match s.len() - point {
+            0 => s
+                .parse()
+                .map(|numerator| Self {
+                    numerator,
+                    denominator: 1,
+                })
+                .map_err(Error::ParseNumerator),
+            exponent => {
+                (exponent - 1)
+                    .try_into()
+                    .map_err(Error::from)
+                    .and_then(|exp: u32| 10_u128.checked_pow(exp).ok_or(Error::ExponentTooBig))
+                    .and_then(|denominator: u128| {
+                        let result = s[point + 1..].trim_start_matches('0').parse();
+                        if point == 0 {
+                            result.map(Some)
+                        } else {
+                            result.and_then(|after_decimal: u128| {
+                                s[..point].parse().map(|before_decimal: u128| {
+                                    before_decimal.checked_mul(denominator).and_then(
+                                        |before_decimal| before_decimal.checked_add(after_decimal),
+                                    )
+                                })
+                            })
+                        }
+                        .map_err(Error::ParseNumerator)
+                        .and_then(|maybe_numerator| maybe_numerator.ok_or(Error::NumeratorTooBig))
+                        .map(|numerator: u128| Self {
+                            numerator,
+                            denominator,
+                        })
+                    })
+            }
+        }
     }
 }
 
@@ -92,6 +98,8 @@ pub enum Error {
     ConvertInt(#[from] std::num::TryFromIntError),
     #[error("Failed to parse ratio! Denominator exponent too big!")]
     ExponentTooBig,
+    #[error("Failed to parse ratio! Numerator too big!")]
+    NumeratorTooBig,
 }
 
 pub trait Coin: Send + 'static {
@@ -209,4 +217,74 @@ where
     pub const fn amount_quote(&self) -> &C {
         &self.amount_quote
     }
+}
+
+#[cfg(test)]
+#[test]
+fn test_ratio_less_than_one() {
+    const INPUT: &str = "0.1234";
+
+    assert_eq!(
+        INPUT.parse().ok(),
+        Some(Ratio {
+            numerator: 1234,
+            denominator: 10000,
+        })
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn test_ratio_greater_than_one() {
+    const INPUT: &str = "1.234";
+
+    assert_eq!(
+        INPUT.parse().ok(),
+        Some(Ratio {
+            numerator: 1234,
+            denominator: 1000,
+        })
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn test_ratio_greater_than_ten() {
+    const INPUT: &str = "12.34";
+
+    assert_eq!(
+        INPUT.parse().ok(),
+        Some(Ratio {
+            numerator: 1234,
+            denominator: 100,
+        })
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn test_ratio_greater_than_hundred() {
+    const INPUT: &str = "123.4";
+
+    assert_eq!(
+        INPUT.parse().ok(),
+        Some(Ratio {
+            numerator: 1234,
+            denominator: 10,
+        })
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn test_ratio_integer() {
+    const INPUT: &str = "1234";
+
+    assert_eq!(
+        INPUT.parse().ok(),
+        Some(Ratio {
+            numerator: 1234,
+            denominator: 1,
+        })
+    );
 }
