@@ -11,47 +11,48 @@ license = "Apache-2.0"
 chain-comms = { path = "./chain-comms" }
 
 astroport = "3.6.1"
-async-trait = "0.1.74"
-base64 = "0.21.4"
-bnum = "0.9"
-bytes = "1.5"
-cosmrs = { version = "0.14", default-features = false, features = [
+async-trait = "0.1.77"
+base64 = "0.21.5"
+bip32 = { version = "0.5.1", features = ["mnemonic"] }
+bnum = "0.10.0"
+bytes = "1.5.0"
+cosmrs = { version = "=0.14.0", default-features = false, features = [
     "rpc",
     "grpc",
     "bip32",
     "cosmwasm",
 ] }
-futures = "0.3.28"
-http = { version = "0.2.9", default-features = false }
-prost = "0.12.1"
-prost-types = "0.12.1"
-regex = "1.10"
-reqwest = { version = "0.11.22", default-features = false, features = [
+futures = "0.3.30"
+http = { version = "=0.2.11", default-features = false }
+prost = "0.12.3"
+prost-types = "0.12.3"
+regex = "1.10.2"
+reqwest = { version = "0.11.23", default-features = false, features = [
     "json",
     "rustls-tls",
 ] }
-semver = { version = "1", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde-json-wasm = "1"
-time = { version = "0.3.30", default-features = false, features = [
+semver = { version = "1.0.21", features = ["serde"] }
+serde = { version = "1.0.195", features = ["derive"] }
+serde-json-wasm = "1.0.0"
+time = { version = "0.3.31", default-features = false, features = [
     "std",
     "formatting",
 ] }
-thiserror = "1"
-tokio = { version = "1.33", default-features = false, features = [
+thiserror = "1.0.56"
+tokio = { version = "1.35.1", default-features = false, features = [
     "rt-multi-thread",
     "macros",
 ] }
-toml = "0.8.2"
-tonic = { version = "0.9.2", default_features = false, features = [
+toml = "0.8.8"
+tonic = { version = "=0.9.2", default_features = false, features = [
     "tls",
     "tls-roots",
     "gzip",
 ] }
 tracing = "0.1.40"
-tracing-appender = "0.2.2"
-tracing-subscriber = "0.3.17"
-url = { version = "2.4.1", default-features = false }
+tracing-appender = "0.2.3"
+tracing-subscriber = "0.3.18"
+url = { version = "2.5.0", default-features = false }
 
 [patch.crates-io.tendermint]
 git = "https://github.com/nolus-protocol/tendermint-rs.git"
