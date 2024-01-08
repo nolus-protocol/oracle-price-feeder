@@ -4,7 +4,7 @@ use cosmrs::{
         response::{CheckTx, DeliverTx},
         Code,
     },
-    tx::{Body, Fee, MessageExt, Raw as RawTx},
+    tx::{Body, Fee, MessageExt as _, Raw as RawTx},
     Any,
 };
 
