@@ -24,6 +24,7 @@ cosmrs = { version = "=0.14.0", default-features = false, features = [
 ] }
 futures = "0.3.30"
 http = { version = "=0.2.11", default-features = false }
+osmosis-std = "=0.20.1"
 prost = "0.12.3"
 prost-types = "0.12.3"
 regex = "1.10.2"
