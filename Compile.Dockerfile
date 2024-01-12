@@ -1,4 +1,4 @@
-FROM rust:1.73.0-alpine
+FROM rust:1.75-alpine
 
 VOLUME ["/artifacts", "/code", "/code/target", "/usr/local/cargo"]
 
