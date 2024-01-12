@@ -19,7 +19,7 @@ impl Ratio {
         )
     }
 
-    pub const fn to_price_with_decimal_places(
+    pub const fn as_quote_to_price_with_decimal_places(
         self,
         base_ticker: Ticker,
         base_decimal_places: u8,
@@ -34,6 +34,7 @@ impl Ratio {
 }
 
 impl<'de> Deserialize<'de> for Ratio {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -46,7 +47,6 @@ impl<'de> Deserialize<'de> for Ratio {
 impl FromStr for Ratio {
     type Err = Error;
 
-    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim_start_matches('0').trim_end_matches('0');
 
@@ -60,13 +60,14 @@ impl FromStr for Ratio {
                     denominator: 1,
                 })
                 .map_err(Error::ParseNumerator),
-            exponent => {
+            exponent @ 1.. => {
                 (exponent - 1)
                     .try_into()
                     .map_err(Error::from)
                     .and_then(|exp: u32| 10_u128.checked_pow(exp).ok_or(Error::ExponentTooBig))
                     .and_then(|denominator: u128| {
                         let result = s[point + 1..].trim_start_matches('0').parse();
+
                         if point == 0 {
                             result.map(Some)
                         } else {
@@ -87,6 +88,15 @@ impl FromStr for Ratio {
                     })
             }
         }
+    }
+}
+
+impl<'r> TryFrom<&'r str> for Ratio {
+    type Error = Error;
+
+    #[inline]
+    fn try_from(value: &'r str) -> Result<Self, Self::Error> {
+        Self::from_str(value)
     }
 }
 
