@@ -18,7 +18,7 @@ use cosmrs::{
     Any, Coin,
 };
 use serde::de::DeserializeOwned;
-use tonic::transport::Channel as TonicChannel;
+use tonic::{client::Grpc as GrpcClient, transport::Channel as TonicChannel, IntoRequest as _};
 use tracing::{debug, error};
 
 use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
@@ -56,6 +56,30 @@ pub async fn query_account_data(
     .map_err(Into::into)
 }
 
+pub async fn raw_query<Q, R>(
+    rpc: TonicChannel,
+    query: Q,
+    type_url: &'static str,
+) -> Result<R, error::RawQuery>
+where
+    Q: prost::Message + 'static,
+    R: prost::Message + Default + 'static,
+{
+    let mut grpc_client: GrpcClient<TonicChannel> = GrpcClient::new(rpc.clone());
+
+    grpc_client.ready().await?;
+
+    grpc_client
+        .unary(
+            query.into_request(),
+            http::uri::PathAndQuery::from_static(type_url),
+            tonic::codec::ProstCodec::default(),
+        )
+        .await
+        .map(tonic::Response::into_inner)
+        .map_err(error::RawQuery::Response)
+}
+
 pub async fn query_wasm<R>(
     rpc: TonicChannel,
     address: String,
@@ -64,17 +88,16 @@ pub async fn query_wasm<R>(
 where
     R: DeserializeOwned,
 {
-    serde_json_wasm::from_slice(
-        &WasmQueryClient::new(rpc)
-            .smart_contract_state(QuerySmartContractStateRequest {
-                address,
-                query_data: query.to_vec(),
-            })
-            .await?
-            .into_inner()
-            .data,
-    )
-    .map_err(Into::into)
+    WasmQueryClient::new(rpc)
+        .smart_contract_state(QuerySmartContractStateRequest {
+            address,
+            query_data: query.to_vec(),
+        })
+        .await
+        .map_err(|error| error::WasmQuery::RawQuery(error::RawQuery::Response(error)))
+        .and_then(|response| {
+            serde_json_wasm::from_slice(&response.into_inner().data).map_err(From::from)
+        })
 }
 
 pub async fn simulate_tx(
