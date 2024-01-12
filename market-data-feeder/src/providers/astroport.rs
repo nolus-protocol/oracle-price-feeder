@@ -187,19 +187,7 @@ impl FromConfig<false> for Astroport {
                 ConstructError::DeserializeField(CURRENCIES_FIELD, error)
             })?;
 
-        if let Some(fields) = config
-            .into_keys()
-            .reduce(|mut accumulator: String, field: String| {
-                accumulator.reserve(field.len() + 2);
-
-                accumulator.push_str(", ");
-
-                accumulator.push_str(&field);
-
-                accumulator
-            })
-            .map(String::into_boxed_str)
-        {
+        if let Some(fields) = super::left_over_fields(config) {
             Err(ConstructError::UnknownFields(fields))
         } else {
             Ok(Self {

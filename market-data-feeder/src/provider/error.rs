@@ -10,14 +10,11 @@ pub enum Provider {
     #[error("URL operation failed! Cause: {0}")]
     UrlOperationFailed(#[from] url::ParseError),
 
-    #[error("Failed to fetch price from pool! Cause: {0}")]
-    FetchPoolPrice(reqwest::Error),
+    #[error("Response contains non-ASCII characters!{}{}", if _0.is_empty() { "" } else { " Additional context: " }, _0)]
+    NonAsciiResponse(String),
 
-    #[error(r#"Failed to fetch price from pool for pair "{0}/{1}" because server responded with an error! Returned status code: {2}"#)]
-    ServerResponse(String, String, u16),
-
-    #[error("Failed to deserialize fetched price from response's body! Cause: {0}")]
-    DeserializePoolPrice(reqwest::Error),
+    #[error("Failed to parse price!{}{}{} Cause: {}", if _0.is_empty() { "" } else { " Additional context: " }, _0, if _0.is_empty() { "" } else { ";" }, _1)]
+    ParsePrice(String, crate::price::Error),
 
     #[error(r#"Failed to query WASM contract!{}{}{} Cause: {}"#, if _0.is_empty() { "" } else { " Additional context: " }, _0, if _0.is_empty() { "" } else { ";" }, _1)]
     WasmQuery(String, chain_comms::interact::error::WasmQuery),

@@ -385,21 +385,8 @@ impl FromConfig<true> for SanityCheck {
         let ticker_mapping: BTreeMap<Arc<TickerUnsized>, Arc<str>> =
             Self::extract_ticker_mapping(&mut config)?;
 
-        if let Some(fields) =
-            config
-                .into_misc()
-                .into_keys()
-                .reduce(|mut accumulator: String, key: String| {
-                    accumulator.reserve(key.len() + 2);
-
-                    accumulator.push_str(", ");
-
-                    accumulator.push_str(&key);
-
-                    accumulator
-                })
-        {
-            Err(ConstructError::UnknownFields(fields.into_boxed_str()))
+        if let Some(fields) = super::left_over_fields(config.into_misc()) {
+            Err(ConstructError::UnknownFields(fields))
         } else {
             Self::fetch_supported_vs_currencies(&http_client, &ticker_mapping)
                 .await

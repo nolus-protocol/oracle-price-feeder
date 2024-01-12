@@ -1,4 +1,4 @@
-use std::convert::identity;
+use std::{collections::BTreeMap, convert::identity};
 
 use tokio::task::JoinSet;
 
@@ -67,6 +67,21 @@ pub(crate) trait ComparisonProviderVisitor {
     fn on<P>(self) -> Self::Return
     where
         P: ComparisonProvider + FromConfig<true>;
+}
+
+fn left_over_fields(config: BTreeMap<String, toml::Value>) -> Option<Box<str>> {
+    config
+        .into_keys()
+        .reduce(|mut accumulator: String, key: String| {
+            accumulator.reserve(key.len() + 2);
+
+            accumulator.push_str(", ");
+
+            accumulator.push_str(&key);
+
+            accumulator
+        })
+        .map(String::into_boxed_str)
 }
 
 async fn collect_prices_from_task_set<C>(
