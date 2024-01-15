@@ -141,7 +141,9 @@ impl Provider for Osmosis {
                             if let Some(zeroes_needed) =
                                 DECIMAL_PLACES_IN_RESPONSE.checked_sub(spot_price.len())
                             {
-                                String::from(".") + &String::from('0').repeat(zeroes_needed) + &spot_price
+                                String::from(".")
+                                    + &String::from('0').repeat(zeroes_needed)
+                                    + &spot_price
                             } else {
                                 spot_price
                                     .insert(spot_price.len() - DECIMAL_PLACES_IN_RESPONSE, '.');
