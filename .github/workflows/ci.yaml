@@ -22,59 +22,36 @@ jobs:
     steps:
       - uses: "actions/checkout@v3"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
-      - shell: "sh"
-        run: "rustup update"
-      - shell: "sh"
-        run: "rustup default stable"
       - uses: "Nolus-Protocol/rust-ci-actions/check_formatting@main"
   check_codebase:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v3"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
-      - shell: "sh"
-        run: "rustup update"
-      - shell: "sh"
-        run: "rustup default stable"
       - uses: "Nolus-Protocol/rust-ci-actions/check_codebase@main"
   # audit_dependencies:
   #   runs-on: "ubuntu-latest"
   #   steps:
   #     - uses: "actions/checkout@v3"
   #     - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
-  #     - shell: "sh"
-  #       run: "rustup update"
-  #     - shell: "sh"
-  #       run: "rustup default stable"
   #     - uses: "Nolus-Protocol/rust-ci-actions/audit_dependencies@main"
   linting:
     runs-on: ubuntu-latest
     steps:
       - uses: "actions/checkout@v3"
-      - shell: "sh"
-        run: "rustup update"
-      - shell: "sh"
-        run: "rustup default stable"
+      - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
       - run: "cargo clippy -- -F unsafe_code -D warnings"
   code_coverage:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v3"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
-      - shell: "sh"
-        run: "rustup update"
-      - shell: "sh"
-        run: "rustup default stable"
       - uses: "Nolus-Protocol/rust-ci-actions/code_coverage@main"
   test_release_profile:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v3"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
-      - shell: "sh"
-        run: "rustup update"
-      - shell: "sh"
-        run: "rustup default stable"
       - name: "Run tests in release profile"
         shell: "sh"
         run: "cargo test --release"
