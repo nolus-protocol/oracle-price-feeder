@@ -17,7 +17,7 @@ fee_adjustment_denominator = 1
 
 [[time_alarms]]
 address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
-max_alarms_group = 32
+max_alarms_group = 65536
 #gas_limit_per_alarm = 175_000
 gas_limit_per_alarm = 5_000_000
 
