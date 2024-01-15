@@ -87,6 +87,8 @@ impl FromStr for Ratio {
                         })
                     })
             }
+            // TODO Remove on 1.75
+            _ => unreachable!(),
         }
     }
 }
