@@ -1,5 +1,5 @@
 poll_period_seconds = 60
-between_tx_margin_seconds = 2
+between_tx_margin_seconds = 5
 query_delivered_tx_tick_seconds = 15
 
 [node]

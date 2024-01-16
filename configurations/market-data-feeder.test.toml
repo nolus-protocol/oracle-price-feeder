@@ -1,5 +1,5 @@
 tick_seconds = 60
-between_tx_margin_seconds = 2
+between_tx_margin_seconds = 5
 query_delivered_tx_tick_seconds = 15
 hard_gas_limit = 1_975_000
 
@@ -15,21 +15,20 @@ fee_adjustment_numerator = 5
 fee_adjustment_denominator = 1
 
 [oracles]
-osmosis_oracle = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
+osmosis_osmosis_axlusdc = "nolus13je4ss56rctm6wazddgch7j6qljkcm8k9uel6nnnr3kllke8e4yqczygxr"
+neutron_astroport_axlusdc = "nolus1avgvt4mu0tzad09y4nmaw53av9ulqz6yyu78ty82stntv8qy7s8s8e4qrf"
 
-[providers.osmosis-lcd]
+[providers.osmosis_osmosis_axlusdc]
 name = "osmosis"
-oracle_id = "osmosis_oracle"
-[providers.osmosis-lcd.comparison]
-provider_id = "sanity_check"
-[providers.osmosis-lcd.currencies]
+oracle_id = "osmosis_osmosis_axlusdc"
+[providers.osmosis_osmosis_axlusdc.currencies]
 AKT = { denom = "ibc/7153C8C55DB988805FAC69E449B680A8BAAC15944B87CF210ADCD1A3A9542857", decimal_places = 6 }
 ATOM = { denom = "ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477", decimal_places = 6 }
 CRO = { denom = "ibc/E6931F78057F7CC5DA0FD6CEF82FF39373A6E0452BF1FD76910B93292CF356C1", decimal_places = 8 }
 EVMOS = { denom = "ibc/3A7AC1F623B3475EE1F3CF849FBC4751FCEB956327ED4E5D49C676828EF9533E", decimal_places = 18 }
 JUNO = { denom = "ibc/8E2FEFCBD754FA3C97411F0126B9EC76191BAA1B3959CB73CECF396A4037BBF0", decimal_places = 6 }
 MARS = { denom = "ibc/2E7368A14AC9AB7870F32CFEA687551C5064FA861868EDF7437BC877358A81F9", decimal_places = 6 }
-NLS = { denom = "ibc/95359FD9C5D15DBD7B9A6B7271F5E769776999590DE138ED62B6E89D5D010B7C", decimal_places = 6 }
+NLS = { denom = "ibc/1588A50E9EF2B6E45B443B8AF5AD7891996D7104566908982603D73D1956FE51", decimal_places = 6 }
 OSMO = { denom = "uosmo", decimal_places = 6 }
 SCRT = { denom = "ibc/0954E1C28EB7AF5B72D24F3BC2B47BBB2FDF91BDDFD57B74B99E133AED40972A", decimal_places = 6 }
 STARS = { denom = "ibc/987C17B11ABC2B20019178ACE62929FE9840202CE79498E29FE8E5CB02B7C0A4", decimal_places = 6 }
@@ -37,26 +36,13 @@ USDC = { denom = "ibc/6F34E1BD664C36CE49ACC28E60D62559A5F96C4F9A6CCE4FC5A67B2852
 WBTC = { denom = "ibc/BDA12A41BCF2DFB005A0794876E0E71D9538E0A7EB9607F600435EDDE5393EC4", decimal_places = 8 }
 WETH = { denom = "ibc/8AE11672A7DF38BF7B484AB642C5C85BA4A94810D57AE8945151818CD6179427", decimal_places = 18 }
 
-[comparison_providers.sanity_check]
-name = "coin_gecko_sanity_check"
-oracle_id = "osmosis_oracle"
-mandatory = true
-[comparison_providers.sanity_check.ticker_mapping]
-AKT = "akash-network"
-ATOM = "cosmos-hub"
-AXL = "axelar"
-CRO = "cronos"
-EVMOS = "evmos"
-INJ = "injective"
-JUNO = "juno-network"
-SCRT = "secret"
-ST_ATOM = "stride-staked-atom"
-ST_OSMO = "stride-staked-osmo"
-STARS = "stargaze"
-STK_ATOM = "stkatom"
-STRD = "stride"
-NLS = "nolus"
-OSMO = "osmosis"
-USDC = "usd"
-WBTC = "bitcoin"
-WETH = "ethereum"
+[providers.neutron_astroport_axlusdc]
+name = "astroport"
+oracle_id = "neutron_astroport_axlusdc"
+[providers.neutron_astroport_axlusdc.currencies]
+ATOM = { denom = "ibc/C4CFF46FD6DE35CA4CF4CE031E643C8FDC9BA4B99AE598E9B0ED98FE3A2319F9", decimal_places = 6 }
+NLS = { denom = "ibc/C9F36A5FCF5FBD26661F9A09900301755C8B042696E4F456ACD73FAA7AFA6551", decimal_places = 6 }
+NTRN = { denom = "untrn", decimal_places = 6 }
+USDC_AXELAR = { denom = "ibc/F91EA2C0A23697A1048E08C2F787E3A58AC6F706A1CD2257A504925158CFC0F3", decimal_places = 6 }
+
+[comparison_providers]

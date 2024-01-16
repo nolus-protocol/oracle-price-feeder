@@ -15,14 +15,13 @@ fee_adjustment_numerator = 5
 fee_adjustment_denominator = 1
 
 [oracles]
-osmosis_oracle = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
+osmosis_osmosis_axlusdc = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
+neutron_astroport_axlusdc = "nolus1jew4l5nq7m3xhkqzy8j7cc99083m5j8d9w004ayyv8xl3yv4h0dql2dd4e"
 
-[providers.osmosis-lcd]
+[providers.osmosis_osmosis_axlusdc]
 name = "osmosis"
-oracle_id = "osmosis_oracle"
-[providers.osmosis-lcd.comparison]
-provider_id = "sanity_check"
-[providers.osmosis-lcd.currencies]
+oracle_id = "osmosis_osmosis_axlusdc"
+[providers.osmosis_osmosis_axlusdc.currencies]
 AKT = { denom = "ibc/1480B8FD20AD5FCAE81EA87584D269547DD4D436843C1D20F15E00EB64743EF4", decimal_places = 6 }
 ATOM = { denom = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2", decimal_places = 6 }
 AXL = { denom = "ibc/903A61A498756EA560B85A85132D3AEE21B5DEDD41213725D22ABF276EA6945E", decimal_places = 6 }
@@ -44,26 +43,15 @@ USDC = { denom = "ibc/D189335C6E4A68B513C10AB227BF1C1D38C746766278BA3EEB4FB14124
 WBTC = { denom = "ibc/D1542AA8762DB13087D8364F3EA6509FD6F009A34F00426AF9E4F9FA85CBBF1F", decimal_places = 8 }
 WETH = { denom = "ibc/EA1D43981D5C9A1C4AAEA9C23BB1D4FA126BA9BC7020A25E0AE4AA841EA25DC5", decimal_places = 18 }
 
-[comparison_providers.sanity_check]
-name = "coin_gecko_sanity_check"
-oracle_id = "osmosis_oracle"
-mandatory = true
-[comparison_providers.sanity_check.ticker_mapping]
-AKT = "akash-network"
-ATOM = "cosmos-hub"
-AXL = "axelar"
-CRO = "cronos"
-EVMOS = "evmos"
-INJ = "injective"
-JUNO = "juno-network"
-SCRT = "secret"
-ST_ATOM = "stride-staked-atom"
-ST_OSMO = "stride-staked-osmo"
-STARS = "stargaze"
-STK_ATOM = "stkatom"
-STRD = "stride"
-NLS = "nolus"
-OSMO = "osmosis"
-USDC = "usd"
-WBTC = "bitcoin"
-WETH = "ethereum"
+[providers.neutron_astroport_axlusdc]
+name = "astroport"
+oracle_id = "neutron_astroport_axlusdc"
+[providers.neutron_astroport_axlusdc.currencies]
+ATOM = { denom = "ibc/C4CFF46FD6DE35CA4CF4CE031E643C8FDC9BA4B99AE598E9B0ED98FE3A2319F9", decimal_places = 6 }
+DYDX = { denom = "ibc/2CB87BCE0937B1D1DFCEE79BE4501AAF3C265E923509AEAC410AD85D27F35130", decimal_places = 18 }
+ST_ATOM = { denom = "ibc/B7864B03E1B9FD4F049243E92ABD691586F682137037A9F3FCA5222815620B3C", decimal_places = 6 }
+NLS = { denom = "ibc/6C9E6701AC217C0FC7D74B0F7A6265B9B4E3C3CDA6E80AADE5F950A8F52F9972", decimal_places = 6 }
+NTRN = { denom = "untrn", decimal_places = 6 }
+USDC_AXELAR = { denom = "ibc/F082B65C88E4B6D5EF1DB243CDA1D331D002759E938A0F5CD3FFDC5D53B3E349", decimal_places = 6 }
+
+[comparison_providers]
