@@ -3,36 +3,56 @@ use base64::{
     engine::{GeneralPurpose, GeneralPurposeConfig},
     Engine,
 };
+use cosmrs::{
+    cosmwasm::MsgExecuteContractResponse, proto::prost::Message,
+    tendermint::abci::response::DeliverTx, tx::Msg as _, Any,
+};
 
-// TODO use this version when errors in wasmd are corrected
-//  use cosmrs::cosmwasm::MsgExecuteContractResponse;
-//  use cosmrs::tx::Msg as _;
-use cosmrs::{proto::prost::Message, tendermint::abci::response::DeliverTx, Any};
+use self::error::Error;
 
 pub mod error;
 
-pub fn exec_tx_data(tx: &DeliverTx) -> Result<Vec<u8>, error::Error> {
-    let data: Vec<u8> = Engine::decode(
+#[derive(Message)]
+struct Package {
+    #[prost(bytes, tag = "2")]
+    data: Vec<u8>,
+}
+
+pub fn exec_tx_data(tx: &DeliverTx) -> Result<Vec<u8>, Error> {
+    Engine::decode(
         &GeneralPurpose::new(&URL_SAFE, GeneralPurposeConfig::new()),
         &tx.data,
-    )?;
-
-    // TODO use this version when errors in wasmd are corrected
-    //
-    // NOTE: outer Vec<u8> protobuf layer may not be needed after it's corrected
-    // <Vec<u8> as Message>::decode(
-    //     MsgExecuteContractResponse::from_any(&<Any as Message>::decode(
-    //         <Vec<u8> as Message>::decode(data.as_slice())?.as_slice(),
-    //     )?)?
-    //     .data
-    //     .as_slice(),
-    // )
-    // .map_err(Into::into)
-
-    <Vec<u8> as Message>::decode(
-        <Any as Message>::decode(<Vec<u8> as Message>::decode(data.as_slice())?.as_slice())?
-            .value
-            .as_slice(),
     )
-    .map_err(Into::into)
+    .map_err(Error::DecodeBase64)
+    .and_then(|data| {
+        <Package as cosmrs::proto::traits::Message>::decode(data.as_slice())
+            .map_err(Error::DeserializeData)
+    })
+    .and_then(|Package { data }| {
+        <Any as Message>::decode(data.as_slice()).map_err(Error::DeserializeData)
+    })
+    .and_then(|any| MsgExecuteContractResponse::from_any(&any).map_err(Error::InvalidResponseType))
+    .map(|MsgExecuteContractResponse { data }| data)
+}
+
+#[cfg(test)]
+#[test]
+fn test() {
+    assert_eq!(
+        exec_tx_data(&DeliverTx {
+            code: Default::default(),
+            data: b"EjQKLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNlEgQKAjE2"
+                .to_vec()
+                .into(),
+            log: String::new(),
+            info: String::new(),
+            gas_wanted: 0,
+            gas_used: 0,
+            events: Vec::new(),
+            codespace: String::new(),
+        })
+        .unwrap()
+        .as_slice(),
+        b"16"
+    );
 }
