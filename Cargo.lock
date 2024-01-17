@@ -39,7 +39,7 @@ dependencies = [
 
 [[package]]
 name = "alarms-dispatcher"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.21.7",
  "chain-comms",
@@ -319,7 +319,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chain-comms"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.21.7",
  "cosmrs",
@@ -1325,7 +1325,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
 name = "market-data-feeder"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "astroport",
  "async-trait",
