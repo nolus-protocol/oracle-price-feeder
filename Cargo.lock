@@ -324,6 +324,7 @@ dependencies = [
  "base64 0.21.7",
  "cosmrs",
  "http",
+ "prost",
  "serde",
  "serde-json-wasm 1.0.0",
  "thiserror",
