@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use cosmrs::tendermint::chain::Id as ChainId;
+use cosmrs::{tendermint::chain::Id as ChainId, Denom};
 use serde::{
     de::{DeserializeOwned, Error as DeserializeError},
     Deserialize, Deserializer, Serialize,
@@ -61,7 +61,7 @@ impl Node {
     }
 
     #[must_use]
-    pub fn fee_denom(&self) -> &str {
+    pub fn fee_denom(&self) -> &Denom {
         &self.file.fee_denom
     }
 
@@ -128,7 +128,7 @@ struct File {
     address_prefix: String,
     #[serde(deserialize_with = "deserialize_chain_id")]
     chain_id: ChainId,
-    fee_denom: String,
+    fee_denom: Denom,
     gas_adjustment_numerator: NonZeroU64,
     gas_adjustment_denominator: NonZeroU64,
     gas_price_numerator: NonZeroU64,

@@ -16,7 +16,6 @@ use self::error::Result as ModuleResult;
 pub mod error;
 
 pub struct Signer {
-    needs_update: bool,
     key: SigningKey,
     chain_id: ChainId,
     account: BaseAccount,
@@ -27,7 +26,6 @@ impl Signer {
     #[must_use]
     pub const fn new(key: SigningKey, chain_id: ChainId, account: BaseAccount) -> Self {
         Self {
-            needs_update: false,
             key,
             chain_id,
             account,
@@ -39,11 +37,7 @@ impl Signer {
         &self.account.address
     }
 
-    pub fn sign(&self, body: Body, fee: Fee) -> ModuleResult<Raw> {
-        if self.needs_update {
-            return Err(error::Error::AccountDataUpdateNeeded);
-        }
-
+    pub fn sign(&mut self, body: Body, fee: Fee) -> ModuleResult<Raw> {
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(

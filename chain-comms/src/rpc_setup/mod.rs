@@ -5,8 +5,7 @@ use serde::de::DeserializeOwned;
 use tracing::info;
 
 use crate::{
-    account, client::Client, config, interact::query_account_data, signer::Signer,
-    signing_key::signing_key,
+    account, client::Client, config, interact::query, signer::Signer, signing_key::signing_key,
 };
 
 use self::error::Result;
@@ -40,7 +39,7 @@ where
 
     info!("Fetching account data from network...");
 
-    let account_data: BaseAccount = query_account_data(
+    let account_data: BaseAccount = query::account_data(
         &nolus_node,
         account::id(config.as_ref(), &signing_key)?.as_ref(),
     )

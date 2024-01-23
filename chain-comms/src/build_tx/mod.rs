@@ -35,6 +35,7 @@ impl ContractTx {
         }
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.messages.is_empty()
     }
@@ -45,42 +46,46 @@ impl ContractTx {
         self
     }
 
+    pub fn serialize(self, signer: &Signer) -> Result<Vec<Any>> {
+        let buf = Vec::with_capacity(self.messages.len());
+
+        self.messages
+            .into_iter()
+            .map(|msg| {
+                MsgExecuteContract {
+                    sender: signer.signer_address().into(),
+                    contract: self.contract.clone(),
+                    msg: msg.message,
+                    funds: msg.funds,
+                }
+                .to_any()
+            })
+            .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>> {
+                acc.push(msg?);
+
+                Ok(acc)
+            })
+    }
+
     pub fn commit(
         self,
-        signer: &Signer,
+        signer: &mut Signer,
         fee: Fee,
         memo: Option<&str>,
         timeout: Option<u32>,
     ) -> Result<RawTx> {
-        signer
-            .sign(
-                Body::new(
-                    {
-                        let buf = Vec::with_capacity(self.messages.len());
-
-                        self.messages
-                            .into_iter()
-                            .map(|msg| {
-                                MsgExecuteContract {
-                                    sender: signer.signer_address().into(),
-                                    contract: self.contract.clone(),
-                                    msg: msg.message,
-                                    funds: msg.funds,
-                                }
-                                .to_any()
-                            })
-                            .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>> {
-                                acc.push(msg?);
-
-                                Ok(acc)
-                            })?
-                    },
-                    memo.unwrap_or_default(),
-                    timeout.unwrap_or_default(),
-                ),
-                fee,
-            )
-            .map_err(Into::into)
+        self.serialize(signer).and_then(|messages| {
+            signer
+                .sign(
+                    Body::new(
+                        messages,
+                        memo.unwrap_or_default(),
+                        timeout.unwrap_or_default(),
+                    ),
+                    fee,
+                )
+                .map_err(Into::into)
+        })
     }
 }
 
