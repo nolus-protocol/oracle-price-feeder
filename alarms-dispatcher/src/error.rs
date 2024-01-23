@@ -12,7 +12,7 @@ pub enum Application {
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]
-    ContractVersionQuery(#[from] chain_comms::interact::error::WasmQuery),
+    ContractVersionQuery(#[from] chain_comms::interact::query::error::WasmQuery),
     #[error("Version of \"{contract}\" contract is not compatible! Minimum compatible version is {compatible}, but contract's actual version is {actual}!")]
     IncompatibleContractVersion {
         contract: &'static str,
@@ -36,7 +36,7 @@ pub enum DispatchAlarms {
 #[derive(Debug, ThisError)]
 pub enum DispatchAlarm {
     #[error("Failed to query smart contract! Cause: {0}")]
-    StatusQuery(#[from] chain_comms::interact::error::WasmQuery),
+    StatusQuery(#[from] chain_comms::interact::query::error::WasmQuery),
     #[error("Failed to commit transaction! Cause: {0}")]
     CommitTx(#[from] CommitDispatchTx),
     #[error("Failed to deserialize dispatch response! Cause: {0}")]
@@ -48,7 +48,7 @@ pub enum CommitDispatchTx {
     #[error("Failed to serialize dispatch message as JSON! Cause: {0}")]
     SerializeDispatchMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to commit transaction! Cause: {0}")]
-    CommitTx(#[from] chain_comms::interact::error::GasEstimatingTxCommit),
+    CommitTx(#[from] chain_comms::interact::commit::error::GasEstimatingTxCommit),
     #[error("Failed to deserialize response data! Cause: {0}")]
     DeserializeTxData(#[from] chain_comms::decode::error::Error),
 }

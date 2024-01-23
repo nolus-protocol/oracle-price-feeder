@@ -12,20 +12,20 @@ use chain_comms::config::Node;
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) struct Config {
     #[serde(
-        rename = "poll_period_seconds",
+        rename = "tick_time_seconds",
         deserialize_with = "deserialize_duration_in_seconds"
     )]
-    pub poll_period: Duration,
+    pub tick_time: Duration,
+    #[serde(
+        rename = "poll_time_seconds",
+        deserialize_with = "deserialize_duration_in_seconds"
+    )]
+    pub poll_time: Duration,
     #[serde(
         rename = "between_tx_margin_seconds",
         deserialize_with = "deserialize_duration_in_seconds"
     )]
     pub between_tx_margin_time: Duration,
-    #[serde(
-        rename = "query_delivered_tx_tick_seconds",
-        deserialize_with = "deserialize_duration_in_seconds"
-    )]
-    pub query_delivered_tx_tick_time: Duration,
     pub node: Node,
     pub time_alarms: Vec<Contract>,
     pub market_price_oracle: Vec<Contract>,

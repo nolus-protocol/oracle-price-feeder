@@ -1,4 +1,4 @@
-use std::{io, num::NonZeroU64, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, io, num::NonZeroU64, time::Duration};
 
 use semver::{
     BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
@@ -6,12 +6,11 @@ use semver::{
 };
 use serde::Deserialize;
 use tokio::{
-    select,
-    sync::mpsc::{unbounded_channel, UnboundedSender},
-    task::JoinSet,
-    time::{sleep as tokio_sleep, sleep_until as tokio_sleep_until, Instant},
+    select, spawn,
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    time::{sleep, timeout, Instant},
 };
-use tracing::{error, error_span, info, warn, warn_span};
+use tracing::{error, error_span, info, warn};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
     rolling,
@@ -19,10 +18,18 @@ use tracing_appender::{
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
 use chain_comms::{
-    interact::{commit_tx_with_gas_estimation_and_serialized_message, get_tx_response, query_wasm},
+    client::Client as NodeClient,
+    config::Node as NodeConfig,
+    interact::{
+        adjust_gas_limit, calculate_fee, commit, get_tx_response, process_simulation_result, query,
+        simulate,
+    },
     reexport::{
         cosmrs::{
-            proto::cosmwasm::wasm::v1::MsgExecuteContract, tx::MessageExt as _, Any as ProtobufAny,
+            rpc::error::{Error as RpcError, ErrorDetail as RpcErrorDetail},
+            tendermint::{abci::response::DeliverTx, Hash as TxHash},
+            tx::Body as TxBody,
+            Any as ProtobufAny,
         },
         tonic::transport::Channel as TonicChannel,
     },
@@ -31,16 +38,15 @@ use chain_comms::{
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 
-use crate::messages::StatusResponse;
-
 use self::{
     config::{Config, Contract},
     error::AppResult,
-    messages::{ExecuteMsg, QueryMsg},
+    messages::QueryMsg,
 };
 
 mod config;
 mod error;
+mod generators;
 mod log;
 mod messages;
 
@@ -90,7 +96,7 @@ async fn app_main() -> AppResult<()> {
 
     info!("Checking compatibility with contract version...");
 
-    check_comparibility(&rpc_setup).await?;
+    check_compatibility(&rpc_setup).await?;
 
     info!("Contract is compatible with feeder version.");
 
@@ -105,7 +111,7 @@ async fn app_main() -> AppResult<()> {
     result.map_err(Into::into)
 }
 
-async fn check_comparibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
+async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
         major: u64,
@@ -129,7 +135,7 @@ async fn check_comparibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
         let version: JsonVersion = rpc_setup
             .nolus_node
             .with_grpc(|rpc: TonicChannel| {
-                query_wasm(rpc, contract.address.clone(), QueryMsg::CONTRACT_VERSION)
+                query::wasm(rpc, contract.address.clone(), QueryMsg::CONTRACT_VERSION)
             })
             .await?;
 
@@ -167,293 +173,284 @@ async fn dispatch_alarms(
         ..
     }: RpcSetup<Config>,
 ) -> Result<(), error::DispatchAlarms> {
-    let mut fallback_gas_limit: Option<NonZeroU64> = None;
-
-    let mut periodic_tx_generators_set = JoinSet::new();
-    let mut delivered_tx_fetchers_set = JoinSet::new();
-
     let (tx_sender, mut tx_receiver) = unbounded_channel();
 
-    spawn_periodic_tx_generators(
+    let (mut tx_generators_set, mut result_senders) = generators::spawn(
+        nolus_node,
         signer,
-        config.poll_period,
+        &{ tx_sender },
         config.market_price_oracle,
         config.time_alarms,
-        tx_sender.clone(),
-        &mut periodic_tx_generators_set,
-        nolus_node,
+        config.tick_time,
+        config.poll_time,
     )?;
 
-    let tx_sender = {
-        let downgraded = tx_sender.downgrade();
+    let mut last_signing_timestamp = Instant::now();
 
-        drop(tx_sender);
+    let mut fallback_gas_limit: u64 = 0;
 
-        downgraded
+    let mut process_transaction_env = ProcessTransactionRequestContext {
+        node_client: nolus_node,
+        node_config: &config.node,
+        signer,
+        tick_time: config.tick_time,
+        poll_time: config.poll_time,
     };
-
-    let mut next_signing_timestamp = Instant::now();
 
     loop {
         select! {
-            Some(result) = delivered_tx_fetchers_set.join_next(), if !delivered_tx_fetchers_set.is_empty() => {
-                match result {
-                    Ok(Some(gas_used)) => {
-                        fallback_gas_limit = Some(fallback_gas_limit.unwrap_or(gas_used).max(gas_used))
-                    }
-                    Ok(None) => {}
-                    Err(error) => error!(
-                        error = ?error,
-                        "Failure reported back from delivered transaction logger! Probable cause is a panic! Error: {error}"
-                    ),
-                }
-            }
-            Some((message, hard_gas_limit, tx_time, contract_type, contract_address)) = tx_receiver.recv() => {
-                if next_signing_timestamp.elapsed() < config.between_tx_margin_time {
-                    tokio_sleep_until(next_signing_timestamp).await;
+            Some(_) = tx_generators_set.join_next(), if !tx_generators_set.is_empty() => {},
+            Some((monotonic_id, messages, hard_gas_limit)) = tx_receiver.recv() => {
+                if last_signing_timestamp.elapsed() < config.between_tx_margin_time {
+                    sleep(config.between_tx_margin_time).await;
                 }
 
-                let result = commit_tx_with_gas_estimation_and_serialized_message(
-                    signer,
-                    nolus_node,
-                    &config.node,
-                    hard_gas_limit.get(),
-                    fallback_gas_limit.map_or(hard_gas_limit.get(), NonZeroU64::get),
-                    message.clone(),
+                if let Some(ProcessTransactionRequestResult {
+                    broadcast_timestamp,
+                    new_fallback_gas_limit,
+                    channel_closed,
+                }) = process_transaction_request(
+                    &mut process_transaction_env,
+                    fallback_gas_limit,
+                    &result_senders,
+                    monotonic_id,
+                    messages,
+                    hard_gas_limit,
                 )
-                .await;
+                .await
+                {
+                    last_signing_timestamp = broadcast_timestamp;
 
-                next_signing_timestamp = Instant::now();
+                    fallback_gas_limit = new_fallback_gas_limit;
 
-                match result {
-                    Ok(response) => {
-                        self::log::commit_response(contract_type, &contract_address, &response);
-
-                        let hash = response.hash;
-                        let client = nolus_node.clone();
-                        let tx_sender = tx_sender.clone();
-                        let contract_address = contract_address.clone();
-
-                        delivered_tx_fetchers_set.spawn(async move {
-                            tokio_sleep(config.query_delivered_tx_tick_time).await;
-
-                            match get_tx_response(&client, response.hash).await {
-                                Ok(response) => {
-                                    self::log::tx_response(contract_type, &contract_address, &hash, &response);
-
-                                    let should_resend = match client.with_grpc(|rpc| async { query_wasm::<StatusResponse>(rpc, contract_address.to_string(), QueryMsg::ALARMS_STATUS).await }).await {
-                                        Ok(status_response) => status_response.remaining_for_dispatch(),
-                                        Err(error) => {
-                                            error_span!(
-                                                "Query remaining",
-                                                contract_type = contract_type,
-                                                contract_address = contract_address.as_ref(),
-                                            ).in_scope(||
-                                                error!(
-                                                    error = ?error,
-                                                    "Failed to determine whether there are remaining alarms to be dispatched! Cause: {error}"
-                                                )
-                                            );
-
-                                            true
-                                        },
-                                    };
-
-                                    if should_resend {
-                                        info!("Resending message for further processing of remaining alarms.");
-
-                                        let channel_closed = tx_sender
-                                            .upgrade()
-                                            .and_then(|tx_sender| {
-                                                tx_sender
-                                                    .send((
-                                                        message,
-                                                        hard_gas_limit,
-                                                        tx_time,
-                                                        contract_type,
-                                                        contract_address.clone(),
-                                                    ))
-                                                    .err()
-                                            })
-                                            .is_some();
-
-                                        if channel_closed {
-                                            warn_span!(
-                                                "Resend for remaning",
-                                                contract_type = contract_type,
-                                                contract_address = contract_address.as_ref(),
-                                            ).in_scope(|| {
-                                                warn!("Sending for further processing failed. Channel is closed.");
-                                            });
-                                        }
-                                    }
-
-                                    NonZeroU64::new(response.gas_used.unsigned_abs())
-                                        .map(|gas_limit| gas_limit.min(hard_gas_limit))
-                                }
-                                Err(error) => {
-                                    error_span!(
-                                        "Delivered Tx",
-                                        contract_type = contract_type,
-                                        contract_address = contract_address.as_ref(),
-                                    )
-                                    .in_scope(|| {
-                                        error!(
-                                            error = ?error,
-                                            "Failed to fetch transaction response! Cause: {error}",
-                                        );
-
-                                        info!("Sending transaction for retry.");
-
-                                        if tx_time.elapsed() >= config.poll_period {
-                                            warn_span!("Transaction timed-out.");
-                                        } else {
-                                            let channel_closed = tx_sender
-                                                .upgrade()
-                                                .and_then(|tx_sender| {
-                                                    tx_sender
-                                                        .send((
-                                                            message,
-                                                            hard_gas_limit,
-                                                            tx_time,
-                                                            contract_type,
-                                                            contract_address,
-                                                        ))
-                                                        .err()
-                                                })
-                                                .is_some();
-
-                                            if channel_closed {
-                                                warn!("Sending for retry failed. Channel is closed.");
-                                            }
-                                        }
-                                    });
-
-                                    None
-                                }
-                            }
-                        });
+                    if channel_closed {
+                        let _ = result_senders.remove(&monotonic_id);
                     }
-                    Err(error) => error!(
-                        contract_type = contract_type,
-                        contract_address = contract_address.as_ref(),
-                        error = ?error,
-                        "Failed to commit alarms dispatching transaction! Cause: {error}",
-                    ),
                 }
             }
             else => {
-                warn!("Transaction receiving channel is closed!");
+                info!("All generator threads stopped. Exiting.");
 
                 break;
             }
         }
     }
 
-    periodic_tx_generators_set.shutdown().await;
-    delivered_tx_fetchers_set.shutdown().await;
+    tx_generators_set.shutdown().await;
 
     Ok(())
 }
 
-type TxGeneratorsSender = UnboundedSender<(
-    Vec<ProtobufAny>,
-    NonZeroU64,
-    Instant,
-    &'static str,
-    Arc<str>,
-)>;
+struct ProcessTransactionRequestContext<'r> {
+    node_client: &'r NodeClient,
+    node_config: &'r NodeConfig,
+    signer: &'r mut Signer,
+    tick_time: Duration,
+    poll_time: Duration,
+}
 
-fn spawn_periodic_tx_generators(
-    signer: &Signer,
-    poll_period: Duration,
-    market_price_oracle_contracts: Vec<Contract>,
-    time_alarms_contracts: Vec<Contract>,
-    tx_sender: TxGeneratorsSender,
-    periodic_tx_generators_set: &mut JoinSet<()>,
-    nolus_node: &chain_comms::client::Client,
-) -> Result<(), error::DispatchAlarms> {
-    market_price_oracle_contracts
-        .into_iter()
-        .map(|contract| (contract, "oracle"))
-        .chain(
-            time_alarms_contracts
-                .into_iter()
-                .map(|contract| (contract, "time_alarms")),
-        )
-        .try_for_each(
-            |(contract, contract_type)| -> Result<(), error::DispatchAlarms> {
-                let message: Arc<[ProtobufAny]> = {
-                    let mut message: Vec<ProtobufAny> = vec![MsgExecuteContract {
-                        sender: signer.signer_address().into(),
-                        contract: contract.address.clone(),
-                        msg: serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
-                            max_count: contract.max_alarms_group.get(),
-                        })?,
-                        funds: Vec::new(),
+struct ProcessTransactionRequestResult {
+    broadcast_timestamp: Instant,
+    new_fallback_gas_limit: u64,
+    channel_closed: bool,
+}
+
+async fn process_transaction_request(
+    &mut ProcessTransactionRequestContext {
+        node_client,
+        node_config,
+        ref mut signer,
+        tick_time,
+        poll_time,
+    }: &mut ProcessTransactionRequestContext<'_>,
+    mut fallback_gas_limit: u64,
+    result_senders: &BTreeMap<usize, CommitResultSender>,
+    monotonic_id: usize,
+    messages: Vec<ProtobufAny>,
+    hard_gas_limit: NonZeroU64,
+) -> Option<ProcessTransactionRequestResult> {
+    let tx_body: TxBody = TxBody::new(messages, String::new(), 0_u32);
+
+    let Some(signed_tx_bytes) =
+        sign_and_serialize_tx(signer, node_config, hard_gas_limit.get(), tx_body.clone())
+    else {
+        return None;
+    };
+
+    let simulation_result =
+        simulate::with_signed_body(node_client, signed_tx_bytes, hard_gas_limit.get()).await;
+
+    let estimated_gas_limit = process_simulation_result(simulation_result, fallback_gas_limit);
+
+    let gas_limit = adjust_gas_limit(node_config, estimated_gas_limit, hard_gas_limit.get());
+
+    fallback_gas_limit = gas_limit.max(fallback_gas_limit);
+
+    let Some(signed_tx_bytes) = sign_and_serialize_tx(signer, node_config, gas_limit, tx_body)
+    else {
+        return None;
+    };
+
+    let tx_response = broadcast_commit(node_client, signer, signed_tx_bytes).await;
+
+    let broadcast_timestamp = Instant::now();
+
+    log::commit_response(&tx_response);
+
+    let channel_closed = matches!(
+        send_back_tx_hash(
+            node_client,
+            tick_time,
+            poll_time,
+            result_senders,
+            monotonic_id,
+            tx_response,
+        ),
+        SendBackTxHashResult::ChannelClosed
+    );
+
+    Some(ProcessTransactionRequestResult {
+        broadcast_timestamp,
+        new_fallback_gas_limit: fallback_gas_limit,
+        channel_closed,
+    })
+}
+
+enum SendBackTxHashResult {
+    Ok,
+    ChannelClosed,
+}
+
+fn send_back_tx_hash(
+    node_client: &NodeClient,
+    tick_time: Duration,
+    poll_time: Duration,
+    result_senders: &BTreeMap<usize, CommitResultSender>,
+    monotonic_id: usize,
+    tx_response: commit::Response,
+) -> SendBackTxHashResult {
+    let hash = tx_response.hash;
+
+    let channel_closed = if let Some(sender) = result_senders.get(&monotonic_id) {
+        if sender
+            .send(if tx_response.code.is_ok() {
+                Ok(tx_response.hash)
+            } else {
+                Err(CommitError {
+                    r#type: if tx_response.code.value() == 32 {
+                        CommitErrorType::InvalidAccountSequence
+                    } else {
+                        CommitErrorType::Unknown
+                    },
+                    response: tx_response,
+                })
+            })
+            .is_ok()
+        {
+            return SendBackTxHashResult::Ok;
+        }
+
+        SendBackTxHashResult::ChannelClosed
+    } else {
+        SendBackTxHashResult::Ok
+    };
+
+    let node_client = node_client.clone();
+
+    spawn(async move {
+        poll_delivered_tx(&node_client, tick_time, poll_time, hash).await;
+    });
+
+    channel_closed
+}
+
+async fn broadcast_commit(
+    node_client: &NodeClient,
+    signer: &mut Signer,
+    signed_tx_bytes: Vec<u8>,
+) -> commit::Response {
+    loop {
+        match commit::with_signed_body(node_client, signed_tx_bytes.clone(), signer).await {
+            Ok(tx_response) => break tx_response,
+            Err(error) => {
+                error_span!("Broadcast").in_scope(|| {
+                    if let commit::error::CommitTx::Broadcast(
+                        RpcError(
+                            RpcErrorDetail::Timeout(..),
+                            ..,
+                        ),
+                    ) = error {
+                        warn!(error = ?error, "Failed to broadcast transaction due to a timeout! Cause: {}", error);
+                    } else {
+                        error!(error = ?error, "Failed to broadcast transaction due to an error! Cause: {}", error);
                     }
-                    .to_any()?];
 
-                    message.shrink_to_fit();
-
-                    message.into()
-                };
-
-                let contract_address: Arc<str> = contract.address.into();
-
-                let hard_gas_limit = contract
-                    .gas_limit_per_alarm
-                    .saturating_mul(contract.max_alarms_group.into());
-
-                let tx_sender = tx_sender.clone();
-
-                periodic_tx_generators_set.spawn({
-                    let nolus_node = nolus_node.clone();
-
-                    async move {
-                        loop {
-                            let should_send = nolus_node
-                                .with_grpc({
-                                    let contract_address: String = contract_address.to_string();
-
-                                    |rpc| async move {
-                                        query_wasm(rpc, contract_address, QueryMsg::ALARMS_STATUS)
-                                            .await
-                                    }
-                                })
-                                .await
-                                .map_or(true, |response: StatusResponse| {
-                                    response.remaining_for_dispatch()
-                                });
-
-                            if should_send {
-                                let channel_closed = tx_sender
-                                    .send((
-                                        message.to_vec(),
-                                        hard_gas_limit,
-                                        Instant::now(),
-                                        contract_type,
-                                        contract_address.clone(),
-                                    ))
-                                    .is_err();
-
-                                if channel_closed {
-                                    warn!(
-                                        contract_type = contract_type,
-                                        contract_address = contract_address.as_ref(),
-                                        "Channel closed. Exiting task.",
-                                    );
-
-                                    break;
-                                }
-                            }
-
-                            tokio_sleep(poll_period).await;
-                        }
-                    }
+                    info!("Retrying to broadcast.");
                 });
+            }
+        }
+    }
+}
 
-                Ok(())
-            },
-        )
+fn sign_and_serialize_tx(
+    signer: &mut Signer,
+    node_config: &NodeConfig,
+    gas_limit: u64,
+    tx_body: TxBody,
+) -> Option<Vec<u8>> {
+    match signer.sign(tx_body, calculate_fee(node_config, gas_limit)) {
+        Ok(signed_tx) => match signed_tx.to_bytes() {
+            Ok(tx_bytes) => {
+                return Some(tx_bytes);
+            }
+            Err(error) => {
+                error!(error = ?error, "Serializing signed transaction failed! Cause: {}", error);
+            }
+        },
+        Err(error) => {
+            error!(error = ?error, "Signing transaction failed! Cause: {}", error);
+        }
+    }
+
+    None
+}
+
+enum CommitErrorType {
+    InvalidAccountSequence,
+    Unknown,
+}
+
+struct CommitError {
+    r#type: CommitErrorType,
+    response: commit::Response,
+}
+
+type CommitResult = Result<TxHash, CommitError>;
+
+type CommitResultSender = UnboundedSender<CommitResult>;
+
+type CommitResultReceiver = UnboundedReceiver<CommitResult>;
+
+async fn poll_delivered_tx(
+    nolus_node: &NodeClient,
+    tick_time: Duration,
+    poll_time: Duration,
+    hash: TxHash,
+) -> Option<DeliverTx> {
+    timeout(tick_time, async {
+        loop {
+            sleep(poll_time).await;
+
+            match get_tx_response(nolus_node, hash).await {
+                Ok(tx) => break tx,
+                Err(error) => error!(
+                    hash = %hash,
+                    error = ?error,
+                    "Polling delivered transaction failed!",
+                ),
+            }
+        }
+    })
+    .await
+    .ok()
 }
