@@ -11,7 +11,7 @@ use crate::{
 /// Capable of storing integers with precision of 320 bits.
 pub(crate) type UInt = BUint<5>;
 
-pub(crate) async fn compare_prices<C>(
+pub(crate) fn compare_prices<C>(
     prices: &[Price<CoinWithDecimalPlaces>],
     comparison_prices: &[Price<C>],
     max_deviation_exclusive: u64,
@@ -21,9 +21,23 @@ where
 {
     const HUNDRED: UInt = UInt::from_digit(100);
 
-    const fn to_big_uint(n: u128) -> UInt {
+    fn to_big_uint(n: u128) -> UInt {
         // Order is documented to be in Little-Endian.
-        UInt::from_digits([n as u64, (n >> u64::BITS) as u64, 0, 0, 0])
+        UInt::from_digits([
+            if let Ok(n) = (n & u128::from(u64::MAX)).try_into() {
+                n
+            } else {
+                unreachable!()
+            },
+            if let Ok(n) = (n >> u64::BITS).try_into() {
+                n
+            } else {
+                unreachable!()
+            },
+            0,
+            0,
+            0,
+        ])
     }
 
     let mut map: BTreeMap<Ticker, BTreeMap<Ticker, (u128, u128)>> = BTreeMap::new();
@@ -51,7 +65,7 @@ where
         }
     }
 
-    for price in prices.iter() {
+    for price in prices {
         let (comparison_base, comparison_quote): (u128, u128) = map
             .get(price.amount().ticker())
             .and_then(|map: &BTreeMap<Ticker, (u128, u128)>| map.get(price.amount_quote().ticker()))

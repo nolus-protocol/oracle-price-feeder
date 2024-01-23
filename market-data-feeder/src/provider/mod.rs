@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
 use futures::{FutureExt as _, TryFutureExt as _};
+use tokio::task::block_in_place;
 use tracing::{error, info};
 
 use chain_comms::client::Client as NodeClient;
@@ -53,12 +54,11 @@ where
                 result.map_err(PriceComparisonGuardError::FetchPrices)
             })
             .and_then(|comparison_prices: Box<[Price<CoinWithDecimalPlaces>]>| async move {
-                let result: Result<(), PriceComparisonGuardError> = crate::deviation::compare_prices(
+                let result: Result<(), PriceComparisonGuardError> = block_in_place(|| crate::deviation::compare_prices(
                     prices,
                     &comparison_prices,
                     max_deviation_exclusive,
-                )
-                .await;
+                ));
 
                 match &result {
                     Ok(()) => info!("Price comparison guard check of \"{benchmarked_provider_id}\" passed against \"{self_id}\".", self_id = self.instance_id()),

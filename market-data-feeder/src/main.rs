@@ -5,6 +5,7 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 use serde::Deserialize;
+use tokio::task::block_in_place;
 use tokio::{
     select,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -22,7 +23,7 @@ use chain_comms::{
     build_tx::ContractTx,
     client::Client as NodeClient,
     config::Node as NodeConfig,
-    interact::{commit_tx_with_gas_estimation, get_tx_response, query_wasm},
+    interact::{commit, get_tx_response, query},
     reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
@@ -90,13 +91,14 @@ async fn app_main() -> Result<()> {
         set: mut price_fetchers_set,
         id_to_name_mapping,
         receiver: mut price_data_receiver,
-    }: workers::SpawnWorkersReturn = workers::spawn(
-        nolus_node.clone(),
-        config.providers,
-        config.comparison_providers,
-        config.tick_time,
-    )
-    .await?;
+    }: workers::SpawnWorkersReturn = block_in_place(|| {
+        workers::spawn(
+            nolus_node.clone(),
+            config.providers,
+            config.comparison_providers,
+            config.tick_time,
+        )
+    })?;
 
     info!("Entering broadcasting loop...");
 
@@ -180,7 +182,7 @@ async fn app_main() -> Result<()> {
                     tokio_sleep_until(next_signing_timestamp).await;
                 }
 
-                let result = commit_tx_with_gas_estimation(
+                let result = commit::with_gas_estimation(
                     &mut signer,
                     &nolus_node,
                     &node_config,
@@ -197,7 +199,7 @@ async fn app_main() -> Result<()> {
 
                 match result {
                     Ok(response) => {
-                        self::log::commit_response(&id_to_name_mapping[&provider_id], &response);
+                        log::commit_response(&id_to_name_mapping[&provider_id], &response);
 
                         let hash = response.hash;
                         let nolus_node = nolus_node.clone();
@@ -209,7 +211,7 @@ async fn app_main() -> Result<()> {
 
                             match get_tx_response(&nolus_node, hash).await {
                                 Ok(response) => {
-                                    self::log::tx_response(&{ provider_id }, &hash, &response);
+                                    log::tx_response(&{ provider_id }, &hash, &response);
 
                                     NonZeroU64::new(
                                         response.gas_used.unsigned_abs().min(config.hard_gas_limit),
@@ -272,10 +274,10 @@ async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()>
 
     info!("Checking compatibility with contract version...");
 
-    for (oracle_name, oracle_address) in config.oracles.iter() {
+    for (oracle_name, oracle_address) in &config.oracles {
         let version: JsonVersion = client
             .with_grpc(|rpc: TonicChannel| {
-                query_wasm(rpc, oracle_address.to_string(), QueryMsg::CONTRACT_VERSION)
+                query::wasm(rpc, oracle_address.to_string(), QueryMsg::CONTRACT_VERSION)
             })
             .await?;
 

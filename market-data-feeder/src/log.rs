@@ -1,10 +1,11 @@
-use chain_comms::{
-    interact::CommitResponse,
-    reexport::cosmrs::tendermint::{abci::response::DeliverTx, Hash},
-};
 use tracing::{debug, error, info, info_span};
 
-pub fn commit_response(provider_id: &str, response: &CommitResponse) {
+use chain_comms::{
+    interact::commit::Response,
+    reexport::cosmrs::tendermint::{abci::response::DeliverTx, Hash},
+};
+
+pub fn commit_response(provider_id: &str, response: &Response) {
     info_span!("Mempool Response", provider_id = provider_id).in_scope(|| {
         info!("Hash: {}", response.hash);
 

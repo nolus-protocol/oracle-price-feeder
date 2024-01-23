@@ -14,7 +14,7 @@ pub(crate) enum Application {
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]
-    ContractVersionQuery(#[from] chain_comms::interact::error::WasmQuery),
+    ContractVersionQuery(#[from] chain_comms::interact::query::error::WasmQuery),
     #[error("Oracle \"{oracle_addr}\"'s version is not compatible! Minimum compatible version is {compatible}, but contract's actual version is {actual}!")]
     IncompatibleContractVersion {
         oracle_addr: Arc<str>,
@@ -28,7 +28,7 @@ pub(crate) enum Application {
     #[error("Failed to instantiate provider! Cause: {0}")]
     InvalidProviderUrl(#[from] url::ParseError),
     #[error("Failed to commit price feeding transaction! Cause: {0}")]
-    CommitTx(#[from] chain_comms::interact::error::GasEstimatingTxCommit),
+    CommitTx(#[from] chain_comms::interact::commit::error::GasEstimatingTxCommit),
     #[error("A worker thread has exited due to an error! Cause: {0}")]
     Worker(#[from] Worker),
 }

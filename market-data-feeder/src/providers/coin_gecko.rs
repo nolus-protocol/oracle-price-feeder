@@ -12,7 +12,7 @@ use http::{HeaderMap, HeaderValue};
 use regex::{Captures, Regex, RegexBuilder};
 use reqwest::{Client as ReqwestClient, Error as ReqwestError, Response as ReqwestResponse};
 use thiserror::Error;
-use tokio::task::JoinSet;
+use tokio::task::{block_in_place, JoinSet};
 use toml::Value;
 
 use chain_comms::client::Client as NodeClient;
@@ -325,9 +325,9 @@ impl ComparisonProvider for SanityCheck {
                     })?;
             }
 
-            let result: Result<(), PriceComparisonGuardError> =
+            let result: Result<(), PriceComparisonGuardError> = block_in_place(|| {
                 deviation::compare_prices(&prices, &comparison_prices, max_deviation_exclusive)
-                    .await;
+            });
 
             if result.is_ok() {
                 tracing::info!(

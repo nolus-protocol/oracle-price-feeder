@@ -8,20 +8,19 @@ impl StrPool {
     }
 
     pub fn get_or_insert(&mut self, s: String) -> Arc<str> {
-        match self.0.get(s.as_str()) {
-            Some(s) => s.clone(),
-            None => {
-                let s: Arc<str> = Arc::from(s);
+        if let Some(s) = self.0.get(s.as_str()) {
+            s.clone()
+        } else {
+            let s: Arc<str> = Arc::from(s);
 
-                #[cfg(debug_assertions)]
-                let true: bool = self.0.insert(s.clone()) else {
-                    unreachable!()
-                };
-                #[cfg(not(debug_assertions))]
-                self.0.insert(s.clone());
+            #[cfg(debug_assertions)]
+            let true: bool = self.0.insert(s.clone()) else {
+                unreachable!()
+            };
+            #[cfg(not(debug_assertions))]
+            self.0.insert(s.clone());
 
-                s
-            }
+            s
         }
     }
 }

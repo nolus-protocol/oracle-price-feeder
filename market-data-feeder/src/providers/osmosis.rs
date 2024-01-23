@@ -8,7 +8,7 @@ use toml::Value;
 
 use chain_comms::{
     client::Client as NodeClient,
-    interact::{error, query_wasm, raw_query},
+    interact::query,
     reexport::tonic::transport::{Channel as TonicChannel, Error as TonicError},
 };
 
@@ -33,8 +33,8 @@ impl Osmosis {
     async fn query_supported_currencies(
         &self,
         node_rpc: TonicChannel,
-    ) -> Result<impl Iterator<Item = Route> + '_, error::WasmQuery> {
-        query_wasm::<SupportedCurrencyPairsResponse>(
+    ) -> Result<impl Iterator<Item = Route> + '_, query::error::WasmQuery> {
+        query::wasm::<SupportedCurrencyPairsResponse>(
             node_rpc,
             self.oracle_addr.to_string(),
             QueryMsg::SUPPORTED_CURRENCY_PAIRS,
@@ -119,7 +119,7 @@ impl Provider for Osmosis {
             let channel = self.channel.clone();
 
             set.spawn(async move {
-                raw_query(
+                query::raw(
                     channel,
                     SpotPriceRequest {
                         pool_id,
@@ -131,8 +131,8 @@ impl Provider for Osmosis {
                 .await
                 .map_err(|error| {
                     ProviderError::WasmQuery(
-                        format!("currency pair: {}/{}", from_ticker, to_ticker),
-                        error::WasmQuery::RawQuery(error),
+                        format!("currency pair: {from_ticker}/{to_ticker}"),
+                        query::error::WasmQuery::RawQuery(error),
                     )
                 })
                 .and_then(|SpotPriceResponse { mut spot_price }| {
@@ -153,8 +153,7 @@ impl Provider for Osmosis {
                         )
                     } else {
                         Err(ProviderError::NonAsciiResponse(format!(
-                            "currency pair: {}/{}",
-                            from_ticker, to_ticker,
+                            "currency pair: {from_ticker}/{to_ticker}",
                         )))
                     }
                 })
@@ -165,7 +164,7 @@ impl Provider for Osmosis {
                         .try_into()
                         .map_err(|error| {
                             ProviderError::ParsePrice(
-                                format!("currency pair: {}/{}", from_ticker, to_ticker),
+                                format!("currency pair: {from_ticker}/{to_ticker}"),
                                 error,
                             )
                         })

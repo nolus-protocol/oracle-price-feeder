@@ -12,7 +12,7 @@ use tracing::{debug, error};
 
 use chain_comms::{
     client::Client as NodeClient,
-    interact::query_wasm,
+    interact::query,
     reexport::tonic::transport::{Channel as TonicChannel, Error as TonicError},
 };
 
@@ -58,7 +58,7 @@ impl Astroport {
     > {
         self.node_client
             .with_grpc(|rpc: TonicChannel| {
-                query_wasm::<SupportedCurrencyPairsResponse>(
+                query::wasm::<SupportedCurrencyPairsResponse>(
                     rpc,
                     self.oracle_addr.to_string(),
                     OracleQueryMsg::SUPPORTED_CURRENCY_PAIRS,
@@ -122,7 +122,7 @@ impl Provider for Astroport {
 
                 debug!(query_message = %String::from_utf8_lossy(&query_message), "Query message");
 
-                match query_wasm(channel, router_contract.to_string(), &{ query_message }).await {
+                match query::wasm(channel, router_contract.to_string(), &{ query_message }).await {
                     Ok(astroport::router::SimulateSwapOperationsResponse {
                         amount: quote_amount,
                     }) => Ok(Price::new(
@@ -138,7 +138,7 @@ impl Provider for Astroport {
                         ),
                     )),
                     Err(error) => Err(ProviderError::WasmQuery(
-                        format!(r#"currency pair = "{}/{}""#, base_ticker, quote_ticker),
+                        format!(r#"currency pair = "{base_ticker}/{quote_ticker}""#),
                         error,
                     )),
                 }

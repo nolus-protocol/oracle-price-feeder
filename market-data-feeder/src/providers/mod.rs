@@ -95,11 +95,15 @@ where
 
     while let Some(result) = set.join_next().await {
         match result.map_err(From::from).and_then(identity) {
-            Ok(price) => prices.push(price),
-            Err(error) if fault_tolerant => {
-                tracing::error!(error = %error, "Couldn't resolve price!")
+            Ok(price) => {
+                prices.push(price);
             }
-            Err(error) => return Err(error),
+            Err(error) if fault_tolerant => {
+                tracing::error!(error = %error, "Couldn't resolve price!");
+            }
+            Err(error) => {
+                return Err(error);
+            }
         }
     }
 

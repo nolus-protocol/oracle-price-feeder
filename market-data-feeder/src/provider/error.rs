@@ -17,14 +17,14 @@ pub enum Provider {
     ParsePrice(String, crate::price::Error),
 
     #[error(r#"Failed to query WASM contract!{}{}{} Cause: {}"#, if _0.is_empty() { "" } else { " Additional context: " }, _0, if _0.is_empty() { "" } else { ";" }, _1)]
-    WasmQuery(String, chain_comms::interact::error::WasmQuery),
+    WasmQuery(String, chain_comms::interact::query::error::WasmQuery),
 
     #[error("Serialization failed! Cause: {0}")]
     Serialization(#[from] serde_json_wasm::ser::Error),
 }
 
-impl From<chain_comms::interact::error::WasmQuery> for Provider {
-    fn from(error: chain_comms::interact::error::WasmQuery) -> Self {
+impl From<chain_comms::interact::query::error::WasmQuery> for Provider {
+    fn from(error: chain_comms::interact::query::error::WasmQuery) -> Self {
         Self::WasmQuery(String::new(), error)
     }
 }

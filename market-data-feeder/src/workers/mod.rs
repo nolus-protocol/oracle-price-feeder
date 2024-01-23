@@ -54,7 +54,7 @@ pub(crate) struct SpawnWorkersReturn {
     pub receiver: PriceDataReceiver,
 }
 
-pub(crate) async fn spawn(
+pub(crate) fn spawn(
     nolus_node: NodeClient,
     providers: BTreeMap<Arc<str>, ProviderWithComparisonConfig>,
     price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
@@ -74,24 +74,22 @@ pub(crate) async fn spawn(
 
     let (sender, receiver): UnboundedChannel<PriceDataPacket> = unbounded_channel();
 
-    block_in_place(move || {
-        providers
-            .into_iter()
-            .enumerate()
-            .try_for_each(try_for_each_provider_f(
-                price_comparison_providers,
-                &mut set,
-                &mut id_to_name_mapping,
-                tick_time,
-                nolus_node,
-                sender,
-            ))
-            .map(|()| SpawnWorkersReturn {
-                set,
-                id_to_name_mapping,
-                receiver,
-            })
-    })
+    providers
+        .into_iter()
+        .enumerate()
+        .try_for_each(try_for_each_provider_f(
+            price_comparison_providers,
+            &mut set,
+            &mut id_to_name_mapping,
+            tick_time,
+            nolus_node,
+            sender,
+        ))
+        .map(|()| SpawnWorkersReturn {
+            set,
+            id_to_name_mapping,
+            receiver,
+        })
 }
 
 fn construct_comparison_provider_f(
