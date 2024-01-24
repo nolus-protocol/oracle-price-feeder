@@ -42,6 +42,7 @@ name = "alarms-dispatcher"
 version = "0.0.0"
 dependencies = [
  "base64 0.21.7",
+ "broadcast",
  "chain-comms",
  "semver",
  "serde",
@@ -271,6 +272,18 @@ name = "bnum"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56953345e39537a3e18bdaeba4cb0c58a78c1f61f361dc0fa7c5c7340ae87c5f"
+
+[[package]]
+name = "broadcast"
+version = "0.0.0"
+dependencies = [
+ "chain-comms",
+ "serde",
+ "serde-json-wasm 1.0.0",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
 
 [[package]]
 name = "bs58"
