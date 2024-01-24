@@ -12,7 +12,7 @@ pub enum Application {
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]
-    ContractVersionQuery(#[from] chain_comms::interact::query::error::WasmQuery),
+    ContractVersionQuery(#[from] chain_comms::interact::query::error::Wasm),
     #[error("Version of \"{contract}\" contract is not compatible! Minimum compatible version is {compatible}, but contract's actual version is {actual}!")]
     IncompatibleContractVersion {
         contract: &'static str,
@@ -36,7 +36,7 @@ pub enum DispatchAlarms {
 #[derive(Debug, ThisError)]
 pub enum DispatchAlarm {
     #[error("Failed to query smart contract! Cause: {0}")]
-    StatusQuery(#[from] chain_comms::interact::query::error::WasmQuery),
+    StatusQuery(#[from] chain_comms::interact::query::error::Wasm),
     #[error("Failed to commit transaction! Cause: {0}")]
     CommitTx(#[from] CommitDispatchTx),
     #[error("Failed to deserialize dispatch response! Cause: {0}")]

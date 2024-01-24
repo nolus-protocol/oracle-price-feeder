@@ -2,27 +2,10 @@ use tracing::{debug, error, info, info_span};
 
 use chain_comms::{
     decode,
-    interact::commit::Response,
     reexport::cosmrs::tendermint::{abci::response::DeliverTx, Hash},
 };
 
 use crate::messages::DispatchResponse;
-
-pub fn commit_response(response: &Response) {
-    info_span!("Mempool Response").in_scope(|| {
-        info!("Hash: {}", response.hash);
-
-        if response.code.is_ok() {
-            debug!("Log: {}", response.log);
-        } else {
-            error!(
-                log = response.log,
-                "Error with code {} has occurred!",
-                response.code.value(),
-            );
-        }
-    });
-}
 
 pub fn tx_response(
     contract_type: &str,
