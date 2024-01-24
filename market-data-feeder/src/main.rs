@@ -5,13 +5,13 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 use serde::Deserialize;
-use tokio::task::block_in_place;
 use tokio::{
     select,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinSet,
-    time::{sleep as tokio_sleep, sleep_until as tokio_sleep_until, Instant},
+    time::{Instant, sleep as tokio_sleep, sleep_until as tokio_sleep_until},
 };
+use tokio::task::block_in_place;
 use tracing::{error, error_span, info, warn};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
@@ -79,11 +79,11 @@ async fn app_main() -> Result<()> {
     let RpcSetup {
         mut signer,
         config,
-        nolus_node,
+        node_client,
         ..
     }: RpcSetup<Config> = prepare_rpc("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
-    check_compatibility(&config, &nolus_node).await?;
+    check_compatibility(&config, &node_client).await?;
 
     info!("Starting workers...");
 
@@ -93,7 +93,7 @@ async fn app_main() -> Result<()> {
         receiver: mut price_data_receiver,
     }: workers::SpawnWorkersReturn = block_in_place(|| {
         workers::spawn(
-            nolus_node.clone(),
+            node_client.clone(),
             config.providers,
             config.comparison_providers,
             config.tick_time,
@@ -184,7 +184,7 @@ async fn app_main() -> Result<()> {
 
                 let result = commit::with_gas_estimation(
                     &mut signer,
-                    &nolus_node,
+                    &node_client,
                     &node_config,
                     config.hard_gas_limit,
                     fallback_gas_limit.map_or(config.hard_gas_limit, NonZeroU64::get),
@@ -202,14 +202,14 @@ async fn app_main() -> Result<()> {
                         log::commit_response(&id_to_name_mapping[&provider_id], &response);
 
                         let hash = response.hash;
-                        let nolus_node = nolus_node.clone();
+                        let node_client = node_client.clone();
                         let retry_sender = retry_sender.clone();
                         let provider_id = id_to_name_mapping[&provider_id].clone();
 
                         delivered_tx_fetchers_set.spawn(async move {
                             tokio_sleep(config.retry_tick_time).await;
 
-                            match get_tx_response(&nolus_node, hash).await {
+                            match get_tx_response(&node_client, hash).await {
                                 Ok(response) => {
                                     log::tx_response(&{ provider_id }, &hash, &response);
 
@@ -264,7 +264,7 @@ async fn app_main() -> Result<()> {
     Ok(())
 }
 
-async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()> {
+async fn check_compatibility(config: &Config, node_client: &NodeClient) -> Result<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
         major: u64,
@@ -275,7 +275,7 @@ async fn check_compatibility(config: &Config, client: &NodeClient) -> Result<()>
     info!("Checking compatibility with contract version...");
 
     for (oracle_name, oracle_address) in &config.oracles {
-        let version: JsonVersion = client
+        let version: JsonVersion = node_client
             .with_grpc(|rpc: TonicChannel| {
                 query::wasm(rpc, oracle_address.to_string(), QueryMsg::CONTRACT_VERSION)
             })

@@ -11,7 +11,7 @@ pub enum AccountData {
 }
 
 #[derive(Debug, ThisError)]
-pub enum RawQuery {
+pub enum Raw {
     #[error("Connection failure occurred! Cause: {0}")]
     Transport(#[from] tonic::transport::Error),
     #[error("RPC responded with a failure! Cause: {0}")]
@@ -19,9 +19,9 @@ pub enum RawQuery {
 }
 
 #[derive(Debug, ThisError)]
-pub enum WasmQuery {
+pub enum Wasm {
     #[error("{0}")]
-    RawQuery(#[from] RawQuery),
+    RawQuery(#[from] Raw),
     #[error("Failed to deserialize smart contract's query response from JSON! Cause: {0}")]
     DeserializeResponse(#[from] serde_json_wasm::de::Error),
 }

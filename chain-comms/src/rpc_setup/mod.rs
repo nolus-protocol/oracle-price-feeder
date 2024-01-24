@@ -19,7 +19,7 @@ where
 {
     pub signer: Signer,
     pub config: C,
-    pub nolus_node: Client,
+    pub node_client: Client,
 }
 
 pub async fn prepare_rpc<C, P>(config_path: P, key_derivation_path: &str) -> Result<RpcSetup<C>>
@@ -35,12 +35,12 @@ where
 
     info!("Successfully read configuration file.");
 
-    let nolus_node: Client = Client::from_config(config.as_ref()).await?;
+    let node_client: Client = Client::from_config(config.as_ref()).await?;
 
     info!("Fetching account data from network...");
 
     let account_data: BaseAccount = query::account_data(
-        &nolus_node,
+        &node_client,
         account::id(config.as_ref(), &signing_key)?.as_ref(),
     )
     .await?;
@@ -54,6 +54,6 @@ where
             account_data,
         ),
         config,
-        nolus_node,
+        node_client,
     })
 }

@@ -14,7 +14,7 @@ pub(crate) enum Application {
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]
-    ContractVersionQuery(#[from] chain_comms::interact::query::error::WasmQuery),
+    ContractVersionQuery(#[from] chain_comms::interact::query::error::Wasm),
     #[error("Oracle \"{oracle_addr}\"'s version is not compatible! Minimum compatible version is {compatible}, but contract's actual version is {actual}!")]
     IncompatibleContractVersion {
         oracle_addr: Arc<str>,

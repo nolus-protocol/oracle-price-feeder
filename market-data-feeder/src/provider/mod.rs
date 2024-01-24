@@ -80,7 +80,7 @@ pub(crate) trait FromConfig<const COMPARISON: bool>: Sync + Send + Sized + 'stat
     async fn from_config<Config>(
         id: &str,
         config: Config,
-        nolus_client: &NodeClient,
+        node_client: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<COMPARISON>;
@@ -95,12 +95,12 @@ impl<T: FromConfig<false>> FromConfig<true> for T {
     async fn from_config<Config>(
         id: &str,
         config: Config,
-        nolus_client: &NodeClient,
+        node_client: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<true>,
     {
-        <T as FromConfig<false>>::from_config(id, ProviderConfigWrapper(config), nolus_client).await
+        <T as FromConfig<false>>::from_config(id, ProviderConfigWrapper(config), node_client).await
     }
 }
 

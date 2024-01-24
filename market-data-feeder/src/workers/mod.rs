@@ -4,7 +4,7 @@ use tokio::{
     runtime::Handle,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::{block_in_place, JoinSet},
-    time::{interval, sleep, Instant, Interval},
+    time::{Instant, interval, Interval, sleep},
 };
 use tracing::info;
 
@@ -55,7 +55,7 @@ pub(crate) struct SpawnWorkersReturn {
 }
 
 pub(crate) fn spawn(
-    nolus_node: NodeClient,
+    node_client: NodeClient,
     providers: BTreeMap<Arc<str>, ProviderWithComparisonConfig>,
     price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
     tick_time: Duration,
@@ -66,7 +66,7 @@ pub(crate) fn spawn(
         block_in_place(|| {
             price_comparison_providers
                 .into_iter()
-                .map(construct_comparison_provider_f(&nolus_node))
+                .map(construct_comparison_provider_f(&node_client))
                 .collect::<Result<_, _>>()
         })?;
 
@@ -82,7 +82,7 @@ pub(crate) fn spawn(
             &mut set,
             &mut id_to_name_mapping,
             tick_time,
-            nolus_node,
+            node_client,
             sender,
         ))
         .map(|()| SpawnWorkersReturn {
@@ -93,10 +93,10 @@ pub(crate) fn spawn(
 }
 
 fn construct_comparison_provider_f(
-    nolus_node: &NodeClient,
+    node_client: &NodeClient,
 ) -> impl Fn((Arc<str>, ComparisonProviderConfig)) -> AppResult<(Arc<str>, Arc<dyn ComparisonProvider>)>
 {
-    let nolus_node: NodeClient = nolus_node.clone();
+    let node_client: NodeClient = node_client.clone();
 
     move |(id, config): (Arc<str>, ComparisonProviderConfig)| {
         if let Some(result) = providers::Providers::visit_comparison_provider(
@@ -104,7 +104,7 @@ fn construct_comparison_provider_f(
             PriceComparisonProviderVisitor {
                 provider_id: id.clone(),
                 provider_config: config,
-                nolus_node: &nolus_node,
+                node_client: &node_client,
             },
         ) {
             result
@@ -121,7 +121,7 @@ fn try_for_each_provider_f<'r>(
     set: &'r mut JoinSet<Result<(), error::Worker>>,
     id_to_name_mapping: &'r mut BTreeMap<usize, Arc<str>>,
     tick_time: Duration,
-    nolus_node: NodeClient,
+    node_client: NodeClient,
     price_data_sender: PriceDataSender,
 ) -> impl FnMut((usize, (Arc<str>, ProviderWithComparisonConfig))) -> AppResult<()> + 'r {
     move |(monotonic_id, (provider_id, config)): (
@@ -167,7 +167,7 @@ fn try_for_each_provider_f<'r>(
                             provider_id,
                             provider_config: config.provider,
                             time_before_feeding: config.time_before_feeding,
-                            nolus_node: &nolus_node,
+                            node_client: &node_client,
                             sender: &price_data_sender,
                         },
                     )
@@ -188,7 +188,7 @@ struct TaskSpawnerConfig<'r> {
 struct PriceComparisonProviderVisitor<'r> {
     provider_id: Arc<str>,
     provider_config: ComparisonProviderConfig,
-    nolus_node: &'r NodeClient,
+    node_client: &'r NodeClient,
 }
 
 impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
@@ -202,7 +202,7 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
             .block_on(FromConfig::<true>::from_config(
                 &self.provider_id,
                 self.provider_config.provider,
-                self.nolus_node,
+                self.node_client,
             ))
             .map(|provider: P| Arc::new(provider) as Arc<dyn ComparisonProvider>)
             .map_err(|error: P::ConstructError| {
@@ -217,7 +217,7 @@ struct TaskSpawningProviderVisitor<'r> {
     provider_id: Arc<str>,
     provider_config: ProviderConfig,
     time_before_feeding: Duration,
-    nolus_node: &'r NodeClient,
+    node_client: &'r NodeClient,
     sender: &'r PriceDataSender,
 }
 
@@ -233,7 +233,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
         match Handle::current().block_on(<P as FromConfig<false>>::from_config(
             &self.provider_id,
             self.provider_config,
-            self.nolus_node,
+            self.node_client,
         )) {
             Ok(provider) => {
                 let provider_friendly_name =
