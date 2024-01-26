@@ -1,6 +1,6 @@
 use cosmrs::proto::{
     cosmos::auth::v1beta1::{
-        BaseAccount, query_client::QueryClient as AuthQueryClient, QueryAccountRequest,
+        query_client::QueryClient as AuthQueryClient, BaseAccount, QueryAccountRequest,
     },
     cosmwasm::wasm::v1::{
         query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
@@ -8,7 +8,7 @@ use cosmrs::proto::{
     prost,
 };
 use serde::de::DeserializeOwned;
-use tonic::{client::Grpc as GrpcClient, IntoRequest as _, transport::Channel as TonicChannel};
+use tonic::{client::Grpc as GrpcClient, transport::Channel as TonicChannel, IntoRequest as _};
 use tracing::debug;
 
 use crate::client::Client;

@@ -7,8 +7,8 @@ use chain_comms::{
     client::Client as NodeClient,
     interact::query,
     reexport::cosmrs::{
-        Any as ProtobufAny, proto::cosmwasm::wasm::v1::MsgExecuteContract,
-        tendermint::Hash as TxHash, tx::MessageExt as _,
+        proto::cosmwasm::wasm::v1::MsgExecuteContract, tendermint::Hash as TxHash,
+        tx::MessageExt as _, Any as ProtobufAny,
     },
 };
 

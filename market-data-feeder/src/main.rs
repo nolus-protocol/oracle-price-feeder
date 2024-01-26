@@ -8,10 +8,9 @@ use serde::Deserialize;
 use tokio::{
     select,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    task::JoinSet,
-    time::{Instant, sleep as tokio_sleep, sleep_until as tokio_sleep_until},
+    task::{block_in_place, JoinSet},
+    time::{sleep as tokio_sleep, sleep_until as tokio_sleep_until, Instant},
 };
-use tokio::task::block_in_place;
 use tracing::{error, error_span, info, warn};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},

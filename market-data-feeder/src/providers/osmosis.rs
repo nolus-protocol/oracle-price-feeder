@@ -33,7 +33,7 @@ impl Osmosis {
     async fn query_supported_currencies(
         &self,
         node_rpc: TonicChannel,
-    ) -> Result<impl Iterator<Item=Route> + '_, query::error::Wasm> {
+    ) -> Result<impl Iterator<Item = Route> + '_, query::error::Wasm> {
         query::wasm::<SupportedCurrencyPairsResponse>(
             node_rpc,
             self.oracle_addr.to_string(),

@@ -4,7 +4,7 @@ use tokio::{
     runtime::Handle,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::{block_in_place, JoinSet},
-    time::{Instant, interval, Interval, sleep},
+    time::{interval, sleep, Instant, Interval},
 };
 use tracing::info;
 
