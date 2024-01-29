@@ -112,12 +112,16 @@ pub async fn with_signed_body(
     signed_tx: Vec<u8>,
     signer: &mut Signer,
 ) -> Result<Response, Error> {
+    const SIGNATURE_VERIFICATION_ERROR: u32 = 4;
+
     match client
         .with_json_rpc(|rpc: RpcHttpClient| async move { rpc.broadcast_tx_sync(signed_tx).await })
         .await
     {
         Ok(response) => {
-            signer.tx_confirmed();
+            if !response.code.is_err() || response.code.value() != SIGNATURE_VERIFICATION_ERROR {
+                signer.tx_confirmed();
+            }
 
             Ok(response)
         }
