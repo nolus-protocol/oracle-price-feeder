@@ -186,7 +186,7 @@ async fn app_main() -> Result<()> {
                     &node_client,
                     &node_config,
                     config.hard_gas_limit,
-                    fallback_gas_limit.map_or(config.hard_gas_limit, NonZeroU64::get),
+                    fallback_gas_limit.unwrap_or(config.hard_gas_limit),
                     ContractTx::new(price_data_packet.message.oracle.as_ref().into()).add_message(
                         price_data_packet.message.execute_message.to_vec(),
                         Vec::new(),
@@ -212,9 +212,10 @@ async fn app_main() -> Result<()> {
                                 Ok(response) => {
                                     log::tx_response(&{ provider_id }, &hash, &response);
 
-                                    NonZeroU64::new(
-                                        response.gas_used.unsigned_abs().min(config.hard_gas_limit),
-                                    )
+                                    NonZeroU64::new(response.gas_used.unsigned_abs())
+                                        .map(|gas_used| {
+                                            gas_used.min(config.hard_gas_limit)
+                                        })
                                 }
                                 Err(error) => {
                                     error_span!(

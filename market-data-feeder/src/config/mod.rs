@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     env::{self, var},
+    num::NonZeroU64,
     sync::Arc,
     time::Duration,
 };
@@ -55,7 +56,7 @@ pub(crate) struct Config {
     pub oracles: BTreeMap<Arc<str>, Arc<str>>,
     pub providers: BTreeMap<Arc<str>, ProviderWithComparison>,
     pub comparison_providers: BTreeMap<Arc<str>, ComparisonProvider>,
-    pub hard_gas_limit: u64,
+    pub hard_gas_limit: NonZeroU64,
     pub node: Node,
 }
 

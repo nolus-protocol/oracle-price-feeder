@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroU64;
 
 use serde::Deserialize;
 
@@ -45,7 +46,7 @@ pub(super) struct Config {
     pub tick_seconds: u64,
     pub between_tx_margin_seconds: u64,
     pub query_delivered_tx_tick_seconds: u64,
-    pub hard_gas_limit: u64,
+    pub hard_gas_limit: NonZeroU64,
     pub node: NodeConfig,
     pub oracles: BTreeMap<String, String>,
     pub providers: BTreeMap<String, ProviderWithComparison>,
