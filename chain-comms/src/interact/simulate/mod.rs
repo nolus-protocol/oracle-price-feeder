@@ -1,3 +1,5 @@
+use std::num::NonZeroU64;
+
 use cosmrs::{
     proto::cosmos::{
         base::abci::v1beta1::GasInfo,
@@ -20,7 +22,7 @@ pub async fn simulate(
     signer: &mut Signer,
     client: &Client,
     config: &Node,
-    gas_limit: u64,
+    gas_limit: NonZeroU64,
     unsigned_tx: ContractTx,
 ) -> Result<GasInfo, Error> {
     with_signed_body(
@@ -37,7 +39,7 @@ pub async fn with_serialized_messages(
     signer: &mut Signer,
     client: &Client,
     config: &Node,
-    gas_limit: u64,
+    gas_limit: NonZeroU64,
     unsigned_tx: Vec<Any>,
 ) -> Result<GasInfo, Error> {
     with_signed_body(
@@ -56,7 +58,7 @@ pub async fn with_serialized_messages(
 pub async fn with_signed_body(
     client: &Client,
     simulation_tx: Vec<u8>,
-    hard_gas_limit: u64,
+    hard_gas_limit: NonZeroU64,
 ) -> Result<GasInfo, Error> {
     let gas_info: GasInfo = client
         .with_grpc(move |channel: TonicChannel| async move {
@@ -72,7 +74,7 @@ pub async fn with_signed_body(
         .gas_info
         .ok_or(Error::MissingSimulationGasInto)?;
 
-    if hard_gas_limit < gas_info.gas_used {
+    if hard_gas_limit.get() < gas_info.gas_used {
         return Err(Error::SimulationGasExceedsLimit {
             used: gas_info.gas_used,
         });

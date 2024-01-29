@@ -1,3 +1,5 @@
+use std::num::NonZeroU64;
+
 use cosmrs::{
     rpc::{Client as _, HttpClient as RpcHttpClient},
     tx::{Body as TxBody, Raw as RawTx},
@@ -20,7 +22,7 @@ pub async fn commit(
     signer: &mut Signer,
     client: &Client,
     node_config: &Node,
-    gas_limit: u64,
+    gas_limit: NonZeroU64,
     unsigned_tx: ContractTx,
 ) -> Result<Response, Error> {
     let signed_tx = unsigned_tx
@@ -35,7 +37,7 @@ pub async fn with_serialized_messages(
     signer: &mut Signer,
     client: &Client,
     node_config: &Node,
-    gas_limit: u64,
+    gas_limit: NonZeroU64,
     unsigned_tx: Vec<Any>,
 ) -> Result<Response, Error> {
     let signed_tx = signer
@@ -53,8 +55,8 @@ pub async fn with_gas_estimation(
     signer: &mut Signer,
     client: &Client,
     node_config: &Node,
-    hard_gas_limit: u64,
-    fallback_gas_limit: u64,
+    hard_gas_limit: NonZeroU64,
+    fallback_gas_limit: NonZeroU64,
     unsigned_tx: ContractTx,
 ) -> Result<Response, ErrorWithEstimation> {
     let gas_limit = adjust_gas_limit(
@@ -82,8 +84,8 @@ pub async fn with_gas_estimation_and_serialized_message(
     signer: &mut Signer,
     client: &Client,
     node_config: &Node,
-    hard_gas_limit: u64,
-    fallback_gas_limit: u64,
+    hard_gas_limit: NonZeroU64,
+    fallback_gas_limit: NonZeroU64,
     unsigned_tx: Vec<Any>,
 ) -> Result<Response, ErrorWithEstimation> {
     let gas_limit = adjust_gas_limit(
@@ -102,7 +104,7 @@ pub async fn with_gas_estimation_and_serialized_message(
         hard_gas_limit,
     );
 
-    self::with_serialized_messages(signer, client, node_config, gas_limit, unsigned_tx)
+    with_serialized_messages(signer, client, node_config, gas_limit, unsigned_tx)
         .await
         .map_err(Into::into)
 }
