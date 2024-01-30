@@ -20,37 +20,37 @@ jobs:
   check_formatting:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
       - uses: "Nolus-Protocol/rust-ci-actions/check_formatting@main"
   check_codebase:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
       - uses: "Nolus-Protocol/rust-ci-actions/check_codebase@main"
   # audit_dependencies:
   #   runs-on: "ubuntu-latest"
   #   steps:
-  #     - uses: "actions/checkout@v3"
+  #     - uses: "actions/checkout@v4"
   #     - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
   #     - uses: "Nolus-Protocol/rust-ci-actions/audit_dependencies@main"
   linting:
     runs-on: ubuntu-latest
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
       - run: "cargo clippy -- -F unsafe_code -D warnings"
   code_coverage:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
       - uses: "Nolus-Protocol/rust-ci-actions/code_coverage@main"
   test_release_profile:
     runs-on: "ubuntu-latest"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - uses: "Nolus-Protocol/rust-ci-actions/rust_cache@main"
       - name: "Run tests in release profile"
         shell: "sh"
@@ -66,7 +66,7 @@ jobs:
       - "test_release_profile"
     if: "github.ref_type == 'tag'"
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - name: "Build compiling image"
         shell: "sh"
         run: "docker build --rm -f Compile.Dockerfile -t compile ."
@@ -76,12 +76,12 @@ jobs:
           docker run -v "$(pwd):/code/" -v "$(pwd)/artifacts/:/artifacts/" \
             --name compile compile
       - name: "Archive Alpine Linux feeder binary artifact"
-        uses: "actions/upload-artifact@v3"
+        uses: "actions/upload-artifact@v4"
         with:
           name: "alpine-linux-feeder"
           path: "artifacts/feeder"
       - name: "Archive Alpine Linux alarms dispatcher binary artifact"
-        uses: "actions/upload-artifact@v3"
+        uses: "actions/upload-artifact@v4"
         with:
           name: "alpine-linux-alarms-dispatcher"
           path: "artifacts/alarms-dispatcher"
@@ -119,9 +119,9 @@ jobs:
     permissions: write-all
     if: github.ref_type == 'tag'
     steps:
-      - uses: "actions/checkout@v3"
+      - uses: "actions/checkout@v4"
       - name: Download artifacts
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       - name: Display structure of downloaded files
         run: ls -R
       # temporary using commit as version until it is merged. Updates node version v12 -> v16
