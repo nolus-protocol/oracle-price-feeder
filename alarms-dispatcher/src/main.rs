@@ -166,7 +166,7 @@ async fn dispatch_alarms(
         move |tx_sender| {
             generators::spawn(
                 &node_client,
-                signer_address,
+                &{ signer_address },
                 &{ tx_sender },
                 config.market_price_oracle,
                 config.time_alarms,
