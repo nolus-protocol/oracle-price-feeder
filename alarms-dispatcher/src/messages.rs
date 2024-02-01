@@ -22,7 +22,7 @@ pub struct StatusResponse {
 
 impl StatusResponse {
     #[must_use]
-    pub fn remaining_for_dispatch(&self) -> bool {
+    pub const fn remaining_for_dispatch(&self) -> bool {
         self.remaining_alarms
     }
 }
@@ -33,7 +33,7 @@ pub struct DispatchResponse(u32);
 
 impl DispatchResponse {
     #[must_use]
-    pub fn dispatched_alarms(&self) -> u32 {
+    pub const fn dispatched_alarms(&self) -> u32 {
         self.0
     }
 }

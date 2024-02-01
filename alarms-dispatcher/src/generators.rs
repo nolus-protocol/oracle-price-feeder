@@ -225,7 +225,10 @@ async fn task_inner(
 
         if should_send {
             'generator_loop: loop {
-                if let Err(ChannelClosedError) = send_tx(&tx_sender, &context, fallback_gas_limit) {
+                if matches!(
+                    send_tx(&tx_sender, &context, fallback_gas_limit),
+                    Err(ChannelClosedError {})
+                ) {
                     break 'runner_loop Ok(());
                 }
 
@@ -377,8 +380,8 @@ fn extract_dispatched_count(
             return Err(ExtractDispatchedCountError::OutOfGas);
         }
     } else {
-        *fallback_gas_limit = if let Some(fallback_gas_limit) = NonZeroU64::new({
-            let (mut n, overflow) = fallback_gas_limit
+        *fallback_gas_limit = NonZeroU64::new({
+            let (mut n, overflow): (u64, bool) = fallback_gas_limit
                 .get()
                 .overflowing_add(response.gas_used.unsigned_abs());
 
@@ -389,11 +392,8 @@ fn extract_dispatched_count(
             }
 
             n
-        }) {
-            fallback_gas_limit
-        } else {
-            unreachable!()
-        };
+        })
+        .unwrap_or_else(|| unreachable!());
 
         if let Some(dispatched_count) = maybe_dispatched_count {
             return Ok(dispatched_count);

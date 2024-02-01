@@ -78,6 +78,7 @@ async fn main() -> AppResult<()> {
     result
 }
 
+#[allow(clippy::future_not_send)]
 async fn app_main() -> AppResult<()> {
     let rpc_setup: RpcSetup<Config> =
         prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?;
@@ -99,6 +100,7 @@ async fn app_main() -> AppResult<()> {
     result.map_err(Into::into)
 }
 
+#[allow(clippy::future_not_send)]
 async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
@@ -107,7 +109,7 @@ async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
         patch: u64,
     }
 
-    for (contract, name, compatible) in rpc_setup
+    let contracts_iter = rpc_setup
         .config
         .time_alarms
         .iter()
@@ -118,8 +120,9 @@ async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
                 .market_price_oracle
                 .iter()
                 .map(|contract: &Contract| (contract, "oracle", ORACLE_COMPATIBLE_VERSION)),
-        )
-    {
+        );
+
+    for (contract, name, compatible) in contracts_iter {
         let version: JsonVersion = rpc_setup
             .node_client
             .with_grpc(|rpc: TonicChannel| {
@@ -153,6 +156,7 @@ async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
     Ok(())
 }
 
+#[allow(clippy::future_not_send)]
 async fn dispatch_alarms(
     RpcSetup {
         signer,
