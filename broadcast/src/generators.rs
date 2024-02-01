@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, num::NonZeroU64};
+use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
 
 use tokio::{
-    sync::mpsc::{UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinSet,
     time::Instant,
 };
@@ -11,7 +11,13 @@ use chain_comms::{
     reexport::cosmrs::{tendermint::Hash as TxHash, Any as ProtobufAny},
 };
 
-use crate::{impl_variant, TimeInsensitive, TimeSensitive};
+use crate::mode::{self, TimeInsensitive, TimeSensitive};
+
+#[must_use]
+#[inline]
+pub fn new_results_channel() -> (CommitResultSender, CommitResultReceiver) {
+    unbounded_channel()
+}
 
 pub enum CommitErrorType {
     InvalidAccountSequence,
@@ -30,14 +36,20 @@ pub type CommitResultSender = UnboundedSender<CommitResult>;
 pub type CommitResultReceiver = UnboundedReceiver<CommitResult>;
 
 #[must_use]
-pub struct SpawnResult {
-    pub(crate) tx_generators_set: JoinSet<()>,
+pub struct SpawnResult<E>
+where
+    E: Error,
+{
+    pub(crate) tx_generators_set: JoinSet<Result<(), E>>,
     pub(crate) tx_result_senders: BTreeMap<usize, CommitResultSender>,
 }
 
-impl SpawnResult {
+impl<E> SpawnResult<E>
+where
+    E: Error,
+{
     pub const fn new(
-        tx_generators_set: JoinSet<()>,
+        tx_generators_set: JoinSet<Result<(), E>>,
         tx_result_senders: BTreeMap<usize, CommitResultSender>,
     ) -> Self {
         Self {
@@ -48,7 +60,7 @@ impl SpawnResult {
 }
 
 #[must_use]
-pub struct TxRequest<Impl: impl_variant::Impl> {
+pub struct TxRequest<Impl: mode::Impl> {
     pub(crate) sender_id: usize,
     pub(crate) messages: Vec<ProtobufAny>,
     pub(crate) fallback_gas_limit: NonZeroU64,

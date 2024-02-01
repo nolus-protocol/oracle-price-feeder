@@ -9,7 +9,7 @@ use chain_comms::{
     signer::Signer,
 };
 
-use crate::{cache, impl_variant, ApiAndConfiguration};
+use crate::{cache, mode, ApiAndConfiguration};
 
 #[inline]
 pub async fn next_tx_request<Impl>(
@@ -18,7 +18,7 @@ pub async fn next_tx_request<Impl>(
     next_sender_id: &mut usize,
 ) -> Option<TxRequest<Impl>>
 where
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
 {
     loop {
         let cache::GetNextResult {
@@ -54,14 +54,14 @@ where
     }
 }
 
-pub(crate) struct TxRequest<Impl: impl_variant::Impl> {
+pub(crate) struct TxRequest<Impl: mode::Impl> {
     pub(crate) sender_id: usize,
     pub(crate) signed_tx_bytes: Vec<u8>,
     pub(crate) expiration: Impl::Expiration,
 }
 
 #[inline]
-async fn preprocess<Impl: impl_variant::Impl>(
+async fn preprocess<Impl: mode::Impl>(
     &mut ApiAndConfiguration {
         ref node_client,
         ref node_config,

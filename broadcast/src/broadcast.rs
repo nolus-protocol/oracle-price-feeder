@@ -7,9 +7,12 @@ use tokio::{
 
 use chain_comms::{client::Client as NodeClient, interact::commit};
 
-use crate::generators::{CommitError, CommitErrorType, CommitResultSender};
-use crate::preprocess::TxRequest;
-use crate::{impl_variant, log, ApiAndConfiguration};
+use crate::{
+    generators::{CommitError, CommitErrorType, CommitResultSender},
+    log, mode,
+    preprocess::TxRequest,
+    ApiAndConfiguration,
+};
 
 pub(crate) struct BroadcastAndSendBackTxHash {
     pub(crate) broadcast_timestamp: Instant,
@@ -17,7 +20,7 @@ pub(crate) struct BroadcastAndSendBackTxHash {
 }
 
 #[inline]
-pub(crate) async fn sleep_and_broadcast_tx<Impl: impl_variant::Impl>(
+pub(crate) async fn sleep_and_broadcast_tx<Impl: mode::Impl>(
     api_and_configuration: &mut ApiAndConfiguration,
     between_tx_margin_time: Duration,
     tx_request: TxRequest<Impl>,
@@ -55,7 +58,7 @@ enum SendBackTxHashResult {
 }
 
 #[inline]
-async fn broadcast_and_send_back_tx_hash<Impl: impl_variant::Impl>(
+async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
     &mut ApiAndConfiguration {
         ref node_client,
         ref mut signer,

@@ -1,8 +1,10 @@
-use std::{collections::btree_map::BTreeMap, future::poll_fn, task::Poll, time::Duration};
+use std::{
+    collections::btree_map::BTreeMap, error::Error, future::poll_fn, task::Poll, time::Duration,
+};
 
 use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    task::{JoinError, JoinSet},
+    task::JoinSet,
     time::{sleep, timeout, Instant},
 };
 use tracing::{error, info};
@@ -15,32 +17,32 @@ use chain_comms::{
     signer::Signer,
 };
 
-pub use self::impl_variant::{TimeInsensitive, TimeSensitive};
 use self::{
     broadcast::BroadcastAndSendBackTxHash,
     config::Config,
     generators::{CommitResultSender, SpawnResult, TxRequest, TxRequestSender},
-    impl_variant::FilterResult,
+    mode::FilterResult,
 };
 
 mod broadcast;
 mod cache;
 pub mod config;
 pub mod generators;
-mod impl_variant;
-mod log;
+pub mod log;
+pub mod mode;
 mod preprocess;
 
-pub async fn broadcast<Impl, F, E>(
+pub async fn broadcast<Impl, GeneratorError, SpawnGeneratorsF, SpawnE>(
     signer: Signer,
     config: Config,
     node_client: NodeClient,
     node_config: NodeConfig,
-    spawn_generators: F,
-) -> Result<(), E>
+    spawn_generators: SpawnGeneratorsF,
+) -> Result<(), SpawnE>
 where
-    F: FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult, E>,
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
+    SpawnGeneratorsF: FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult<GeneratorError>, SpawnE>,
+    GeneratorError: Error + 'static,
 {
     let (tx_sender, tx_receiver): (
         UnboundedSender<TxRequest<Impl>>,
@@ -50,7 +52,7 @@ where
     let SpawnResult {
         mut tx_generators_set,
         tx_result_senders,
-    }: SpawnResult = spawn_generators(tx_sender)?;
+    }: SpawnResult<GeneratorError> = spawn_generators(tx_sender)?;
 
     processing_loop(
         signer,
@@ -105,16 +107,17 @@ pub(crate) struct ApiAndConfiguration {
 }
 
 #[inline]
-async fn processing_loop<Impl>(
+async fn processing_loop<Impl, GeneratorError>(
     signer: Signer,
     config: Config,
     node_client: NodeClient,
     node_config: NodeConfig,
     mut tx_receiver: UnboundedReceiver<TxRequest<Impl>>,
-    tx_generators_set: &mut JoinSet<()>,
+    tx_generators_set: &mut JoinSet<Result<(), GeneratorError>>,
     mut tx_result_senders: BTreeMap<usize, CommitResultSender>,
 ) where
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
+    GeneratorError: Error + 'static,
 {
     let mut last_signing_timestamp: Instant = Instant::now();
 
@@ -133,24 +136,7 @@ async fn processing_loop<Impl>(
     let mut preprocessed_tx_request: Option<preprocess::TxRequest<Impl>> = None;
 
     loop {
-        if let Some(Err::<(), JoinError>(error)) =
-            poll_fn(|cx| match tx_generators_set.poll_join_next(cx) {
-                Poll::Pending => Poll::Ready(None),
-                maybe_joined @ Poll::Ready(_) => maybe_joined,
-            })
-            .await
-        {
-            error!(
-                "Generator task {}!",
-                if error.is_panic() {
-                    "panicked"
-                } else if error.is_cancelled() {
-                    "was cancelled"
-                } else {
-                    unreachable!()
-                }
-            );
-        }
+        try_join_generator_task(tx_generators_set).await;
 
         if let Err(cache::ChannelClosed) =
             cache::purge_and_update(&mut tx_receiver, &mut requests_cache).await
@@ -208,6 +194,40 @@ async fn processing_loop<Impl>(
 
                     preprocessed_tx_request = Some(tx_request);
                 }
+            }
+        }
+    }
+}
+
+async fn try_join_generator_task<GeneratorError>(
+    tx_generators_set: &mut JoinSet<Result<(), GeneratorError>>,
+) where
+    GeneratorError: Error + 'static,
+{
+    if let Some(result) = poll_fn(|cx| match tx_generators_set.poll_join_next(cx) {
+        Poll::Pending => Poll::Ready(None),
+        maybe_joined @ Poll::Ready(_) => maybe_joined,
+    })
+    .await
+    {
+        match result {
+            Ok(Ok(())) => {
+                info!("Generator task exited without errors.");
+            }
+            Ok(Err(error)) => {
+                error!(error = ?error, "Generator task exited with error! Error: {error}");
+            }
+            Err(error) => {
+                error!(
+                    "Generator task {}!",
+                    if error.is_panic() {
+                        "panicked"
+                    } else if error.is_cancelled() {
+                        "was cancelled"
+                    } else {
+                        unreachable!()
+                    }
+                );
             }
         }
     }

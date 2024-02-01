@@ -2,12 +2,12 @@ use std::{cell::Cell, collections::BTreeMap, num::NonZeroU64};
 
 use chain_comms::reexport::cosmrs::Any as ProtobufAny;
 
-use crate::impl_variant;
+use crate::mode;
 
 #[must_use]
 pub struct TxRequest<Impl>
 where
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
 {
     pub(crate) messages: Vec<ProtobufAny>,
     pub(crate) fallback_gas_limit: NonZeroU64,

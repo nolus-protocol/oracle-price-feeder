@@ -6,10 +6,12 @@ use std::{
 use tokio::sync::mpsc::{error::TryRecvError, UnboundedReceiver};
 use tracing::warn;
 
-pub(crate) use sealed::{TxRequest, TxRequests};
+use crate::{
+    generators::TxRequest as ReceivedTxRequest,
+    mode::{self, FilterResult, PurgeResult},
+};
 
-use crate::generators::TxRequest as ReceivedTxRequest;
-use crate::impl_variant::{self, FilterResult, PurgeResult};
+pub(crate) use self::sealed::{TxRequest, TxRequests};
 
 mod sealed;
 
@@ -19,7 +21,7 @@ pub(crate) fn get_next<Impl>(
     next_sender_id: usize,
 ) -> Option<GetNextResult<Impl>>
 where
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
 {
     requests_cache
         .range(next_sender_id..)
@@ -38,7 +40,7 @@ pub(crate) async fn purge_and_update<Impl>(
     requests_cache: &mut BTreeMap<usize, Cell<Option<TxRequest<Impl>>>>,
 ) -> Result<(), ChannelClosed>
 where
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
 {
     let mut recv_result: Result<ReceivedTxRequest<Impl>, TryRecvError> =
         if matches!(Impl::purge_cache(requests_cache), PurgeResult::Exhausted) {
@@ -92,7 +94,7 @@ pub(crate) struct ChannelClosed;
 
 pub(crate) struct GetNextResult<Impl>
 where
-    Impl: impl_variant::Impl,
+    Impl: mode::Impl,
 {
     pub(crate) sender_id: usize,
     pub(crate) tx_request: TxRequest<Impl>,
