@@ -212,25 +212,7 @@ impl SanityCheck {
                 result.and_then(|body: Bytes| {
                     String::from_utf8({ body }.to_vec())
                         .map_err(BenchmarkError::InvalidUtf8)
-                        .and_then(|body| {
-                            if let Some(price_decimal) = regex
-                                .captures(&body)
-                                .and_then(|captures: Captures<'_>| captures.get(1))
-                            {
-                                price_decimal
-                                    .as_str()
-                                    .parse()
-                                    .map(|price_ratio: Ratio| {
-                                        price_ratio.to_price(
-                                            mappings.base.ticker.to_string(),
-                                            mappings.quote.ticker.to_string(),
-                                        )
-                                    })
-                                    .map_err(BenchmarkError::ParsePrice)
-                            } else {
-                                Err(BenchmarkError::PriceNotFoundInResponse(body))
-                            }
-                        })
+                        .and_then(move |body| Self::parse_price_with_regex(&mappings, regex, body))
                 })
             })
             .await
@@ -252,6 +234,30 @@ impl SanityCheck {
 
             regex
         })
+    }
+
+    fn parse_price_with_regex(
+        mappings: &Mappings,
+        regex: &Regex,
+        body: String,
+    ) -> Result<Price<CoinWithoutDecimalPlaces>, BenchmarkError> {
+        let maybe_price: Option<Result<Price<CoinWithoutDecimalPlaces>, BenchmarkError>> = regex
+            .captures(&body)
+            .and_then(|captures: Captures<'_>| captures.get(1))
+            .map(|price_decimal| {
+                price_decimal
+                    .as_str()
+                    .parse()
+                    .map(|price_ratio: Ratio| {
+                        price_ratio.to_price(
+                            mappings.base.ticker.to_string(),
+                            mappings.quote.ticker.to_string(),
+                        )
+                    })
+                    .map_err(BenchmarkError::ParsePrice)
+            });
+
+        maybe_price.unwrap_or_else(|| Err(BenchmarkError::PriceNotFoundInResponse(body)))
     }
 }
 

@@ -24,16 +24,12 @@ where
     fn to_big_uint(n: u128) -> UInt {
         // Order is documented to be in Little-Endian.
         UInt::from_digits([
-            if let Ok(n) = (n & u128::from(u64::MAX)).try_into() {
-                n
-            } else {
-                unreachable!()
-            },
-            if let Ok(n) = (n >> u64::BITS).try_into() {
-                n
-            } else {
-                unreachable!()
-            },
+            (n & u128::from(u64::MAX))
+                .try_into()
+                .unwrap_or_else(|_| unreachable!()),
+            (n >> u64::BITS)
+                .try_into()
+                .unwrap_or_else(|_| unreachable!()),
             0,
             0,
             0,

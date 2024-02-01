@@ -116,6 +116,7 @@ fn cmp_price_tickers(
 }
 
 fn normalize_and_stringify_quote(price: &Price<CoinWithDecimalPlaces>) -> String {
+    #[allow(clippy::cast_precision_loss)]
     let base_f64: f64 = (price.amount_quote().amount()
         * 10_u128.pow(
             price
@@ -125,6 +126,7 @@ fn normalize_and_stringify_quote(price: &Price<CoinWithDecimalPlaces>) -> String
                 .into(),
         )) as f64;
 
+    #[allow(clippy::cast_precision_loss)]
     let quote_f64: f64 = (price.amount().amount()
         * 10_u128.pow(
             price

@@ -97,6 +97,11 @@ impl Provider for Osmosis {
 
         let mut set: JoinSet<Result<Price<CoinWithDecimalPlaces>, ProviderError>> = JoinSet::new();
 
+        let routes_iter = self
+            .node_client
+            .with_grpc(|rpc: TonicChannel| self.query_supported_currencies(rpc))
+            .await?;
+
         for Route {
             pool_id,
             from:
@@ -111,10 +116,7 @@ impl Provider for Osmosis {
                     symbol: to_symbol,
                     decimal_places: to_decimal_places,
                 },
-        } in self
-            .node_client
-            .with_grpc(|rpc: TonicChannel| self.query_supported_currencies(rpc))
-            .await?
+        } in routes_iter
         {
             let channel = self.channel.clone();
 

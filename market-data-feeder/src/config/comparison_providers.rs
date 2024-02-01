@@ -49,7 +49,7 @@ where
                 return Err(DeserializeError::custom(format_args!(
                     "Comparison provider with ID \"{id}\" already exists!",
                     id = entry.key()
-                )))
+                )));
             }
         };
     }

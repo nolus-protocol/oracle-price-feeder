@@ -103,6 +103,8 @@ impl Provider for Astroport {
     ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError> {
         let mut set: JoinSet<Result<Price<CoinWithDecimalPlaces>, ProviderError>> = JoinSet::new();
 
+        let supported_currencies_iter = self.supported_currencies_intersection().await?;
+
         for (
             base_ticker,
             base_dex_denom,
@@ -110,7 +112,7 @@ impl Provider for Astroport {
             quote_ticker,
             quote_dex_denom,
             quote_decimal_places,
-        ) in self.supported_currencies_intersection().await?
+        ) in supported_currencies_iter
         {
             let channel: TonicChannel = self.channel.clone();
             let router_contract: Arc<str> = self.router_contract.clone();
@@ -122,7 +124,12 @@ impl Provider for Astroport {
 
                 debug!(query_message = %String::from_utf8_lossy(&query_message), "Query message");
 
-                match query::wasm(channel, router_contract.to_string(), &{ query_message }).await {
+                let query_result: Result<
+                    astroport::router::SimulateSwapOperationsResponse,
+                    query::error::Wasm,
+                > = query::wasm(channel, router_contract.to_string(), &{ query_message }).await;
+
+                match query_result {
                     Ok(astroport::router::SimulateSwapOperationsResponse {
                         amount: quote_amount,
                     }) => Ok(Price::new(

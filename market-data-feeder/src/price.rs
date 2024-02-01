@@ -214,7 +214,7 @@ where
     C: Coin,
 {
     pub const fn new(amount: C, amount_quote: C) -> Self {
-        Price {
+        Self {
             amount,
             amount_quote,
         }

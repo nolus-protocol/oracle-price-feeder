@@ -73,6 +73,7 @@ async fn main() -> Result<()> {
     result
 }
 
+#[allow(clippy::future_not_send)]
 async fn app_main() -> Result<()> {
     let RpcSetup {
         signer,
@@ -121,6 +122,7 @@ async fn app_main() -> Result<()> {
     .await
 }
 
+#[allow(clippy::future_not_send)]
 async fn check_compatibility(config: &Config, node_client: &NodeClient) -> Result<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
