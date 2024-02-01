@@ -10,7 +10,8 @@ path = "src/main.rs"
 name = "feeder"
 
 [dependencies]
-chain-comms = { workspace = true }
+broadcast.workspace = true
+chain-comms.workspace = true
 
 astroport.workspace = true
 async-trait.workspace = true

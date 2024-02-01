@@ -1343,6 +1343,7 @@ dependencies = [
  "astroport",
  "async-trait",
  "bnum 0.10.0",
+ "broadcast",
  "bytes",
  "chain-comms",
  "futures",
