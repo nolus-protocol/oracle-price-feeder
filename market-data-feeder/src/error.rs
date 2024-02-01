@@ -36,13 +36,15 @@ pub(crate) enum Application {
 #[derive(Debug, ThisError)]
 pub(crate) enum Worker {
     #[error("Failed to instantiate provider with id: {0}! Returned price list is empty!")]
-    EmptyPriceList(Arc<str>),
+    EmptyPriceList(Box<str>),
     #[error("Failed to instantiate provider with id: {0}! Cause: {1}")]
-    InstantiateProvider(Arc<str>, Box<dyn StdError + Send + 'static>),
+    InstantiateProvider(Box<str>, Box<dyn StdError + Send + 'static>),
     #[error("Failed to instantiate price comparison provider with id: {0}! Cause: {1}")]
     InstantiatePriceComparisonProvider(Arc<str>, Box<dyn StdError + Send + 'static>),
     #[error("Price comparison guard failure! Cause: {0}")]
     PriceComparisonGuard(#[from] PriceComparisonGuardError),
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
+    #[error("Failed to encode price feed message as Protobuf message! Cause: {0}")]
+    EncodeExecuteMessage(#[from] chain_comms::reexport::cosmrs::proto::prost::EncodeError),
 }
