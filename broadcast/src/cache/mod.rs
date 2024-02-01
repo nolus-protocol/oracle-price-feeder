@@ -17,7 +17,7 @@ mod sealed;
 
 #[inline]
 pub(crate) fn get_next<Impl>(
-    requests_cache: &mut TxRequests<Impl>,
+    requests_cache: &TxRequests<Impl>,
     next_sender_id: usize,
 ) -> Option<GetNextResult<Impl>>
 where

@@ -12,9 +12,10 @@ use chain_comms::{
 use crate::{cache, mode, ApiAndConfiguration};
 
 #[inline]
+#[allow(clippy::future_not_send)]
 pub async fn next_tx_request<Impl>(
     api_and_configuration: &mut ApiAndConfiguration,
-    requests_cache: &mut cache::TxRequests<Impl>,
+    requests_cache: &cache::TxRequests<Impl>,
     next_sender_id: &mut usize,
 ) -> Option<TxRequest<Impl>>
 where
@@ -61,11 +62,12 @@ pub(crate) struct TxRequest<Impl: mode::Impl> {
 }
 
 #[inline]
+#[allow(clippy::future_not_send)]
 async fn preprocess<Impl: mode::Impl>(
-    &mut ApiAndConfiguration {
-        ref node_client,
-        ref node_config,
-        ref mut signer,
+    ApiAndConfiguration {
+        node_client,
+        node_config,
+        signer,
         ..
     }: &mut ApiAndConfiguration,
     fallback_gas_limit: NonZeroU64,

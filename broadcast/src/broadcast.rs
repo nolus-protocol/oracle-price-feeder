@@ -14,19 +14,20 @@ use crate::{
     ApiAndConfiguration,
 };
 
-pub(crate) struct BroadcastAndSendBackTxHash {
+pub(crate) struct ProcessingOutput {
     pub(crate) broadcast_timestamp: Instant,
     pub(crate) channel_closed: Option<usize>,
 }
 
 #[inline]
+#[allow(clippy::future_not_send)]
 pub(crate) async fn sleep_and_broadcast_tx<Impl: mode::Impl>(
     api_and_configuration: &mut ApiAndConfiguration,
     between_tx_margin_time: Duration,
     tx_request: TxRequest<Impl>,
     tx_result_senders: &BTreeMap<usize, CommitResultSender>,
     last_signing_timestamp: Instant,
-) -> Result<BroadcastAndSendBackTxHash, TxRequest<Impl>> {
+) -> Result<ProcessingOutput, TxRequest<Impl>> {
     sleep_between_txs(between_tx_margin_time, last_signing_timestamp).await;
 
     broadcast_and_send_back_tx_hash::<Impl>(
@@ -58,6 +59,7 @@ enum SendBackTxHashResult {
 }
 
 #[inline]
+#[allow(clippy::future_not_send)]
 async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
     &mut ApiAndConfiguration {
         ref node_client,
@@ -69,7 +71,7 @@ async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
     tx_result_senders: &BTreeMap<usize, CommitResultSender>,
     sender_id: usize,
     signed_tx_bytes: Vec<u8>,
-) -> Result<BroadcastAndSendBackTxHash, Vec<u8>> {
+) -> Result<ProcessingOutput, Vec<u8>> {
     let tx_response: commit::Response =
         Impl::broadcast_commit(node_client, signer, signed_tx_bytes).await?;
 
@@ -89,7 +91,7 @@ async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
         SendBackTxHashResult::ChannelClosed
     );
 
-    Ok(BroadcastAndSendBackTxHash {
+    Ok(ProcessingOutput {
         broadcast_timestamp,
         channel_closed: channel_closed.then_some(sender_id),
     })

@@ -19,13 +19,13 @@ use tracing::{error, info};
 use chain_comms::{
     client::Client as NodeClient,
     config::Node as NodeConfig,
-    interact::get_tx_response,
+    interact::{error::GetTxResponse as GetTxResponseError, get_tx_response},
     reexport::cosmrs::tendermint::{abci::response::DeliverTx, Hash as TxHash},
     signer::Signer,
 };
 
 use self::{
-    broadcast::BroadcastAndSendBackTxHash,
+    broadcast::ProcessingOutput as BroadcastProcessingOutput,
     config::Config,
     generators::{CommitResultSender, SpawnResult, TxRequest, TxRequestSender},
     mode::FilterResult,
@@ -39,6 +39,7 @@ pub mod log;
 pub mod mode;
 mod preprocess;
 
+#[allow(clippy::future_not_send)]
 pub async fn broadcast<Impl, GeneratorError, SpawnGeneratorsF, SpawnE>(
     signer: Signer,
     config: Config,
@@ -48,8 +49,9 @@ pub async fn broadcast<Impl, GeneratorError, SpawnGeneratorsF, SpawnE>(
 ) -> Result<(), SpawnE>
 where
     Impl: mode::Impl,
-    SpawnGeneratorsF: FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult<GeneratorError>, SpawnE>,
-    GeneratorError: Error + 'static,
+    SpawnGeneratorsF:
+        FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult<GeneratorError>, SpawnE> + Send,
+    GeneratorError: Error + Send + 'static,
 {
     let (tx_sender, tx_receiver): (
         UnboundedSender<TxRequest<Impl>>,
@@ -87,7 +89,10 @@ pub async fn poll_delivered_tx(
         loop {
             sleep(poll_time).await;
 
-            match get_tx_response(node_client, hash).await {
+            let result: Result<DeliverTx, GetTxResponseError> =
+                get_tx_response(node_client, hash).await;
+
+            match result {
                 Ok(tx) => {
                     break tx;
                 }
@@ -114,6 +119,7 @@ pub(crate) struct ApiAndConfiguration {
 }
 
 #[inline]
+#[allow(clippy::future_not_send)]
 async fn processing_loop<Impl, GeneratorError>(
     signer: Signer,
     config: Config,
@@ -124,9 +130,15 @@ async fn processing_loop<Impl, GeneratorError>(
     mut tx_result_senders: BTreeMap<usize, CommitResultSender>,
 ) where
     Impl: mode::Impl,
-    GeneratorError: Error + 'static,
+    GeneratorError: Error + Send + 'static,
 {
     let mut last_signing_timestamp: Instant = Instant::now();
+
+    let mut next_sender_id: usize = 0;
+
+    let mut requests_cache: cache::TxRequests<Impl> = cache::TxRequests::new();
+
+    let mut preprocessed_tx_request: Option<preprocess::TxRequest<Impl>> = None;
 
     let mut api_and_configuration = ApiAndConfiguration {
         node_client,
@@ -136,18 +148,13 @@ async fn processing_loop<Impl, GeneratorError>(
         poll_time: config.poll_time,
     };
 
-    let mut next_sender_id: usize = 0;
-
-    let mut requests_cache: cache::TxRequests<Impl> = cache::TxRequests::new();
-
-    let mut preprocessed_tx_request: Option<preprocess::TxRequest<Impl>> = None;
-
     loop {
         try_join_generator_task(tx_generators_set).await;
 
-        if let Err(cache::ChannelClosed) =
-            cache::purge_and_update(&mut tx_receiver, &mut requests_cache).await
-        {
+        if matches!(
+            cache::purge_and_update(&mut tx_receiver, &mut requests_cache).await,
+            Err(cache::ChannelClosed {})
+        ) {
             info!("All generator threads stopped. Exiting.");
 
             return;
@@ -168,23 +175,25 @@ async fn processing_loop<Impl, GeneratorError>(
         ) {
             preprocessed_tx_request = preprocess::next_tx_request(
                 &mut api_and_configuration,
-                &mut requests_cache,
+                &requests_cache,
                 &mut next_sender_id,
             )
             .await;
         }
 
         if let Some(tx_request) = preprocessed_tx_request.take() {
-            match broadcast::sleep_and_broadcast_tx(
-                &mut api_and_configuration,
-                config.between_tx_margin_time,
-                tx_request,
-                &tx_result_senders,
-                last_signing_timestamp,
-            )
-            .await
-            {
-                Ok(BroadcastAndSendBackTxHash {
+            let broadcast_result: Result<BroadcastProcessingOutput, preprocess::TxRequest<Impl>> =
+                broadcast::sleep_and_broadcast_tx(
+                    &mut api_and_configuration,
+                    config.between_tx_margin_time,
+                    tx_request,
+                    &tx_result_senders,
+                    last_signing_timestamp,
+                )
+                .await;
+
+            match broadcast_result {
+                Ok(BroadcastProcessingOutput {
                     broadcast_timestamp,
                     channel_closed,
                 }) => {
@@ -206,12 +215,13 @@ async fn processing_loop<Impl, GeneratorError>(
     }
 }
 
+#[allow(clippy::needless_pass_by_ref_mut)]
 async fn try_join_generator_task<GeneratorError>(
     tx_generators_set: &mut JoinSet<Result<(), GeneratorError>>,
 ) where
-    GeneratorError: Error + 'static,
+    GeneratorError: Error + Send + 'static,
 {
-    if let Some(result) = poll_fn(|cx| match tx_generators_set.poll_join_next(cx) {
+    if let Some(result) = poll_fn(move |cx| match tx_generators_set.poll_join_next(cx) {
         Poll::Pending => Poll::Ready(None),
         maybe_joined @ Poll::Ready(_) => maybe_joined,
     })

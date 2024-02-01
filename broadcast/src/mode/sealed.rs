@@ -4,8 +4,8 @@ use chain_comms::{client::Client as NodeClient, interact::commit, signer::Signer
 
 use crate::cache;
 
-pub trait Impl: Sized {
-    type Expiration;
+pub trait Impl: Send + Sync + Sized {
+    type Expiration: Send + Sync + Sized;
 
     fn purge_cache(cache: &mut cache::TxRequests<Self>) -> PurgeResult;
 

@@ -33,6 +33,7 @@ impl Impl for Blocking {
         FilterResult::NotExpired
     }
 
+    #[allow(clippy::future_not_send)]
     async fn broadcast_commit(
         node_client: &NodeClient,
         signer: &mut Signer,
@@ -95,6 +96,7 @@ impl Impl for NonBlocking {
     }
 
     #[inline]
+    #[allow(clippy::future_not_send)]
     async fn broadcast_commit(
         node_client: &NodeClient,
         signer: &mut Signer,
@@ -106,6 +108,7 @@ impl Impl for NonBlocking {
     }
 }
 
+#[allow(clippy::future_not_send)]
 async fn try_commit<F>(
     node_client: &NodeClient,
     signer: &mut Signer,
@@ -113,9 +116,12 @@ async fn try_commit<F>(
     on_error: F,
 ) -> Option<commit::Response>
 where
-    F: FnOnce(),
+    F: FnOnce() + Send,
 {
-    match commit::with_signed_body(node_client, signed_tx_bytes, signer).await {
+    let commit_result: Result<commit::Response, commit::error::CommitTx> =
+        commit::with_signed_body(node_client, signed_tx_bytes, signer).await;
+
+    match commit_result {
         Ok(tx_response) => Some(tx_response),
         Err(error) => {
             error_span!("Broadcast").in_scope(|| {
