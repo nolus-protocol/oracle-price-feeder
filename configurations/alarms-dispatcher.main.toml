@@ -16,15 +16,15 @@ fee_adjustment_denominator = 1
 
 [[time_alarms]]
 address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
-max_alarms_group = 16
-gas_limit_per_alarm = 5_000_000
+max_alarms_group = 24
+gas_limit_per_alarm = 750_000
 
 [[market_price_oracle]]
 address = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
-max_alarms_group = 16
-gas_limit_per_alarm = 5_000_000
+max_alarms_group = 24
+gas_limit_per_alarm = 750_000
 
 [[market_price_oracle]]
 address = "nolus1jew4l5nq7m3xhkqzy8j7cc99083m5j8d9w004ayyv8xl3yv4h0dql2dd4e"
-max_alarms_group = 16
-gas_limit_per_alarm = 5_000_000
+max_alarms_group = 24
+gas_limit_per_alarm = 750_000
