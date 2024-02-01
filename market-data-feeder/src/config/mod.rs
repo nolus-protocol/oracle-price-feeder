@@ -12,7 +12,8 @@ use serde::{
 };
 use thiserror::Error as ThisError;
 
-use chain_comms::config::Node;
+use broadcast::config::Config as BroadcastConfig;
+use chain_comms::config::Node as NodeConfig;
 
 use self::str_pool::StrPool;
 
@@ -50,14 +51,12 @@ impl SymbolAndDecimalPlaces {
 #[derive(Debug)]
 #[must_use]
 pub(crate) struct Config {
-    pub tick_time: Duration,
-    pub between_tx_margin_time: Duration,
-    pub retry_tick_time: Duration,
-    pub oracles: BTreeMap<Arc<str>, Arc<str>>,
-    pub providers: BTreeMap<Arc<str>, ProviderWithComparison>,
-    pub comparison_providers: BTreeMap<Arc<str>, ComparisonProvider>,
     pub hard_gas_limit: NonZeroU64,
-    pub node: Node,
+    pub broadcast: BroadcastConfig,
+    pub node: NodeConfig,
+    pub oracles: BTreeMap<Arc<str>, Arc<str>>,
+    pub providers: BTreeMap<Box<str>, ProviderWithComparison>,
+    pub comparison_providers: BTreeMap<Arc<str>, ComparisonProvider>,
 }
 
 impl<'de> Deserialize<'de> for Config {
@@ -68,14 +67,12 @@ impl<'de> Deserialize<'de> for Config {
         let mut str_pool: StrPool = StrPool::new();
 
         let raw::Config {
-            tick_seconds,
-            between_tx_margin_seconds,
-            query_delivered_tx_tick_seconds,
+            hard_gas_limit,
+            broadcast,
+            node,
             oracles: raw_oracles,
             providers: raw_providers,
             comparison_providers: raw_comparison_providers,
-            hard_gas_limit,
-            node,
         }: raw::Config = raw::Config::deserialize(deserializer)?;
 
         let mut oracles: BTreeMap<Arc<str>, Arc<str>> = BTreeMap::new();
@@ -98,17 +95,16 @@ impl<'de> Deserialize<'de> for Config {
                 &oracles,
             )?;
 
-        let providers = providers::reconstruct::<D>(raw_providers, str_pool, &oracles)?;
+        let providers: BTreeMap<Box<str>, ProviderWithComparison> =
+            providers::reconstruct::<D>(raw_providers, str_pool, &oracles)?;
 
-        Ok(Config {
-            tick_time: Duration::from_secs(tick_seconds),
-            between_tx_margin_time: Duration::from_secs(between_tx_margin_seconds),
-            retry_tick_time: Duration::from_secs(query_delivered_tx_tick_seconds),
+        Ok(Self {
+            hard_gas_limit,
+            broadcast,
+            node,
             oracles,
             providers,
             comparison_providers,
-            hard_gas_limit,
-            node,
         })
     }
 }
@@ -128,8 +124,8 @@ where
         .clone())
 }
 
-impl AsRef<Node> for Config {
-    fn as_ref(&self) -> &Node {
+impl AsRef<NodeConfig> for Config {
+    fn as_ref(&self) -> &NodeConfig {
         &self.node
     }
 }

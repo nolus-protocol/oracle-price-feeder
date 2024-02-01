@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
-use std::num::NonZeroU64;
+use std::{collections::BTreeMap, num::NonZeroU64};
 
 use serde::Deserialize;
 
+use broadcast::config::Config as BroadcastConfig;
 use chain_comms::config::Node as NodeConfig;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -43,10 +43,8 @@ pub(super) struct ComparisonProvider {
 #[must_use]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub(super) struct Config {
-    pub tick_seconds: u64,
-    pub between_tx_margin_seconds: u64,
-    pub query_delivered_tx_tick_seconds: u64,
     pub hard_gas_limit: NonZeroU64,
+    pub broadcast: BroadcastConfig,
     pub node: NodeConfig,
     pub oracles: BTreeMap<String, String>,
     pub providers: BTreeMap<String, ProviderWithComparison>,
