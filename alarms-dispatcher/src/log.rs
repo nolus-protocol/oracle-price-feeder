@@ -1,4 +1,4 @@
-use tracing::{debug, error, info, info_span};
+use tracing::{error, info, info_span};
 
 use chain_comms::{
     decode,
@@ -23,9 +23,9 @@ pub fn tx_response(
 
             let mut maybe_dispatch_response = None;
 
-            if response.code.is_ok() {
-                debug!("Log: {}", response.log);
+            broadcast::log::on_error(response.code, &response.log);
 
+            if response.code.is_ok() {
                 match decode::exec_tx_data(response) {
                     Ok(dispatch_response) => {
                         match serde_json_wasm::from_slice::<DispatchResponse>(&dispatch_response) {
@@ -49,12 +49,6 @@ pub fn tx_response(
                         "Failed to decode transaction response from the Protobuf format! Cause: {error}",
                     ),
                 }
-            } else {
-                error!(
-                    log = response.log,
-                    "Error with code {} has occurred!",
-                    response.code.value(),
-                );
             }
 
             info!("Gas limit for transacion: {}", response.gas_wanted);

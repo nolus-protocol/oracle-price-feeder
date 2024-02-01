@@ -1,14 +1,20 @@
-use std::{collections::BTreeMap, num::NonZeroU32, num::NonZeroU64, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap,
+    convert::Infallible,
+    num::{NonZeroU32, NonZeroU64},
+    sync::Arc,
+    time::Duration,
+};
 
 use tokio::{sync::mpsc::unbounded_channel, task::JoinSet, time::sleep};
 use tracing::{error, info, warn};
 
 use broadcast::{
     generators::{
-        CommitErrorType, CommitResultReceiver, CommitResultSender, SpawnResult, TxRequest,
-        TxRequestSender,
+        CommitError, CommitErrorType, CommitResultReceiver, CommitResultSender, SpawnResult,
+        TxRequest, TxRequestSender,
     },
-    TimeInsensitive,
+    mode::Blocking,
 };
 use chain_comms::{
     client::Client as NodeClient,
@@ -31,13 +37,13 @@ use crate::{
 pub fn spawn(
     node_client: &NodeClient,
     signer_address: &str,
-    tx_sender: &TxRequestSender<TimeInsensitive>,
+    tx_sender: &TxRequestSender<Blocking>,
     market_price_oracle_contracts: Vec<Contract>,
     time_alarms_contracts: Vec<Contract>,
     tick_time: Duration,
     poll_time: Duration,
-) -> Result<SpawnResult, DispatchAlarmsError> {
-    let mut tx_generators_set = JoinSet::new();
+) -> Result<SpawnResult<Infallible>, DispatchAlarmsError> {
+    let mut tx_generators_set: JoinSet<Result<(), Infallible>> = JoinSet::new();
 
     let mut tx_result_senders = BTreeMap::new();
 
@@ -70,7 +76,7 @@ pub fn spawn(
 }
 
 struct SpawnTxGeneratorContext {
-    tx_sender: TxRequestSender<TimeInsensitive>,
+    tx_sender: TxRequestSender<Blocking>,
     monotonic_id: usize,
     contract: Contract,
     contract_type: &'static str,
@@ -79,7 +85,7 @@ struct SpawnTxGeneratorContext {
 fn spawn_single(
     signer_address: String,
     node_client: &NodeClient,
-    tx_generators_set: &mut JoinSet<()>,
+    tx_generators_set: &mut JoinSet<Result<(), Infallible>>,
     tx_result_senders: &mut BTreeMap<usize, CommitResultSender>,
     SpawnTxGeneratorContext {
         tx_sender,
@@ -147,12 +153,12 @@ struct TaskContext {
 
 async fn task(
     node_client: NodeClient,
-    tx_sender: TxRequestSender<TimeInsensitive>,
+    tx_sender: TxRequestSender<Blocking>,
     result_receiver: CommitResultReceiver,
     context: TaskContext,
     tick_time: Duration,
     poll_time: Duration,
-) {
+) -> Result<(), Infallible> {
     if let Err(FatalError {
         contract_type,
         contract_address,
@@ -182,6 +188,8 @@ async fn task(
             sleep(tick_time).await;
         }
     }
+
+    Ok(())
 }
 
 struct FatalError {
@@ -193,7 +201,7 @@ struct FatalError {
 
 async fn task_inner(
     node_client: NodeClient,
-    tx_sender: TxRequestSender<TimeInsensitive>,
+    tx_sender: TxRequestSender<Blocking>,
     mut result_receiver: CommitResultReceiver,
     context: TaskContext,
     tick_time: Duration,
@@ -318,12 +326,12 @@ fn handle_response(
 struct ChannelClosedError;
 
 fn send_tx(
-    tx_sender: &TxRequestSender<TimeInsensitive>,
+    tx_sender: &TxRequestSender<Blocking>,
     context: &TaskContext,
     fallback_gas_limit: NonZeroU64,
 ) -> Result<(), ChannelClosedError> {
     let channel_closed: bool = tx_sender
-        .send(TxRequest::<TimeInsensitive>::new(
+        .send(TxRequest::<Blocking>::new(
             context.monotonic_id,
             context.messages.to_vec(),
             fallback_gas_limit,
@@ -369,7 +377,7 @@ fn extract_dispatched_count(
             return Err(ExtractDispatchedCountError::OutOfGas);
         }
     } else {
-        {
+        *fallback_gas_limit = if let Some(fallback_gas_limit) = NonZeroU64::new({
             let (mut n, overflow) = fallback_gas_limit
                 .get()
                 .overflowing_add(response.gas_used.unsigned_abs());
@@ -380,10 +388,12 @@ fn extract_dispatched_count(
                 n |= 1 << (u64::BITS - 1);
             }
 
-            if let Some(n) = NonZeroU64::new(n) {
-                *fallback_gas_limit = n;
-            }
-        }
+            n
+        }) {
+            fallback_gas_limit
+        } else {
+            unreachable!()
+        };
 
         if let Some(dispatched_count) = maybe_dispatched_count {
             return Ok(dispatched_count);
@@ -401,15 +411,18 @@ async fn receive_back_tx_hash(
     if let Some(result) = result_receiver.recv().await {
         match result {
             Ok(hash) => return Ok(Some(hash)),
-            Err(error) => {
+            Err(CommitError {
+                r#type,
+                tx_response,
+            }) => {
                 error!(
                     contract_type = contract_type,
                     address = contract_address.as_ref(),
-                    code = error.tx_response.code.value(),
-                    log = error.tx_response.log,
-                    data = ?error.tx_response.data,
+                    code = tx_response.code.value(),
+                    log = tx_response.log,
+                    data = ?tx_response.data,
                     "Failed to commit transaction! Error type: {}",
-                    match error.r#type {
+                    match r#type {
                         CommitErrorType::InvalidAccountSequence => "Invalid account sequence",
                         CommitErrorType::Unknown => "Unknown",
                     },
