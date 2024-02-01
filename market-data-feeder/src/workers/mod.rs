@@ -267,9 +267,6 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
             self.node_client,
         )) {
             Ok(provider) => {
-                let provider_friendly_name =
-                    format!("Provider \"{}\" [{}]", self.provider_id, P::ID).into_boxed_str();
-
                 let (commit_result_sender, commit_result_receiver): (
                     CommitResultSender,
                     CommitResultReceiver,
@@ -282,7 +279,6 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                     ProviderWithIds {
                         provider,
                         provider_id: self.provider_id,
-                        provider_friendly_name,
                     },
                     self.worker_task_context,
                     self.price_comparison_provider,
@@ -305,14 +301,12 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
 struct ProviderWithIds<P> {
     provider: P,
     provider_id: Box<str>,
-    provider_friendly_name: Box<str>,
 }
 
 async fn perform_check_and_enter_loop<P>(
     ProviderWithIds {
         provider,
         provider_id,
-        provider_friendly_name,
     }: ProviderWithIds<P>,
     worker_task_context: TaskContext,
     comparison_provider_and_deviation: Option<(Arc<dyn ComparisonProvider>, u64)>,
@@ -334,13 +328,11 @@ where
 
     if prices.is_empty() {
         error!(
-            r#"Price list returned for provider "{provider_friendly_name}" is empty! Exiting providing task."#
+            r#"Price list returned for provider "{provider_id}" is empty! Exiting providing task."#
         );
 
         return Err(error::Worker::EmptyPriceList(provider_id));
     }
-
-    drop(provider_id);
 
     if let Some((comparison_provider, max_deviation_exclusive)) =
         { comparison_provider_and_deviation }
@@ -349,9 +341,7 @@ where
             .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
             .await?;
     } else {
-        info!(
-            r#"Provider "{provider_friendly_name}" isn't associated with a comparison provider."#
-        );
+        info!(r#"Provider "{provider_id}" isn't associated with a comparison provider."#);
     }
 
     print_prices_pretty::print(&provider, &{ prices });
@@ -360,7 +350,7 @@ where
 
     provider_main_loop(
         provider,
-        provider_friendly_name,
+        provider_id,
         worker_task_context,
         node_client,
         oracle_address,
@@ -371,7 +361,7 @@ where
 
 async fn provider_main_loop<P>(
     provider: P,
-    provider_name: Box<str>,
+    provider_id: Box<str>,
     TaskContext {
         tx_request_sender,
         signer_address,
@@ -408,7 +398,7 @@ where
             next_tick,
             handle_idle_work(
                 &node_client,
-                &provider_name,
+                &provider_id,
                 &mut commit_result_receiver,
                 &mut poll_delivered_tx_set,
                 &mut fallback_gas_limit,
@@ -442,7 +432,7 @@ where
 
                 if send_tx_request(message, NonZeroU64::MAX, hard_gas_limit, next_tick).is_err() {
                     info!(
-                        provider_name = %provider_name,
+                        provider_id = %provider_id,
                         "Communication channel has been closed! Exiting worker task..."
                     );
 
@@ -451,7 +441,7 @@ where
             }
             Err(error) => {
                 error!(
-                    provider_name = %provider_name,
+                    provider_id = %provider_id,
                     "Couldn't get price feed! Cause: {:?}",
                     error
                 );
