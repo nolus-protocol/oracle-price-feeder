@@ -11,7 +11,7 @@ use chain_comms::{
     reexport::cosmrs::{tendermint::Hash as TxHash, Any as ProtobufAny},
 };
 
-use crate::mode::{self, TimeInsensitive, TimeSensitive};
+use crate::mode::{self, Blocking, NonBlocking};
 
 #[must_use]
 #[inline]
@@ -68,7 +68,7 @@ pub struct TxRequest<Impl: mode::Impl> {
     pub(crate) expiration: Impl::Expiration,
 }
 
-impl TxRequest<TimeInsensitive> {
+impl TxRequest<Blocking> {
     pub const fn new(
         sender_id: usize,
         messages: Vec<ProtobufAny>,
@@ -85,7 +85,7 @@ impl TxRequest<TimeInsensitive> {
     }
 }
 
-impl TxRequest<TimeSensitive> {
+impl TxRequest<NonBlocking> {
     pub const fn new(
         sender_id: usize,
         messages: Vec<ProtobufAny>,

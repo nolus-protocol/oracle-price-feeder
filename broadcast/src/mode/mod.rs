@@ -14,9 +14,9 @@ pub(crate) use self::sealed::{FilterResult, Impl, PurgeResult};
 
 mod sealed;
 
-pub struct TimeInsensitive;
+pub struct Blocking;
 
-impl Impl for TimeInsensitive {
+impl Impl for Blocking {
     type Expiration = ();
 
     #[inline]
@@ -51,9 +51,9 @@ impl Impl for TimeInsensitive {
     }
 }
 
-pub struct TimeSensitive;
+pub struct NonBlocking;
 
-impl Impl for TimeSensitive {
+impl Impl for NonBlocking {
     type Expiration = Instant;
 
     #[inline]
