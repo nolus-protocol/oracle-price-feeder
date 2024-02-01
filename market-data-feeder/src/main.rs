@@ -1,4 +1,11 @@
-use std::{collections::BTreeMap, future::poll_fn, io, num::NonZeroU64, sync::Arc, task::Poll};
+#![warn(clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::redundant_pub_crate,
+    clippy::significant_drop_tightening
+)]
+
+use std::{io, sync::Arc};
 
 use semver::{
     BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,

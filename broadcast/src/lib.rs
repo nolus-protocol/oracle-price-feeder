@@ -1,3 +1,10 @@
+#![warn(clippy::pedantic, clippy::nursery)]
+#![allow(
+    clippy::missing_errors_doc,
+    clippy::redundant_pub_crate,
+    clippy::significant_drop_tightening
+)]
+
 use std::{
     collections::btree_map::BTreeMap, error::Error, future::poll_fn, task::Poll, time::Duration,
 };
