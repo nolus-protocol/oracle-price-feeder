@@ -38,7 +38,8 @@ enable = true
    export TXFLAG="--chain-id ${CHAIN_ID} --gas auto --gas-adjustment 1.3 --fees 15000unls"
    ```
 
-   *Note: The CHAIN_ID can be found in the produced after network initiliazation 'networks' directory (`./nolus-core/networks/nolus/local-validator-1/genesis.json`).
+*Note: The CHAIN_ID can be found in the produced after network initiliazation 'networks'
+directory (`./nolus-core/networks/nolus/local-validator-1/genesis.json`).
 
 ### Add new key to be used as Feeder
 
@@ -46,7 +47,7 @@ enable = true
    nolusd keys add feeder
    ```
 
-   The output will look like this:
+The output will look like this:
 
    ```yaml
    - name: feeder
@@ -56,7 +57,7 @@ enable = true
      mnemonic: "<MNEMONIC PHRASE>"
    ```
 
-   Store the mnemonic phrase as it will be needed to start the service.
+Store the mnemonic phrase as it will be needed to start the service.
 
 ### Add new key to be used as Dispatcher
 
@@ -64,7 +65,7 @@ enable = true
   nolusd keys add dispatcher
   ```
 
-  Store the mnemonic phrase as it will be needed to start the service.
+Store the mnemonic phrase as it will be needed to start the service.
 
 ### Register feeder address
 
@@ -97,68 +98,71 @@ enable = true
 
 ### Configure service
 
-  At the root of the repository there is a directory called `configurations`.
+At the root of the repository there is a directory called `configurations`.
 
-  In there are several files: `market-data-feeder.main.toml`,
-  `market-data-feeder.test.toml`, `market-data-feeder.dev.toml`, `alarms-dispatcher.main.toml` ...
+In there are several files: `market-data-feeder.main.toml`,
+`market-data-feeder.test.toml`, `market-data-feeder.dev.toml`, `alarms-dispatcher.main.toml` ...
 
-  Depending on whether you want to run the feeder on the main-net, dev-net or the
-  test-net, rename the corresponding file to `market-data-feeder.toml`/`alarms-dispatcher.toml`.
+Depending on whether you want to run the feeder on the main-net, dev-net or the
+test-net, rename the corresponding file to `market-data-feeder.toml`/`alarms-dispatcher.toml`.
 
 * Editing the `market-data-feeder.toml` file:
 
-  * When running through `bash` - replace all instances of entries containing a dash, e.g. `osmosis-lcd`, with their counterpart that uses an underscore, e.g. `osmosis_lcd`.
-  * When desired to run without a sanity check - remove the [providers.osmosis_lcd.comparison], [comparison_providers.sanity_check] and [comparison_providers.sanity_check.ticker_mapping] sections from the configuration file.
+    * When running through `bash` - replace all instances of entries containing a dash, e.g. `osmosis-lcd`, with their
+      counterpart that uses an underscore, e.g. `osmosis_lcd`.
+    * When desired to run without a sanity check - remove
+      the [providers.osmosis_lcd.comparison], [comparison_providers.sanity_check]
+      and [comparison_providers.sanity_check.ticker_mapping] sections from the configuration file.
 
-   |      Key       |            Value             | Default | Description                                                                                                                                       |
-   |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
-   | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
-   | [`tick_time`]  |   &lt;time in seconds&gt;    |   60    | push price on every X seconds                                                                                                                     |
-   | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
-   |   main_type    |            crypto            |         | currently, the only crypto provider that is implemented - Osmosis                                                                                 |
-   |      name      |           osmosis            |         | crypto provider type                                                                                                                              |
-   |   [`oracle`]   |                              |         | Oracle contract configuration                                                                                                                     |
-   | contract_addrs |    &lt;oracle address&gt;    |         | Oracle contract address                                                                                                                           |
-   |     prefix     |            nolus             |         | Nolus prefix                                                                                                                                      |
-   |    chain_id    |                              |         | The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0                                              |
-   |   fee_denom    |             unls             |         | Network denom                                                                                                                                     |
-   |  funds_amount  |                              |         | Amount to be used for transactions                                                                                                                |
-   |   gas_limit    |                              |         | Gas limit (Example: 500_000)                                                                                                                      |
+  |      Key       |            Value             | Default | Description                                                                                                                                       |
+       |:--------------:|:----------------------------:|:-------:|:--------------------------------------------------------------------------------------------------------------------------------------------------|
+  | [`continuous`] |      `true` or `false`       |  true   | if false the service will push a price only once and exit                                                                                         |
+  | [`tick_time`]  |   &lt;time in seconds&gt;    |   60    | push price on every X seconds                                                                                                                     |
+  | [`providers`]  |                              |         | List of price providers. A price provider is an off-chain service that provides prices for crypto or non-crypto assets                            |
+  |   main_type    |            crypto            |         | currently, the only crypto provider that is implemented - Osmosis                                                                                 |
+  |      name      |           osmosis            |         | crypto provider type                                                                                                                              |
+  |   [`oracle`]   |                              |         | Oracle contract configuration                                                                                                                     |
+  | contract_addrs |    &lt;oracle address&gt;    |         | Oracle contract address                                                                                                                           |
+  |     prefix     |            nolus             |         | Nolus prefix                                                                                                                                      |
+  |    chain_id    |                              |         | The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0                                              |
+  |   fee_denom    |             unls             |         | Network denom                                                                                                                                     |
+  |  funds_amount  |                              |         | Amount to be used for transactions                                                                                                                |
+  |   gas_limit    |                              |         | Gas limit (Example: 500_000)                                                                                                                      |
 
 * Editing the `alarms-dispatcher.toml` file:
-  * chain_id - The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0
+    * chain_id - The ID of the chain. This property is configured in the node's configuration. E.g.: nolus-local-v1.0
 
 ### Environment variables configuration
 
-   There are also environment variables which are used for configuring the services.
+There are also environment variables which are used for configuring the services.
 
-   They are as follows:
+They are as follows:
 
 * For feeder & dispatcher:
-  * `DEBUG_LOGGING`
-    Turns on debug logging when running a release build.
-    Possible values:
-    * 1
-    * y
-    * Y
+    * `DEBUG_LOGGING`
+      Turns on debug logging when running a release build.
+      Possible values:
+        * 1
+        * y
+        * Y
 
-  * `JSON_RPC_URL`
-    JSON-RPC endpoint's URL.
+    * `JSON_RPC_URL`
+      JSON-RPC endpoint's URL.
 
-  * `GRPC_URL`
-    gRPC endpoint's URL.
+    * `GRPC_URL`
+      gRPC endpoint's URL.
 
 * For feeder:
-  * `PROVIDER_OSMOSIS_LCD_RPC_URL`
-    Osmosis' GAMM module API endpoint's URL.
+    * `PROVIDER_OSMOSIS_LCD_RPC_URL`
+      Osmosis' GAMM module API endpoint's URL.
 
-  * `PROVIDER_OSMOSIS_LCD_SECONDS_BEFORE_FEEDING`
+    * `PROVIDER_OSMOSIS_LCD_SECONDS_BEFORE_FEEDING`
 
-  * `PROVIDER_OSMOSIS_LCD_MAX_DEVIATION`
+    * `PROVIDER_OSMOSIS_LCD_MAX_DEVIATION`
 
-  * `SIGNING_KEY_MNEMONIC`
+    * `SIGNING_KEY_MNEMONIC`
 
-  * `COMPARISON_PROVIDER_SANITY_CHECK_API_KEY`
+    * `COMPARISON_PROVIDER_SANITY_CHECK_API_KEY`
 
 On local network:
 
@@ -245,7 +249,7 @@ over time. These are provided as a guide.*
 
 * Feeder - one of the following options:
 
-  * ```shell
+    * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
@@ -253,7 +257,7 @@ over time. These are provided as a guide.*
       market-data-feeder
     ```
 
-  * ```shell
+    * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
@@ -261,7 +265,7 @@ over time. These are provided as a guide.*
       market-data-feeder
     ```
 
-  * ```shell
+    * ```shell
       docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
@@ -272,21 +276,21 @@ over time. These are provided as a guide.*
 
 * Dispatcher - one of the following options:
 
-  * ```shell
+    * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       alarms-dispatcher
     ```
 
-  * ```shell
+    * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       alarms-dispatcher
     ```
 
-  * ```shell
+    * ```shell
       docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
       --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
