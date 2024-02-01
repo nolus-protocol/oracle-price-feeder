@@ -69,5 +69,6 @@ git = "https://github.com/nolus-protocol/tendermint-rs.git"
 branch = "feat-set-origin-header"
 
 [profile.release]
+strip = "debuginfo"
 overflow-checks = true
 lto = "fat"
