@@ -1,7 +1,9 @@
-tick_seconds = 60
-between_tx_margin_seconds = 2
-query_delivered_tx_tick_seconds = 15
 hard_gas_limit = 10_000_000
+
+[broadcast]
+tick_time_seconds = 60
+poll_time_seconds = 15
+between_tx_margin_seconds = 2
 
 [node]
 address_prefix = "nolus"
