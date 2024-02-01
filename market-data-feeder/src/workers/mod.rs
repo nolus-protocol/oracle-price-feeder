@@ -50,6 +50,7 @@ pub(crate) struct SpawnContext {
     pub(crate) tx_request_sender: TxRequestSender<NonBlocking>,
     pub(crate) signer_address: Arc<str>,
     pub(crate) hard_gas_limit: NonZeroU64,
+    pub(crate) time_before_feeding: Duration,
     pub(crate) tick_time: Duration,
     pub(crate) poll_time: Duration,
 }
@@ -62,6 +63,7 @@ pub fn spawn(
         tx_request_sender,
         signer_address,
         hard_gas_limit,
+        time_before_feeding,
         tick_time,
         poll_time,
     }: SpawnContext,
@@ -89,6 +91,7 @@ pub fn spawn(
             signer_address,
             price_comparison_providers,
             hard_gas_limit,
+            time_before_feeding,
             tick_time,
             poll_time,
         }))
@@ -127,6 +130,7 @@ struct TryForEachProviderContext<'r> {
     signer_address: Arc<str>,
     price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>>,
     hard_gas_limit: NonZeroU64,
+    time_before_feeding: Duration,
     tick_time: Duration,
     poll_time: Duration,
 }
@@ -140,6 +144,7 @@ fn try_for_each_provider_f(
         signer_address,
         price_comparison_providers,
         hard_gas_limit,
+        time_before_feeding,
         tick_time,
         poll_time,
     }: TryForEachProviderContext<'_>,
@@ -191,7 +196,7 @@ fn try_for_each_provider_f(
                             provider_id,
                             provider_config: config.provider,
                             price_comparison_provider,
-                            time_before_feeding: config.time_before_feeding,
+                            time_before_feeding,
                         },
                     )
                     .ok_or(error::Application::UnknownProviderId(provider_name))

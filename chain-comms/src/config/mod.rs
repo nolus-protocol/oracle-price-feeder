@@ -17,13 +17,6 @@ use self::error::Result as ModuleResult;
 
 pub mod error;
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-struct CoinDTO {
-    amount: String,
-    denom: String,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 #[must_use]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
@@ -102,13 +95,29 @@ impl AsRef<Self> for Node {
     }
 }
 
-fn deserialize_chain_id<'de, D>(deserializer: D) -> Result<ChainId, D::Error>
+pub fn read_from_env<'de, T, D>(var_name: &'static str) -> Result<T, D::Error>
 where
+    T: FromStr,
+    T::Err: StdError,
     D: Deserializer<'de>,
 {
-    String::deserialize(deserializer)?
-        .parse()
-        .map_err(DeserializeError::custom)
+    maybe_read_from_env::<'de, T, D>(var_name)
+        .and_then(|maybe_value| maybe_value.ok_or_else(|| D::Error::missing_field(var_name)))
+}
+
+pub fn maybe_read_from_env<'de, T, D>(var_name: &'static str) -> Result<Option<T>, D::Error>
+where
+    T: FromStr,
+    T::Err: StdError,
+    D: Deserializer<'de>,
+{
+    match var(var_name) {
+        Ok(value) => T::from_str(&value).map(Some).map_err(D::Error::custom),
+        Err(VarError::NotPresent) => Ok(None),
+        Err(VarError::NotUnicode(_)) => Err(D::Error::custom(format!(
+            r#"Value for environment variable "{var_name}" contains invalid unicode data."#,
+        ))),
+    }
 }
 
 pub async fn read<C, P>(path: P) -> ModuleResult<C>
@@ -159,27 +168,18 @@ impl<'de> Deserialize<'de> for Environment {
     }
 }
 
-fn read_from_env<'de, T, D>(var_name: &'static str) -> Result<T, D::Error>
-where
-    T: FromStr,
-    T::Err: StdError,
-    D: Deserializer<'de>,
-{
-    maybe_read_from_env::<'de, T, D>(var_name)
-        .and_then(|maybe_value| maybe_value.ok_or_else(|| D::Error::missing_field(var_name)))
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+struct CoinDTO {
+    amount: String,
+    denom: String,
 }
 
-fn maybe_read_from_env<'de, T, D>(var_name: &'static str) -> Result<Option<T>, D::Error>
+fn deserialize_chain_id<'de, D>(deserializer: D) -> Result<ChainId, D::Error>
 where
-    T: FromStr,
-    T::Err: StdError,
     D: Deserializer<'de>,
 {
-    match var(var_name) {
-        Ok(value) => T::from_str(&value).map(Some).map_err(D::Error::custom),
-        Err(VarError::NotPresent) => Ok(None),
-        Err(VarError::NotUnicode(_)) => Err(D::Error::custom(format!(
-            r#"Value for environment variable "{var_name}" contains invalid unicode data."#,
-        ))),
-    }
+    String::deserialize(deserializer)?
+        .parse()
+        .map_err(DeserializeError::custom)
 }

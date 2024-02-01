@@ -100,6 +100,7 @@ async fn app_main() -> Result<()> {
                     tx_request_sender,
                     signer_address,
                     hard_gas_limit: config.hard_gas_limit,
+                    time_before_feeding: config.time_before_feeding,
                     tick_time: config.broadcast.tick_time,
                     poll_time: config.broadcast.poll_time,
                 })

@@ -13,7 +13,7 @@ use serde::{
 use thiserror::Error as ThisError;
 
 use broadcast::config::Config as BroadcastConfig;
-use chain_comms::config::Node as NodeConfig;
+use chain_comms::config::{read_from_env, Node as NodeConfig};
 
 use self::str_pool::StrPool;
 
@@ -52,6 +52,7 @@ impl SymbolAndDecimalPlaces {
 #[must_use]
 pub(crate) struct Config {
     pub hard_gas_limit: NonZeroU64,
+    pub time_before_feeding: Duration,
     pub broadcast: BroadcastConfig,
     pub node: NodeConfig,
     pub oracles: BTreeMap<Arc<str>, Arc<str>>,
@@ -74,6 +75,9 @@ impl<'de> Deserialize<'de> for Config {
             providers: raw_providers,
             comparison_providers: raw_comparison_providers,
         }: raw::Config = raw::Config::deserialize(deserializer)?;
+
+        let time_before_feeding: Duration =
+            read_from_env::<u64, D>("SECONDS_BEFORE_FEEDING").map(Duration::from_secs)?;
 
         let mut oracles: BTreeMap<Arc<str>, Arc<str>> = BTreeMap::new();
 
@@ -100,6 +104,7 @@ impl<'de> Deserialize<'de> for Config {
 
         Ok(Self {
             hard_gas_limit,
+            time_before_feeding,
             broadcast,
             node,
             oracles,
@@ -218,7 +223,6 @@ impl ProviderConfigExt<false> for Provider {
 #[must_use]
 pub(crate) struct ProviderWithComparison {
     pub provider: Provider,
-    pub time_before_feeding: Duration,
     pub comparison: Option<ComparisonProviderIdAndMaxDeviation>,
 }
 

@@ -1,7 +1,6 @@
 use std::{
     collections::btree_map::{BTreeMap, Entry as BTreeMapEntry},
     sync::Arc,
-    time::Duration,
 };
 
 use serde::de::{Deserializer, Error as DeserializeError};
@@ -39,8 +38,6 @@ where
         let oracle_id: Arc<str> = str_pool.get_or_insert(oracle_id);
         let oracle_address: Arc<str> = get_oracle::<D>(oracles, &oracle_id)?;
 
-        let time_before_feeding: Duration = extract_time_before_feeding::<D>(&id)?;
-
         let provider: ProviderWithComparison = ProviderWithComparison {
             provider: Provider {
                 name: str_pool.get_or_insert(name),
@@ -48,7 +45,6 @@ where
                 oracle_address,
                 misc,
             },
-            time_before_feeding,
             comparison: map_comparison_provider_option::<D>(comparison, &id, &mut str_pool)?,
         };
 
@@ -64,20 +60,6 @@ where
     }
 
     Ok(providers)
-}
-
-fn extract_time_before_feeding<'de, D>(id: &str) -> Result<Duration, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    <Provider as ProviderConfigExt<false>>::fetch_from_env(id, "seconds_before_feeding")
-        .map_err(DeserializeError::custom)
-        .and_then(|value: String| {
-            value
-                .parse()
-                .map(Duration::from_secs)
-                .map_err(DeserializeError::custom)
-        })
 }
 
 fn map_comparison_provider_option<'de, D>(
