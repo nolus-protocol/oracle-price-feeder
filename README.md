@@ -143,8 +143,8 @@ They are as follows:
       Turns on debug logging when running a release build.
       Possible values:
         * 1
-        * y
-        * Y
+        * y (lowercase)
+        * Y (uppercase)
 
     * `JSON_RPC_URL`
       JSON-RPC endpoint's URL.
