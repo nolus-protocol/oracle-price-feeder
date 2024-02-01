@@ -1,14 +1,29 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, num::NonZeroU64, sync::Arc, time::Duration};
 
 use tokio::{
     runtime::Handle,
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    task::{block_in_place, JoinSet},
-    time::{interval, sleep, Instant, Interval},
+    select,
+    task::{block_in_place, JoinError, JoinSet},
+    time::{error::Elapsed, sleep, timeout_at, Instant},
 };
 use tracing::info;
 
-use chain_comms::client::Client as NodeClient;
+use broadcast::{
+    generators::{
+        CommitError, CommitErrorType, CommitResult, CommitResultReceiver, CommitResultSender,
+        SpawnResult, TxRequest, TxRequestSender,
+    },
+    mode::NonBlocking,
+    poll_delivered_tx,
+};
+use chain_comms::{
+    client::Client as NodeClient,
+    reexport::cosmrs::{
+        proto::{cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny},
+        tendermint::{abci::response::DeliverTx, Hash as TxHash},
+        tx::MessageExt as _,
+    },
+};
 
 use crate::{
     config::{
@@ -24,43 +39,34 @@ use crate::{
     },
     providers::{self, ComparisonProviderVisitor, ProviderVisitor},
     result::Result as AppResult,
-    UnboundedChannel,
 };
 
 mod print_prices_pretty;
 
-const MAX_SEQ_ERRORS: u8 = 5;
-
-const MAX_SEQ_ERRORS_SLEEP_DURATION: Duration = Duration::from_secs(60);
-
-#[derive(Clone)]
-pub(crate) struct PriceDataMessage {
-    pub oracle: Arc<str>,
-    pub execute_message: Arc<[u8]>,
+pub(crate) struct SpawnContext {
+    pub(crate) node_client: NodeClient,
+    pub(crate) providers: BTreeMap<Box<str>, ProviderWithComparisonConfig>,
+    pub(crate) price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
+    pub(crate) tx_request_sender: TxRequestSender<NonBlocking>,
+    pub(crate) signer_address: Arc<str>,
+    pub(crate) hard_gas_limit: NonZeroU64,
+    pub(crate) tick_time: Duration,
+    pub(crate) poll_time: Duration,
 }
 
-pub(crate) struct PriceDataPacket {
-    pub provider_id: usize,
-    pub tx_time: Instant,
-    pub message: PriceDataMessage,
-}
-
-type PriceDataSender = UnboundedSender<PriceDataPacket>;
-type PriceDataReceiver = UnboundedReceiver<PriceDataPacket>;
-
-pub(crate) struct SpawnWorkersReturn {
-    pub set: JoinSet<Result<(), error::Worker>>,
-    pub id_to_name_mapping: BTreeMap<usize, Arc<str>>,
-    pub receiver: PriceDataReceiver,
-}
-
-pub(crate) fn spawn(
-    node_client: NodeClient,
-    providers: BTreeMap<Arc<str>, ProviderWithComparisonConfig>,
-    price_comparison_providers: BTreeMap<Arc<str>, ComparisonProviderConfig>,
-    tick_time: Duration,
-) -> AppResult<SpawnWorkersReturn> {
-    let mut set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
+pub fn spawn(
+    SpawnContext {
+        node_client,
+        providers,
+        price_comparison_providers,
+        tx_request_sender,
+        signer_address,
+        hard_gas_limit,
+        tick_time,
+        poll_time,
+    }: SpawnContext,
+) -> AppResult<SpawnResult<error::Worker>> {
+    let mut tx_generators_set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
 
     let price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>> =
         block_in_place(|| {
@@ -70,26 +76,23 @@ pub(crate) fn spawn(
                 .collect::<Result<_, _>>()
         })?;
 
-    let mut id_to_name_mapping = BTreeMap::new();
-
-    let (sender, receiver): UnboundedChannel<PriceDataPacket> = unbounded_channel();
+    let mut tx_result_senders: BTreeMap<usize, CommitResultSender> = BTreeMap::new();
 
     providers
         .into_iter()
         .enumerate()
-        .try_for_each(try_for_each_provider_f(
-            price_comparison_providers,
-            &mut set,
-            &mut id_to_name_mapping,
-            tick_time,
+        .try_for_each(try_for_each_provider_f(TryForEachProviderContext {
             node_client,
-            sender,
-        ))
-        .map(|()| SpawnWorkersReturn {
-            set,
-            id_to_name_mapping,
-            receiver,
-        })
+            tx_generators_set: &mut tx_generators_set,
+            tx_result_senders: &mut tx_result_senders,
+            tx_request_sender,
+            signer_address,
+            price_comparison_providers,
+            hard_gas_limit,
+            tick_time,
+            poll_time,
+        }))
+        .map(|()| SpawnResult::new(tx_generators_set, tx_result_senders))
 }
 
 fn construct_comparison_provider_f(
@@ -116,17 +119,34 @@ fn construct_comparison_provider_f(
     }
 }
 
-fn try_for_each_provider_f<'r>(
-    price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>>,
-    set: &'r mut JoinSet<Result<(), error::Worker>>,
-    id_to_name_mapping: &'r mut BTreeMap<usize, Arc<str>>,
-    tick_time: Duration,
+struct TryForEachProviderContext<'r> {
     node_client: NodeClient,
-    price_data_sender: PriceDataSender,
-) -> impl FnMut((usize, (Arc<str>, ProviderWithComparisonConfig))) -> AppResult<()> + 'r {
+    tx_generators_set: &'r mut JoinSet<Result<(), error::Worker>>,
+    tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
+    tx_request_sender: TxRequestSender<NonBlocking>,
+    signer_address: Arc<str>,
+    price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>>,
+    hard_gas_limit: NonZeroU64,
+    tick_time: Duration,
+    poll_time: Duration,
+}
+
+fn try_for_each_provider_f(
+    TryForEachProviderContext {
+        node_client,
+        tx_generators_set,
+        tx_result_senders,
+        tx_request_sender,
+        signer_address,
+        price_comparison_providers,
+        hard_gas_limit,
+        tick_time,
+        poll_time,
+    }: TryForEachProviderContext<'_>,
+) -> impl FnMut((usize, (Box<str>, ProviderWithComparisonConfig))) -> AppResult<()> + '_ {
     move |(monotonic_id, (provider_id, config)): (
         usize,
-        (Arc<str>, ProviderWithComparisonConfig),
+        (Box<str>, ProviderWithComparisonConfig),
     )| {
         config
             .comparison
@@ -144,31 +164,34 @@ fn try_for_each_provider_f<'r>(
                                 ))
                             },
                             |provider: &Arc<dyn ComparisonProvider>| {
-                                Ok((provider, max_deviation_exclusive))
+                                Ok((provider.clone(), max_deviation_exclusive))
                             },
                         )
                 },
             )
             .transpose()
             .and_then(
-                |price_comparison_provider: Option<(&Arc<dyn ComparisonProvider>, u64)>| {
+                |price_comparison_provider: Option<(Arc<dyn ComparisonProvider>, u64)>| {
                     let provider_name: Arc<str> = config.provider.name().clone();
 
                     providers::Providers::visit_provider(
                         &provider_name,
                         TaskSpawningProviderVisitor {
-                            worker_task_spawner_config: TaskSpawnerConfig {
-                                set,
+                            worker_task_context: TaskContext {
+                                tx_request_sender: tx_request_sender.clone(),
+                                signer_address: signer_address.clone(),
+                                hard_gas_limit,
                                 monotonic_id,
                                 tick_time,
-                                price_comparison_provider,
+                                poll_time,
                             },
-                            id_to_name_mapping,
+                            node_client: &node_client,
+                            tx_generators_set,
+                            tx_result_senders,
                             provider_id,
                             provider_config: config.provider,
+                            price_comparison_provider,
                             time_before_feeding: config.time_before_feeding,
-                            node_client: &node_client,
-                            sender: &price_data_sender,
                         },
                     )
                     .ok_or(error::Application::UnknownProviderId(provider_name))
@@ -178,11 +201,13 @@ fn try_for_each_provider_f<'r>(
     }
 }
 
-struct TaskSpawnerConfig<'r> {
-    set: &'r mut JoinSet<Result<(), error::Worker>>,
+struct TaskContext {
+    tx_request_sender: TxRequestSender<NonBlocking>,
+    signer_address: Arc<str>,
+    hard_gas_limit: NonZeroU64,
     monotonic_id: usize,
     tick_time: Duration,
-    price_comparison_provider: Option<(&'r Arc<dyn ComparisonProvider>, u64)>,
+    poll_time: Duration,
 }
 
 struct PriceComparisonProviderVisitor<'r> {
@@ -212,13 +237,14 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
 }
 
 struct TaskSpawningProviderVisitor<'r> {
-    worker_task_spawner_config: TaskSpawnerConfig<'r>,
-    id_to_name_mapping: &'r mut BTreeMap<usize, Arc<str>>,
-    provider_id: Arc<str>,
-    provider_config: ProviderConfig,
-    time_before_feeding: Duration,
+    worker_task_context: TaskContext,
     node_client: &'r NodeClient,
-    sender: &'r PriceDataSender,
+    tx_generators_set: &'r mut JoinSet<Result<(), error::Worker>>,
+    tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
+    provider_id: Box<str>,
+    provider_config: ProviderConfig,
+    price_comparison_provider: Option<(Arc<dyn ComparisonProvider>, u64)>,
+    time_before_feeding: Duration,
 }
 
 impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
@@ -228,7 +254,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
     where
         P: Provider + FromConfig<false>,
     {
-        let oracle_address = self.provider_config.oracle_addr().clone();
+        let oracle_address: Arc<str> = self.provider_config.oracle_addr().clone();
 
         match Handle::current().block_on(<P as FromConfig<false>>::from_config(
             &self.provider_id,
@@ -239,26 +265,27 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
                 let provider_friendly_name =
                     format!("Provider \"{}\" [{}]", self.provider_id, P::ID).into_boxed_str();
 
-                self.id_to_name_mapping.insert(
-                    self.worker_task_spawner_config.monotonic_id,
-                    self.provider_id.clone(),
-                );
+                let (commit_result_sender, commit_result_receiver): (
+                    CommitResultSender,
+                    CommitResultReceiver,
+                ) = broadcast::generators::new_results_channel();
 
-                self.worker_task_spawner_config
-                    .set
-                    .spawn(perform_check_and_enter_loop(
-                        (provider, self.provider_id.clone(), provider_friendly_name),
-                        self.worker_task_spawner_config
-                            .price_comparison_provider
-                            .map(|(comparison_provider, max_deviation_exclusive)| {
-                                (comparison_provider.clone(), max_deviation_exclusive)
-                            }),
-                        self.time_before_feeding,
-                        oracle_address,
-                        self.sender.clone(),
-                        self.worker_task_spawner_config.monotonic_id,
-                        self.worker_task_spawner_config.tick_time,
-                    ));
+                self.tx_result_senders
+                    .insert(self.worker_task_context.monotonic_id, commit_result_sender);
+
+                self.tx_generators_set.spawn(perform_check_and_enter_loop(
+                    ProviderWithIds {
+                        provider,
+                        provider_id: self.provider_id,
+                        provider_friendly_name,
+                    },
+                    self.worker_task_context,
+                    self.price_comparison_provider,
+                    self.time_before_feeding,
+                    self.node_client.clone(),
+                    oracle_address,
+                    commit_result_receiver,
+                ));
 
                 Ok(())
             }
@@ -270,14 +297,24 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
     }
 }
 
+struct ProviderWithIds<P> {
+    provider: P,
+    provider_id: Box<str>,
+    provider_friendly_name: Box<str>,
+}
+
 async fn perform_check_and_enter_loop<P>(
-    (provider, provider_id, provider_friendly_name): (P, Arc<str>, Box<str>),
+    ProviderWithIds {
+        provider,
+        provider_id,
+        provider_friendly_name,
+    }: ProviderWithIds<P>,
+    worker_task_context: TaskContext,
     comparison_provider_and_deviation: Option<(Arc<dyn ComparisonProvider>, u64)>,
     time_before_feeding: Duration,
+    node_client: NodeClient,
     oracle_address: Arc<str>,
-    sender: PriceDataSender,
-    monotonic_id: usize,
-    tick_time: Duration,
+    commit_result_receiver: CommitResultReceiver,
 ) -> Result<(), error::Worker>
 where
     P: Provider,
@@ -300,7 +337,8 @@ where
 
     drop(provider_id);
 
-    if let Some((comparison_provider, max_deviation_exclusive)) = comparison_provider_and_deviation
+    if let Some((comparison_provider, max_deviation_exclusive)) =
+        { comparison_provider_and_deviation }
     {
         comparison_provider
             .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
@@ -311,64 +349,99 @@ where
         );
     }
 
-    print_prices_pretty::print(&provider, &prices);
+    print_prices_pretty::print(&provider, &{ prices });
 
     sleep(time_before_feeding).await;
 
     provider_main_loop(
         provider,
-        move |message: Arc<[u8]>| {
-            sender
-                .send(PriceDataPacket {
-                    provider_id: monotonic_id,
-                    tx_time: Instant::now(),
-                    message: PriceDataMessage {
-                        oracle: oracle_address.clone(),
-                        execute_message: message,
-                    },
-                })
-                .map_err(|_| ())
-        },
         provider_friendly_name,
-        tick_time,
+        worker_task_context,
+        node_client,
+        oracle_address,
+        commit_result_receiver,
     )
     .await
 }
 
-async fn provider_main_loop<SenderFn, P>(
+async fn provider_main_loop<P>(
     provider: P,
-    sender: SenderFn,
     provider_name: Box<str>,
-    tick_time: Duration,
+    TaskContext {
+        tx_request_sender,
+        signer_address,
+        hard_gas_limit,
+        monotonic_id,
+        tick_time,
+        poll_time,
+    }: TaskContext,
+    node_client: NodeClient,
+    oracle_address: Arc<str>,
+    mut commit_result_receiver: CommitResultReceiver,
 ) -> Result<(), error::Worker>
 where
-    SenderFn: Fn(Arc<[u8]>) -> Result<(), ()>,
     P: Provider,
 {
-    let mut interval: Interval = interval(tick_time);
+    let send_tx_request = move |message, fallback_gas_limit, hard_gas_limit, expiration| {
+        tx_request_sender.send(TxRequest::<NonBlocking>::new(
+            monotonic_id,
+            vec![message],
+            fallback_gas_limit,
+            hard_gas_limit,
+            expiration,
+        ))
+    };
 
-    let mut seq_error_counter: u8 = 0;
+    let mut fallback_gas_limit: NonZeroU64 = hard_gas_limit;
+
+    let mut poll_delivered_tx_set: JoinSet<Option<(TxHash, DeliverTx)>> = JoinSet::new();
+
+    let mut next_tick: Instant = Instant::now();
 
     'worker_loop: loop {
-        interval.tick().await;
+        let idle_work_result: Result<ChannelClosed, Elapsed> = timeout_at(
+            next_tick,
+            handle_idle_work(
+                &node_client,
+                &provider_name,
+                &mut commit_result_receiver,
+                &mut poll_delivered_tx_set,
+                &mut fallback_gas_limit,
+                tick_time,
+                poll_time,
+            ),
+        )
+        .await;
+
+        match idle_work_result {
+            Ok(ChannelClosed {}) => {
+                break 'worker_loop;
+            }
+            Err(Elapsed { .. }) => {}
+        };
 
         match provider.get_prices(true).await {
             Ok(prices) => {
-                seq_error_counter = 0;
+                let message: Vec<u8> =
+                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?.into_bytes();
 
-                if sender(
-                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?
-                        .into_bytes()
-                        .into(),
-                )
-                .is_err()
-                {
+                let message: ProtobufAny = MsgExecuteContract {
+                    sender: signer_address.to_string(),
+                    contract: oracle_address.to_string(),
+                    msg: message,
+                    funds: Vec::new(),
+                }
+                .to_any()?;
+
+                next_tick = Instant::now() + tick_time;
+
+                if send_tx_request(message, NonZeroU64::MAX, hard_gas_limit, next_tick).is_err() {
                     info!(
                         provider_name = %provider_name,
                         "Communication channel has been closed! Exiting worker task..."
                     );
 
-                    break 'worker_loop Ok(());
+                    break 'worker_loop;
                 }
             }
             Err(error) => {
@@ -377,15 +450,128 @@ where
                     "Couldn't get price feed! Cause: {:?}",
                     error
                 );
-
-                if seq_error_counter == MAX_SEQ_ERRORS {
-                    info!(provider_name = %provider_name, "Falling asleep...");
-
-                    sleep(MAX_SEQ_ERRORS_SLEEP_DURATION).await;
-                } else {
-                    seq_error_counter += 1;
-                }
             }
         };
     }
+
+    poll_delivered_tx_set.shutdown().await;
+
+    Ok(())
+}
+
+struct ChannelClosed;
+
+async fn handle_idle_work(
+    node_client: &NodeClient,
+    provider_name: &str,
+    commit_result_receiver: &mut CommitResultReceiver,
+    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, DeliverTx)>>,
+    fallback_gas_limit: &mut NonZeroU64,
+    tick_time: Duration,
+    poll_time: Duration,
+) -> ChannelClosed {
+    loop {
+        select! {
+            maybe_result = commit_result_receiver.recv() => {
+                if let Some(result) = maybe_result {
+                    handle_commit_result(
+                        node_client,
+                        poll_delivered_tx_set,
+                        result,
+                        tick_time,
+                        poll_time,
+                    );
+                } else {
+                    break ChannelClosed {};
+                }
+            }
+            Some(result) = poll_delivered_tx_set.join_next(), if !poll_delivered_tx_set.is_empty() => {
+                handle_delivered_tx(provider_name, fallback_gas_limit, result);
+            }
+        }
+    }
+}
+
+fn handle_commit_result(
+    node_client: &NodeClient,
+    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, DeliverTx)>>,
+    result: CommitResult,
+    tick_time: Duration,
+    poll_time: Duration,
+) {
+    match result {
+        Ok(tx_hash) => {
+            let node_client: NodeClient = node_client.clone();
+
+            poll_delivered_tx_set.spawn(async move {
+                poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash)
+                    .await
+                    .map(|tx: DeliverTx| (tx_hash, tx))
+            });
+        }
+        Err(CommitError {
+            r#type,
+            tx_response,
+        }) => {
+            error!(
+                code = tx_response.code.value(),
+                log = tx_response.log,
+                data = ?tx_response.data,
+                "Failed to commit transaction! Error type: {}",
+                match r#type {
+                    CommitErrorType::InvalidAccountSequence => "Invalid account sequence",
+                    CommitErrorType::Unknown => "Unknown",
+                },
+            );
+        }
+    }
+}
+
+fn handle_delivered_tx(
+    provider_name: &str,
+    fallback_gas_limit: &mut NonZeroU64,
+    result: Result<Option<(TxHash, DeliverTx)>, JoinError>,
+) {
+    match result {
+        Ok(Some((tx_hash, delivered_tx))) => {
+            crate::log::tx_response(provider_name, &tx_hash, &delivered_tx);
+
+            *fallback_gas_limit = update_fallback_gas_limit(
+                *fallback_gas_limit,
+                delivered_tx.gas_used.unsigned_abs(),
+            );
+        }
+        Ok(None) => {}
+        Err(error) => {
+            error!(
+                "Task polling delivered transaction {}!",
+                if error.is_panic() {
+                    "panicked"
+                } else if error.is_cancelled() {
+                    "was cancelled"
+                } else {
+                    unreachable!()
+                }
+            );
+        }
+    }
+}
+
+#[inline]
+fn update_fallback_gas_limit(fallback_gas_limit: NonZeroU64, gas_used: u64) -> NonZeroU64 {
+    NonZeroU64::new({
+        let (mut n, overflow): (u64, bool) = fallback_gas_limit.get().overflowing_add(gas_used);
+
+        n >>= 1;
+
+        if overflow {
+            n |= 1 << (u64::BITS - 1);
+        }
+
+        n
+    })
+    .unwrap_or_else(
+        #[cold]
+        || unreachable!(),
+    )
 }

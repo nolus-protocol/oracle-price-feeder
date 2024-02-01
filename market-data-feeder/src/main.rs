@@ -12,30 +12,24 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 use serde::Deserialize;
-use tokio::{
-    select,
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-    task::{block_in_place, JoinSet},
-    time::{sleep as tokio_sleep, sleep_until as tokio_sleep_until, Instant},
-};
-use tracing::{error, error_span, info, warn};
+use tokio::task::block_in_place;
+use tracing::{error, info};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
     rolling,
 };
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
+use broadcast::broadcast;
 use chain_comms::{
-    build_tx::ContractTx,
     client::Client as NodeClient,
-    config::Node as NodeConfig,
-    interact::{commit, get_tx_response, query},
+    interact::query,
     reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 
-use self::{config::Config, messages::QueryMsg, result::Result, workers::PriceDataPacket};
+use self::{config::Config, messages::QueryMsg, result::Result, workers::SpawnContext};
 
 mod config;
 mod deviation;
@@ -55,8 +49,6 @@ const COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
     patch: None,
     pre: SemVerPrerelease::EMPTY,
 };
-
-type UnboundedChannel<T> = (UnboundedSender<T>, UnboundedReceiver<T>);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -83,7 +75,7 @@ async fn main() -> Result<()> {
 
 async fn app_main() -> Result<()> {
     let RpcSetup {
-        mut signer,
+        signer,
         config,
         node_client,
         ..
@@ -91,184 +83,42 @@ async fn app_main() -> Result<()> {
 
     check_compatibility(&config, &node_client).await?;
 
-    info!("Starting workers...");
+    let spawn_generators_f = {
+        let node_client: NodeClient = node_client.clone();
 
-    let workers::SpawnWorkersReturn {
-        set: mut price_fetchers_set,
-        id_to_name_mapping,
-        receiver: mut price_data_receiver,
-    }: workers::SpawnWorkersReturn = block_in_place(|| {
-        workers::spawn(
-            node_client.clone(),
-            config.providers,
-            config.comparison_providers,
-            config.tick_time,
-        )
-    })?;
+        let signer_address: Arc<str> = Arc::from(signer.signer_address());
 
-    info!("Entering broadcasting loop...");
+        move |tx_request_sender| {
+            info!("Starting workers...");
 
-    let node_config: Arc<NodeConfig> = Arc::new(config.node);
+            block_in_place(move || {
+                workers::spawn(SpawnContext {
+                    node_client: node_client.clone(),
+                    providers: config.providers,
+                    price_comparison_providers: config.comparison_providers,
+                    tx_request_sender,
+                    signer_address,
+                    hard_gas_limit: config.hard_gas_limit,
+                    tick_time: config.broadcast.tick_time,
+                    poll_time: config.broadcast.poll_time,
+                })
+            })
+            .map(|spawn_result| {
+                info!("Workers started successfully.");
 
-    let (retry_sender, mut retry_receiver): UnboundedChannel<PriceDataPacket> = unbounded_channel();
-
-    let mut delivered_tx_fetchers_set: JoinSet<Option<NonZeroU64>> = JoinSet::new();
-
-    let mut latest_timestamps: BTreeMap<usize, Instant> = BTreeMap::new();
-
-    let mut fallback_gas_limit: Option<NonZeroU64> = None;
-
-    let mut next_signing_timestamp = Instant::now();
-
-    'outer_loop: loop {
-        select! {
-            Some(result) = price_fetchers_set.join_next(), if !price_fetchers_set.is_empty() => {
-                match result {
-                    Ok(Ok(())) => {},
-                    Ok(Err(error)) => error!(
-                        error = ?error,
-                        "Provider exitted prematurely! Error: {error}",
-                    ),
-                    Err(error) => error!(
-                        error = ?error,
-                        "Provider exitted prematurely and was unable to be joined! Probable cause is a panic! Error: {error}",
-                    ),
-                }
-            }
-            Some(result) = delivered_tx_fetchers_set.join_next(), if !delivered_tx_fetchers_set.is_empty() => {
-                match result {
-                    Ok(Some(gas_used)) => fallback_gas_limit = Some(fallback_gas_limit.unwrap_or(gas_used).max(gas_used)),
-                    Ok(None) => {}
-                    Err(error) => error!(
-                        error = ?error,
-                        "Failure reported back from delivered transaction logger! Probable cause is a panic! Error: {error}",
-                    ),
-                }
-            }
-            Some(price_data_packet) = poll_fn(|cx| {
-                if let Poll::Ready(packet) = price_data_receiver.poll_recv(cx) {
-                    if packet.is_some() {
-                        return Poll::Ready(packet);
-                    }
-
-                    retry_receiver.close();
-                }
-
-                retry_receiver.poll_recv(cx)
-            }) => {
-                let PriceDataPacket {
-                    provider_id,
-                    tx_time,
-                    ..
-                } = price_data_packet;
-
-                if tx_time.elapsed() >= config.tick_time {
-                    warn!(
-                        provider = id_to_name_mapping[&provider_id].as_ref(),
-                        "Transaction data timed out."
-                    );
-
-                    continue;
-                }
-
-                let saved_timestamp = latest_timestamps.entry(provider_id).or_insert(tx_time);
-
-                if *saved_timestamp < tx_time {
-                    *saved_timestamp = tx_time;
-                } else if *saved_timestamp != tx_time {
-                    warn!(
-                        provider = id_to_name_mapping[&provider_id].as_ref(),
-                        "Transaction data already superceded."
-                    );
-
-                    continue;
-                }
-
-                if next_signing_timestamp.elapsed() < config.between_tx_margin_time {
-                    tokio_sleep_until(next_signing_timestamp).await;
-                }
-
-                let result = commit::with_gas_estimation(
-                    &mut signer,
-                    &node_client,
-                    &node_config,
-                    config.hard_gas_limit,
-                    fallback_gas_limit.unwrap_or(config.hard_gas_limit),
-                    ContractTx::new(price_data_packet.message.oracle.as_ref().into()).add_message(
-                        price_data_packet.message.execute_message.to_vec(),
-                        Vec::new(),
-                    ),
-                )
-                .await;
-
-                next_signing_timestamp = Instant::now() + config.between_tx_margin_time;
-
-                match result {
-                    Ok(response) => {
-                        log::commit_response(&id_to_name_mapping[&provider_id], &response);
-
-                        let hash = response.hash;
-                        let node_client = node_client.clone();
-                        let retry_sender = retry_sender.clone();
-                        let provider_id = id_to_name_mapping[&provider_id].clone();
-
-                        delivered_tx_fetchers_set.spawn(async move {
-                            tokio_sleep(config.retry_tick_time).await;
-
-                            match get_tx_response(&node_client, hash).await {
-                                Ok(response) => {
-                                    log::tx_response(&{ provider_id }, &hash, &response);
-
-                                    NonZeroU64::new(response.gas_used.unsigned_abs())
-                                        .map(|gas_used| {
-                                            gas_used.min(config.hard_gas_limit)
-                                        })
-                                }
-                                Err(error) => {
-                                    error_span!(
-                                        "Delivered Tx",
-                                        provider_id = { provider_id }.as_ref(),
-                                    )
-                                    .in_scope(|| {
-                                        info!("Hash: {hash}");
-
-                                        error!(
-                                            error = ?error,
-                                            "Failed to fetch transaction response! Cause: {error}",
-                                        );
-
-                                        info!("Sending transaction for retry.");
-
-                                        if retry_sender.send(price_data_packet).is_err() {
-                                            warn!("Sending for retry failed. Channel is closed.");
-                                        }
-                                    });
-
-                                    None
-                                }
-                            }
-                        });
-                    }
-                    Err(error) => error!(
-                        error = ?error,
-                        "Failed to feed data into oracle! Cause: {error}",
-                    ),
-                }
-            }
-            else => {
-                warn!("Transaction receiving channel is closed!");
-
-                retry_receiver.close();
-
-                break 'outer_loop;
-            }
+                spawn_result
+            })
         }
-    }
+    };
 
-    assert!(price_fetchers_set.is_empty());
-    assert!(delivered_tx_fetchers_set.is_empty());
-
-    Ok(())
+    broadcast::<broadcast::mode::NonBlocking, _, _, _>(
+        signer,
+        config.broadcast,
+        node_client,
+        config.node,
+        spawn_generators_f,
+    )
+    .await
 }
 
 async fn check_compatibility(config: &Config, node_client: &NodeClient) -> Result<()> {
