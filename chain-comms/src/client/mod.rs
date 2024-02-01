@@ -42,16 +42,16 @@ impl Client {
 
     pub async fn with_json_rpc<F, R>(&self, f: F) -> R::Output
     where
-        F: FnOnce(TendermintRpcClient) -> R,
-        R: Future,
+        F: FnOnce(TendermintRpcClient) -> R + Send,
+        R: Future + Send,
     {
         f(self.0.json_rpc.clone()).await
     }
 
     pub async fn with_grpc<F, R>(&self, f: F) -> R::Output
     where
-        F: FnOnce(Channel) -> R,
-        R: Future,
+        F: FnOnce(Channel) -> R + Send,
+        R: Future + Send,
     {
         f(self.0.grpc.clone()).await
     }

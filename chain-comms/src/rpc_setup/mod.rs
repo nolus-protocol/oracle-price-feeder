@@ -22,10 +22,11 @@ where
     pub node_client: Client,
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn prepare_rpc<C, P>(config_path: P, key_derivation_path: &str) -> Result<RpcSetup<C>>
 where
-    C: DeserializeOwned + AsRef<config::Node>,
-    P: AsRef<Path>,
+    C: DeserializeOwned + AsRef<config::Node> + Send,
+    P: AsRef<Path> + Send,
 {
     let signing_key: SigningKey = signing_key(key_derivation_path, "").await?;
 

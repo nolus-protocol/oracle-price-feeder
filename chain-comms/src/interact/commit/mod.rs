@@ -1,12 +1,10 @@
 use std::num::NonZeroU64;
 
 use cosmrs::{
-    rpc::{Client as _, HttpClient as RpcHttpClient},
+    rpc::{error::Error as RpcError, Client as _, HttpClient as RpcHttpClient},
     tx::{Body as TxBody, Raw as RawTx},
     Any,
 };
-
-use error::{CommitTx as Error, GasEstimatingTxCommit as ErrorWithEstimation};
 
 use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
 
@@ -14,10 +12,13 @@ use super::{
     adjust_gas_limit, calculate_fee, process_simulation_result, simulate, simulate::simulate,
 };
 
+use self::error::{CommitTx as Error, GasEstimatingTxCommit as ErrorWithEstimation};
+
 pub mod error;
 
 pub type Response = cosmrs::rpc::endpoint::broadcast::tx_sync::Response;
 
+#[allow(clippy::future_not_send)]
 pub async fn commit(
     signer: &mut Signer,
     client: &Client,
@@ -33,6 +34,7 @@ pub async fn commit(
     with_signed_body(client, signed_tx, signer).await
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn with_serialized_messages(
     signer: &mut Signer,
     client: &Client,
@@ -51,6 +53,7 @@ pub async fn with_serialized_messages(
     with_signed_body(client, signed_tx, signer).await
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn with_gas_estimation(
     signer: &mut Signer,
     client: &Client,
@@ -80,6 +83,7 @@ pub async fn with_gas_estimation(
         .map_err(From::from)
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn with_gas_estimation_and_serialized_message(
     signer: &mut Signer,
     client: &Client,
@@ -109,6 +113,7 @@ pub async fn with_gas_estimation_and_serialized_message(
         .map_err(Into::into)
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn with_signed_body(
     client: &Client,
     signed_tx: Vec<u8>,
@@ -116,10 +121,11 @@ pub async fn with_signed_body(
 ) -> Result<Response, Error> {
     const SIGNATURE_VERIFICATION_ERROR: u32 = 4;
 
-    match client
+    let response_result: Result<Response, RpcError> = client
         .with_json_rpc(|rpc: RpcHttpClient| async move { rpc.broadcast_tx_sync(signed_tx).await })
-        .await
-    {
+        .await;
+
+    match response_result {
         Ok(response) => {
             if !response.code.is_err() || response.code.value() != SIGNATURE_VERIFICATION_ERROR {
                 signer.tx_confirmed();

@@ -1,12 +1,14 @@
-use std::num::NonZeroU64;
+use std::{future::Future, num::NonZeroU64};
 
 use cosmrs::{
-    proto::cosmos::{
-        base::abci::v1beta1::GasInfo,
-        tx::v1beta1::{service_client::ServiceClient, SimulateRequest},
+    proto::{
+        cosmos::{
+            base::abci::v1beta1::GasInfo,
+            tx::v1beta1::{service_client::ServiceClient, SimulateRequest},
+        },
+        Any as ProtobufAny,
     },
     tx::Body as TxBody,
-    Any,
 };
 use tonic::transport::Channel as TonicChannel;
 
@@ -18,41 +20,37 @@ use super::calculate_fee;
 
 pub mod error;
 
-pub async fn simulate(
+pub fn simulate<'r>(
     signer: &mut Signer,
-    client: &Client,
-    config: &Node,
+    client: &'r Client,
+    config: &'r Node,
     gas_limit: NonZeroU64,
     unsigned_tx: ContractTx,
-) -> Result<GasInfo, Error> {
-    with_signed_body(
-        client,
-        unsigned_tx
-            .commit(signer, calculate_fee(config, gas_limit), None, None)?
-            .to_bytes()?,
-        gas_limit,
-    )
-    .await
+) -> impl Future<Output = Result<GasInfo, Error>> + Send + 'r {
+    let simulation_tx_result: Result<Vec<u8>, Error> = unsigned_tx
+        .commit(signer, calculate_fee(config, gas_limit), None, None)
+        .map_err(Error::Commit)
+        .and_then(|tx| tx.to_bytes().map_err(Error::SerializeTransaction));
+
+    async move { with_signed_body(client, simulation_tx_result?, gas_limit).await }
 }
 
-pub async fn with_serialized_messages(
+pub fn with_serialized_messages<'r>(
     signer: &mut Signer,
-    client: &Client,
-    config: &Node,
+    client: &'r Client,
+    config: &'r Node,
     gas_limit: NonZeroU64,
-    unsigned_tx: Vec<Any>,
-) -> Result<GasInfo, Error> {
-    with_signed_body(
-        client,
-        signer
-            .sign(
-                TxBody::new(unsigned_tx, String::new(), 0_u32),
-                calculate_fee(config, gas_limit),
-            )?
-            .to_bytes()?,
-        gas_limit,
-    )
-    .await
+    unsigned_tx: Vec<ProtobufAny>,
+) -> impl Future<Output = Result<GasInfo, Error>> + Send + 'r {
+    let simulation_tx_result: Result<Vec<u8>, Error> = signer
+        .sign(
+            TxBody::new(unsigned_tx, String::new(), 0_u32),
+            calculate_fee(config, gas_limit),
+        )
+        .map_err(Error::Signing)
+        .and_then(|tx| tx.to_bytes().map_err(Error::SerializeTransaction));
+
+    async move { with_signed_body(client, simulation_tx_result?, gas_limit).await }
 }
 
 pub async fn with_signed_body(

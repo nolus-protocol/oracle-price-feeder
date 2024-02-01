@@ -56,12 +56,12 @@ impl Node {
     }
 
     #[must_use]
-    pub fn chain_id(&self) -> &ChainId {
+    pub const fn chain_id(&self) -> &ChainId {
         &self.file.chain_id
     }
 
     #[must_use]
-    pub fn fee_denom(&self) -> &Denom {
+    pub const fn fee_denom(&self) -> &Denom {
         &self.file.fee_denom
     }
 
@@ -113,8 +113,8 @@ where
 
 pub async fn read<C, P>(path: P) -> ModuleResult<C>
 where
-    C: DeserializeOwned + AsRef<Node>,
-    P: AsRef<Path>,
+    C: DeserializeOwned + AsRef<Node> + Send,
+    P: AsRef<Path> + Send,
 {
     toml::from_str(&read_to_string(path).await?).map_err(Into::into)
 }
@@ -166,7 +166,7 @@ where
     D: Deserializer<'de>,
 {
     maybe_read_from_env::<'de, T, D>(var_name)
-        .and_then(|maybe_value| maybe_value.ok_or(D::Error::missing_field(var_name)))
+        .and_then(|maybe_value| maybe_value.ok_or_else(|| D::Error::missing_field(var_name)))
 }
 
 fn maybe_read_from_env<'de, T, D>(var_name: &'static str) -> Result<Option<T>, D::Error>
