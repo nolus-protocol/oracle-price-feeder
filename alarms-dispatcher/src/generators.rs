@@ -42,8 +42,8 @@ pub fn spawn(
     time_alarms_contracts: Vec<Contract>,
     tick_time: Duration,
     poll_time: Duration,
-) -> Result<SpawnResult<Infallible>, DispatchAlarmsError> {
-    let mut tx_generators_set: JoinSet<Result<(), Infallible>> = JoinSet::new();
+) -> Result<SpawnResult, DispatchAlarmsError> {
+    let mut tx_generators_set: JoinSet<Infallible> = JoinSet::new();
 
     let mut tx_result_senders = BTreeMap::new();
 
@@ -85,7 +85,7 @@ struct SpawnTxGeneratorContext {
 fn spawn_single(
     signer_address: String,
     node_client: &NodeClient,
-    tx_generators_set: &mut JoinSet<Result<(), Infallible>>,
+    tx_generators_set: &mut JoinSet<Infallible>,
     tx_result_senders: &mut BTreeMap<usize, CommitResultSender>,
     SpawnTxGeneratorContext {
         tx_sender,
@@ -158,13 +158,8 @@ async fn task(
     context: TaskContext,
     tick_time: Duration,
     poll_time: Duration,
-) -> Result<(), Infallible> {
-    if let Err(FatalError {
-        contract_type,
-        contract_address,
-        tx_hash,
-        response,
-    }) = task_inner(
+) -> Infallible {
+    let result: Result<ChannelClosed, FatalError> = task_inner(
         node_client,
         tx_sender,
         result_receiver,
@@ -172,24 +167,53 @@ async fn task(
         tick_time,
         poll_time,
     )
-    .await
-    {
-        loop {
-            error!(
-                contract_type = contract_type,
-                address = contract_address.as_ref(),
-                code = response.code.value(),
-                log = response.log,
-                data = ?response.data,
-                hash = %tx_hash,
-                "Task encountered expected error!"
-            );
+    .await;
 
-            sleep(tick_time).await;
+    match result {
+        Ok(ChannelClosed {
+            contract_type,
+            contract_address,
+        }) => {
+            let contract_address: &str = contract_address.as_ref();
+
+            loop {
+                error!(
+                    %contract_type,
+                    %contract_address,
+                    "Communication channel has been closed!"
+                );
+
+                sleep(tick_time).await;
+            }
+        }
+        Err(FatalError {
+            contract_type,
+            contract_address,
+            tx_hash: hash,
+            response,
+        }) => {
+            let contract_address: &str = contract_address.as_ref();
+
+            loop {
+                error!(
+                    %contract_type,
+                    %contract_address,
+                    code = response.code.value(),
+                    log = response.log,
+                    data = ?response.data,
+                    %hash,
+                    "Task encountered expected error!"
+                );
+
+                sleep(tick_time).await;
+            }
         }
     }
+}
 
-    Ok(())
+struct ChannelClosed {
+    contract_type: &'static str,
+    contract_address: Arc<str>,
 }
 
 struct FatalError {
@@ -206,7 +230,7 @@ async fn task_inner(
     context: TaskContext,
     tick_time: Duration,
     poll_time: Duration,
-) -> Result<(), FatalError> {
+) -> Result<ChannelClosed, FatalError> {
     let mut fallback_gas_limit: NonZeroU64 = context.hard_gas_limit;
 
     'runner_loop: loop {
@@ -229,7 +253,10 @@ async fn task_inner(
                     send_tx(&tx_sender, &context, fallback_gas_limit),
                     Err(ChannelClosedError {})
                 ) {
-                    break 'runner_loop Ok(());
+                    break 'runner_loop Ok(ChannelClosed {
+                        contract_type: context.contract_type,
+                        contract_address: context.contract_address,
+                    });
                 }
 
                 let tx_hash: TxHash = match receive_back_tx_hash(
@@ -243,8 +270,11 @@ async fn task_inner(
                     Ok(None) => {
                         continue 'generator_loop;
                     }
-                    Err(ChannelClosedError) => {
-                        break 'runner_loop Ok(());
+                    Err(ChannelClosedError {}) => {
+                        break 'runner_loop Ok(ChannelClosed {
+                            contract_type: context.contract_type,
+                            contract_address: context.contract_address,
+                        });
                     }
                 };
 
