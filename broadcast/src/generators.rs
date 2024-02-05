@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, error::Error, num::NonZeroU64};
+use std::{collections::BTreeMap, convert::Infallible, num::NonZeroU64};
 
 use tokio::{
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -36,20 +36,14 @@ pub type CommitResultSender = UnboundedSender<CommitResult>;
 pub type CommitResultReceiver = UnboundedReceiver<CommitResult>;
 
 #[must_use]
-pub struct SpawnResult<E>
-where
-    E: Error,
-{
-    pub(crate) tx_generators_set: JoinSet<Result<(), E>>,
+pub struct SpawnResult {
+    pub(crate) tx_generators_set: JoinSet<Infallible>,
     pub(crate) tx_result_senders: BTreeMap<usize, CommitResultSender>,
 }
 
-impl<E> SpawnResult<E>
-where
-    E: Error,
-{
+impl SpawnResult {
     pub const fn new(
-        tx_generators_set: JoinSet<Result<(), E>>,
+        tx_generators_set: JoinSet<Infallible>,
         tx_result_senders: BTreeMap<usize, CommitResultSender>,
     ) -> Self {
         Self {

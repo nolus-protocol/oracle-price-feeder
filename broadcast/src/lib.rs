@@ -5,11 +5,15 @@
     clippy::significant_drop_tightening
 )]
 
+use std::future::Future;
+use std::pin::pin;
 use std::{
-    collections::btree_map::BTreeMap, error::Error, future::poll_fn, task::Poll, time::Duration,
+    collections::btree_map::BTreeMap, convert::Infallible, future::poll_fn, task::Poll,
+    time::Duration,
 };
 
 use tokio::{
+    select,
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     task::JoinSet,
     time::{sleep, timeout, Instant},
@@ -40,7 +44,7 @@ pub mod mode;
 mod preprocess;
 
 #[allow(clippy::future_not_send)]
-pub async fn broadcast<Impl, GeneratorError, SpawnGeneratorsF, SpawnE>(
+pub async fn broadcast<Impl, SpawnGeneratorsF, SpawnE>(
     signer: Signer,
     config: Config,
     node_client: NodeClient,
@@ -49,9 +53,7 @@ pub async fn broadcast<Impl, GeneratorError, SpawnGeneratorsF, SpawnE>(
 ) -> Result<(), SpawnE>
 where
     Impl: mode::Impl,
-    SpawnGeneratorsF:
-        FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult<GeneratorError>, SpawnE> + Send,
-    GeneratorError: Error + Send + 'static,
+    SpawnGeneratorsF: FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult, SpawnE> + Send,
 {
     let (tx_sender, tx_receiver): (
         UnboundedSender<TxRequest<Impl>>,
@@ -61,18 +63,47 @@ where
     let SpawnResult {
         mut tx_generators_set,
         tx_result_senders,
-    }: SpawnResult<GeneratorError> = spawn_generators(tx_sender)?;
+    }: SpawnResult = spawn_generators(tx_sender)?;
 
-    processing_loop(
-        signer,
-        config,
-        node_client,
-        node_config,
-        tx_receiver,
-        &mut tx_generators_set,
-        tx_result_senders,
-    )
-    .await;
+    let mut signal = pin!(tokio::signal::ctrl_c());
+
+    let signal_installed: bool = if let Err(error) = poll_fn(|cx| match signal.as_mut().poll(cx) {
+        result @ Poll::Ready(_) => result,
+        Poll::Pending => Poll::Ready(Ok(())),
+    })
+    .await
+    {
+        error!(
+            ?error,
+            "Failed to install Ctrl+C signal handler! Cause: {error}"
+        );
+
+        false
+    } else {
+        true
+    };
+
+    select! {
+        result = signal, if signal_installed => {
+            match result {
+                Ok(()) => {
+                    info!("Received Ctrl+C signal. Stopping task.");
+                }
+                Err(error) => {
+                    error!(?error, "Error received from Ctrl+C signal handler! Stopping task! Error: {error}");
+                }
+            }
+        },
+        () = processing_loop(
+            signer,
+            config,
+            node_client,
+            node_config,
+            tx_receiver,
+            &mut tx_generators_set,
+            tx_result_senders,
+        ) => {}
+    }
 
     tx_generators_set.shutdown().await;
 
@@ -120,17 +151,16 @@ pub(crate) struct ApiAndConfiguration {
 
 #[inline]
 #[allow(clippy::future_not_send)]
-async fn processing_loop<Impl, GeneratorError>(
+async fn processing_loop<Impl>(
     signer: Signer,
     config: Config,
     node_client: NodeClient,
     node_config: NodeConfig,
     mut tx_receiver: UnboundedReceiver<TxRequest<Impl>>,
-    tx_generators_set: &mut JoinSet<Result<(), GeneratorError>>,
+    tx_generators_set: &mut JoinSet<Infallible>,
     mut tx_result_senders: BTreeMap<usize, CommitResultSender>,
 ) where
     Impl: mode::Impl,
-    GeneratorError: Error + Send + 'static,
 {
     let mut last_signing_timestamp: Instant = Instant::now();
 
@@ -216,36 +246,22 @@ async fn processing_loop<Impl, GeneratorError>(
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)]
-async fn try_join_generator_task<GeneratorError>(
-    tx_generators_set: &mut JoinSet<Result<(), GeneratorError>>,
-) where
-    GeneratorError: Error + Send + 'static,
-{
-    if let Some(result) = poll_fn(move |cx| match tx_generators_set.poll_join_next(cx) {
+async fn try_join_generator_task(tx_generators_set: &mut JoinSet<Infallible>) {
+    if let Some(error) = poll_fn(move |cx| match tx_generators_set.poll_join_next(cx) {
         Poll::Pending => Poll::Ready(None),
-        maybe_joined @ Poll::Ready(_) => maybe_joined,
+        Poll::Ready(maybe_joined) => Poll::Ready(maybe_joined.and_then(Result::err)),
     })
     .await
     {
-        match result {
-            Ok(Ok(())) => {
-                info!("Generator task exited without errors.");
+        error!(
+            "Generator task {}!",
+            if error.is_panic() {
+                "panicked"
+            } else if error.is_cancelled() {
+                "was cancelled"
+            } else {
+                unreachable!()
             }
-            Ok(Err(error)) => {
-                error!(error = ?error, "Generator task exited with error! Error: {error}");
-            }
-            Err(error) => {
-                error!(
-                    "Generator task {}!",
-                    if error.is_panic() {
-                        "panicked"
-                    } else if error.is_cancelled() {
-                        "was cancelled"
-                    } else {
-                        unreachable!()
-                    }
-                );
-            }
-        }
+        );
     }
 }
