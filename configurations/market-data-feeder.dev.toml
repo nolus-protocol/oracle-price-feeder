@@ -1,4 +1,4 @@
-hard_gas_limit = 550_000
+hard_gas_limit = 1_000_000
 
 [broadcast]
 tick_time_seconds = 60
