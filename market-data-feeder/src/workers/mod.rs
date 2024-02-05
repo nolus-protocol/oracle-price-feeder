@@ -1,12 +1,13 @@
-use std::{collections::BTreeMap, num::NonZeroU64, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, convert::Infallible, num::NonZeroU64, sync::Arc, time::Duration};
 
+use thiserror::Error;
 use tokio::{
     runtime::Handle,
     select,
     task::{block_in_place, JoinError, JoinSet},
     time::{error::Elapsed, sleep, timeout_at, Instant},
 };
-use tracing::info;
+use tracing::{error, info, warn};
 
 use broadcast::{
     generators::{
@@ -31,7 +32,7 @@ use crate::{
         Provider as ProviderConfig, ProviderConfig as _,
         ProviderWithComparison as ProviderWithComparisonConfig,
     },
-    error,
+    error as error_mod,
     messages::ExecuteMsg,
     price::{CoinWithDecimalPlaces, Price},
     provider::{
@@ -67,8 +68,8 @@ pub fn spawn(
         tick_time,
         poll_time,
     }: SpawnContext,
-) -> AppResult<SpawnResult<error::Worker>> {
-    let mut tx_generators_set: JoinSet<Result<(), error::Worker>> = JoinSet::new();
+) -> AppResult<SpawnResult> {
+    let mut tx_generators_set: JoinSet<Infallible> = JoinSet::new();
 
     let price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>> =
         block_in_place(|| {
@@ -115,16 +116,16 @@ fn construct_comparison_provider_f(
         ) {
             result
                 .map(|comparison_provider: Arc<dyn ComparisonProvider>| (id, comparison_provider))
-                .map_err(error::Application::Worker)
+                .map_err(error_mod::Application::Worker)
         } else {
-            Err(error::Application::UnknownPriceComparisonProviderId(id))
+            Err(error_mod::Application::UnknownPriceComparisonProviderId(id))
         }
     }
 }
 
 struct TryForEachProviderContext<'r> {
     node_client: NodeClient,
-    tx_generators_set: &'r mut JoinSet<Result<(), error::Worker>>,
+    tx_generators_set: &'r mut JoinSet<Infallible>,
     tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
     tx_request_sender: TxRequestSender<NonBlocking>,
     signer_address: Arc<str>,
@@ -164,7 +165,7 @@ fn try_for_each_provider_f(
                         .get(&comparison_provider_id)
                         .map_or_else(
                             || {
-                                Err(error::Application::UnknownPriceComparisonProviderId(
+                                Err(error_mod::Application::UnknownPriceComparisonProviderId(
                                     comparison_provider_id,
                                 ))
                             },
@@ -199,8 +200,8 @@ fn try_for_each_provider_f(
                             time_before_feeding,
                         },
                     )
-                    .ok_or(error::Application::UnknownProviderId(provider_name))
-                    .and_then(|result: Result<(), error::Worker>| result.map_err(From::from))
+                    .ok_or(error_mod::Application::UnknownProviderId(provider_name))
+                    .and_then(|result: Result<(), error_mod::Worker>| result.map_err(From::from))
                 },
             )
     }
@@ -222,7 +223,7 @@ struct PriceComparisonProviderVisitor<'r> {
 }
 
 impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
-    type Return = Result<Arc<dyn ComparisonProvider>, error::Worker>;
+    type Return = Result<Arc<dyn ComparisonProvider>, error_mod::Worker>;
 
     fn on<P>(self) -> Self::Return
     where
@@ -236,7 +237,10 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
             ))
             .map(|provider: P| Arc::new(provider) as Arc<dyn ComparisonProvider>)
             .map_err(|error: P::ConstructError| {
-                error::Worker::InstantiatePriceComparisonProvider(self.provider_id, Box::new(error))
+                error_mod::Worker::InstantiatePriceComparisonProvider(
+                    self.provider_id,
+                    Box::new(error),
+                )
             })
     }
 }
@@ -244,7 +248,7 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
 struct TaskSpawningProviderVisitor<'r> {
     worker_task_context: TaskContext,
     node_client: &'r NodeClient,
-    tx_generators_set: &'r mut JoinSet<Result<(), error::Worker>>,
+    tx_generators_set: &'r mut JoinSet<Infallible>,
     tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
     provider_id: Box<str>,
     provider_config: ProviderConfig,
@@ -253,7 +257,7 @@ struct TaskSpawningProviderVisitor<'r> {
 }
 
 impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
-    type Return = Result<(), error::Worker>;
+    type Return = Result<(), error_mod::Worker>;
 
     fn on<P>(self) -> Self::Return
     where
@@ -290,7 +294,7 @@ impl<'r> ProviderVisitor for TaskSpawningProviderVisitor<'r> {
 
                 Ok(())
             }
-            Err(error) => Err(error::Worker::InstantiateProvider(
+            Err(error) => Err(error_mod::Worker::InstantiateProvider(
                 self.provider_id,
                 Box::new(error),
             )),
@@ -314,54 +318,87 @@ async fn perform_check_and_enter_loop<P>(
     node_client: NodeClient,
     oracle_address: Arc<str>,
     commit_result_receiver: CommitResultReceiver,
-) -> Result<(), error::Worker>
+) -> Infallible
 where
     P: Provider,
 {
-    let prices: Box<[Price<CoinWithDecimalPlaces>]> =
-        provider
-            .get_prices(false)
-            .await
-            .map_err(|error: ProviderError| {
-                error::Worker::PriceComparisonGuard(PriceComparisonGuardError::FetchPrices(error))
-            })?;
+    let result: Result<ChannelClosed, error_mod::Worker> = 'result: {
+        let prices: Box<[Price<CoinWithDecimalPlaces>]> = {
+            let result = provider
+                .get_prices(false)
+                .await
+                .map_err(|error: ProviderError| {
+                    error_mod::Worker::PriceComparisonGuard(PriceComparisonGuardError::FetchPrices(
+                        error,
+                    ))
+                });
 
-    if prices.is_empty() {
-        error!(
-            r#"Price list returned for provider "{provider_id}" is empty! Exiting providing task."#
-        );
+            match result {
+                Ok(prices) => prices,
+                Err(error) => {
+                    break 'result Err(error);
+                }
+            }
+        };
 
-        return Err(error::Worker::EmptyPriceList(provider_id));
+        if prices.is_empty() {
+            error!(
+                r#"Price list returned for provider "{provider_id}" is empty! Exiting providing task."#
+            );
+
+            break 'result Err(error_mod::Worker::EmptyPriceList);
+        }
+
+        if let Some((comparison_provider, max_deviation_exclusive)) =
+            { comparison_provider_and_deviation }
+        {
+            let result: Result<(), PriceComparisonGuardError> = comparison_provider
+                .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
+                .await;
+
+            if let Err(error) = result {
+                break 'result Err(error_mod::Worker::PriceComparisonGuard(error));
+            }
+        } else {
+            info!(r#"Provider "{provider_id}" isn't associated with a comparison provider."#);
+        }
+
+        print_prices_pretty::print(&provider, &{ prices });
+
+        sleep(time_before_feeding).await;
+
+        provider_main_loop(
+            provider,
+            &provider_id,
+            worker_task_context,
+            node_client,
+            oracle_address,
+            commit_result_receiver,
+        )
+        .await
+    };
+
+    let is_error: bool = result.is_err();
+
+    let (error, cause): (String, String) = match { result } {
+        Ok(output) => (format!("{output:?}"), output.to_string()),
+        Err(error) => (format!("{error:?}"), error.to_string()),
+    };
+
+    loop {
+        if is_error {
+            error!(%provider_id, %error, "Provider task stopped! Cause: {cause}");
+        } else {
+            warn!(%provider_id, %error, "Provider task stopped! Cause: {cause}");
+        }
+
+        sleep(Duration::from_secs(15)).await;
     }
-
-    if let Some((comparison_provider, max_deviation_exclusive)) =
-        { comparison_provider_and_deviation }
-    {
-        comparison_provider
-            .benchmark_prices(provider.instance_id(), &prices, max_deviation_exclusive)
-            .await?;
-    } else {
-        info!(r#"Provider "{provider_id}" isn't associated with a comparison provider."#);
-    }
-
-    print_prices_pretty::print(&provider, &{ prices });
-
-    sleep(time_before_feeding).await;
-
-    provider_main_loop(
-        provider,
-        provider_id,
-        worker_task_context,
-        node_client,
-        oracle_address,
-        commit_result_receiver,
-    )
-    .await
 }
 
 async fn provider_main_loop<P>(
     provider: P,
-    provider_id: Box<str>,
+    provider_id: &str,
     TaskContext {
         tx_request_sender,
         signer_address,
@@ -373,7 +410,7 @@ async fn provider_main_loop<P>(
     node_client: NodeClient,
     oracle_address: Arc<str>,
     mut commit_result_receiver: CommitResultReceiver,
-) -> Result<(), error::Worker>
+) -> Result<ChannelClosed, error_mod::Worker>
 where
     P: Provider,
 {
@@ -393,12 +430,12 @@ where
 
     let mut next_tick: Instant = Instant::now();
 
-    'worker_loop: loop {
+    let ok_output: ChannelClosed = 'worker_loop: loop {
         let idle_work_result: Result<ChannelClosed, Elapsed> = timeout_at(
             next_tick,
             handle_idle_work(
                 &node_client,
-                &provider_id,
+                provider_id,
                 &mut commit_result_receiver,
                 &mut poll_delivered_tx_set,
                 &mut fallback_gas_limit,
@@ -408,12 +445,11 @@ where
         )
         .await;
 
-        match idle_work_result {
-            Ok(ChannelClosed {}) => {
-                break 'worker_loop;
-            }
-            Err(Elapsed { .. }) => {}
-        };
+        if let Ok::<ChannelClosed, Elapsed>(channel_closed @ ChannelClosed {}) = idle_work_result {
+            warn!(%provider_id, "Communication channel has been closed! Exiting worker task...");
+
+            break 'worker_loop channel_closed;
+        }
 
         match provider.get_prices(true).await {
             Ok(prices) => {
@@ -431,29 +467,36 @@ where
                 next_tick = Instant::now() + tick_time;
 
                 if send_tx_request(message, NonZeroU64::MAX, hard_gas_limit, next_tick).is_err() {
-                    info!(
-                        provider_id = %provider_id,
-                        "Communication channel has been closed! Exiting worker task..."
-                    );
+                    warn!(%provider_id, "Communication channel has been closed! Exiting worker task...");
 
-                    break 'worker_loop;
+                    break 'worker_loop ChannelClosed {};
                 }
             }
             Err(error) => {
-                error!(
-                    provider_id = %provider_id,
-                    "Couldn't get price feed! Cause: {:?}",
-                    error
-                );
+                error!(%provider_id, "Couldn't get price feed! Cause: {error:?}");
             }
         };
-    }
+    };
 
-    poll_delivered_tx_set.shutdown().await;
+    drop(provider);
 
-    Ok(())
+    drop(signer_address);
+
+    drop(node_client);
+
+    drop(oracle_address);
+
+    drop(commit_result_receiver);
+
+    info!(%provider_id, "Joining all child tasks before exiting.");
+
+    while poll_delivered_tx_set.join_next().await.is_some() {}
+
+    Ok(ok_output)
 }
 
+#[derive(Debug, Error)]
+#[error("Communication channel has been closed!")]
 struct ChannelClosed;
 
 async fn handle_idle_work(

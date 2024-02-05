@@ -35,8 +35,8 @@ pub(crate) enum Application {
 
 #[derive(Debug, ThisError)]
 pub(crate) enum Worker {
-    #[error("Failed to instantiate provider with id: {0}! Returned price list is empty!")]
-    EmptyPriceList(Box<str>),
+    #[error("Failed to instantiate provider! Returned price list is empty!")]
+    EmptyPriceList,
     #[error("Failed to instantiate provider with id: {0}! Cause: {1}")]
     InstantiateProvider(Box<str>, Box<dyn StdError + Send + 'static>),
     #[error("Failed to instantiate price comparison provider with id: {0}! Cause: {1}")]

@@ -113,7 +113,7 @@ async fn app_main() -> Result<()> {
         }
     };
 
-    broadcast::<broadcast::mode::NonBlocking, _, _, _>(
+    broadcast(
         signer,
         config.broadcast,
         node_client,
