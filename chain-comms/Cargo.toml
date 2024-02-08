@@ -8,8 +8,8 @@ license.workspace = true
 
 [dependencies]
 base64.workspace = true
+bip32.workspace = true
 cosmrs.workspace = true
-http.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde-json-wasm.workspace = true
