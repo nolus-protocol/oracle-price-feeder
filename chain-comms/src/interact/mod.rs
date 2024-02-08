@@ -3,7 +3,7 @@ use std::num::{NonZeroU128, NonZeroU64};
 use cosmrs::{
     proto::cosmos::base::abci::v1beta1::GasInfo,
     rpc::Client as _,
-    tendermint::{abci::response::DeliverTx, Hash},
+    tendermint::{abci::types::ExecTxResult, Hash},
     tx::Fee,
     Coin,
 };
@@ -74,7 +74,7 @@ pub fn calculate_fee(config: &Node, gas_limit: NonZeroU64) -> Fee {
 pub async fn get_tx_response(
     client: &Client,
     tx_hash: Hash,
-) -> Result<DeliverTx, error::GetTxResponse> {
+) -> Result<ExecTxResult, error::GetTxResponse> {
     client
         .with_json_rpc(move |rpc| async move { rpc.tx(tx_hash, false).await })
         .await

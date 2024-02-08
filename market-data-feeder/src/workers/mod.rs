@@ -21,8 +21,7 @@ use chain_comms::{
     client::Client as NodeClient,
     reexport::cosmrs::{
         proto::{cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny},
-        tendermint::{abci::response::DeliverTx, Hash as TxHash},
-        tx::MessageExt as _,
+        tendermint::{abci::types::ExecTxResult, Hash as TxHash},
     },
 };
 
@@ -426,7 +425,7 @@ where
 
     let mut fallback_gas_limit: NonZeroU64 = hard_gas_limit;
 
-    let mut poll_delivered_tx_set: JoinSet<Option<(TxHash, DeliverTx)>> = JoinSet::new();
+    let mut poll_delivered_tx_set: JoinSet<Option<(TxHash, ExecTxResult)>> = JoinSet::new();
 
     let mut next_tick: Instant = Instant::now();
 
@@ -456,13 +455,12 @@ where
                 let message: Vec<u8> =
                     serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?.into_bytes();
 
-                let message: ProtobufAny = MsgExecuteContract {
+                let message: ProtobufAny = ProtobufAny::from_msg(&MsgExecuteContract {
                     sender: signer_address.to_string(),
                     contract: oracle_address.to_string(),
                     msg: message,
                     funds: Vec::new(),
-                }
-                .to_any()?;
+                })?;
 
                 next_tick = Instant::now() + tick_time;
 
@@ -503,7 +501,7 @@ async fn handle_idle_work(
     node_client: &NodeClient,
     provider_name: &str,
     commit_result_receiver: &mut CommitResultReceiver,
-    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, DeliverTx)>>,
+    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, ExecTxResult)>>,
     fallback_gas_limit: &mut NonZeroU64,
     tick_time: Duration,
     poll_time: Duration,
@@ -532,7 +530,7 @@ async fn handle_idle_work(
 
 fn handle_commit_result(
     node_client: &NodeClient,
-    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, DeliverTx)>>,
+    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, ExecTxResult)>>,
     result: CommitResult,
     tick_time: Duration,
     poll_time: Duration,
@@ -544,7 +542,7 @@ fn handle_commit_result(
             poll_delivered_tx_set.spawn(async move {
                 poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash)
                     .await
-                    .map(|tx: DeliverTx| (tx_hash, tx))
+                    .map(|tx| (tx_hash, tx))
             });
         }
         Err(CommitError {
@@ -568,16 +566,14 @@ fn handle_commit_result(
 fn handle_delivered_tx(
     provider_name: &str,
     fallback_gas_limit: &mut NonZeroU64,
-    result: Result<Option<(TxHash, DeliverTx)>, JoinError>,
+    result: Result<Option<(TxHash, ExecTxResult)>, JoinError>,
 ) {
     match result {
-        Ok(Some((tx_hash, delivered_tx))) => {
-            crate::log::tx_response(provider_name, &tx_hash, &delivered_tx);
+        Ok(Some((tx_hash, tx_result))) => {
+            crate::log::tx_response(provider_name, &tx_hash, &tx_result);
 
-            *fallback_gas_limit = update_fallback_gas_limit(
-                *fallback_gas_limit,
-                delivered_tx.gas_used.unsigned_abs(),
-            );
+            *fallback_gas_limit =
+                update_fallback_gas_limit(*fallback_gas_limit, tx_result.gas_used.unsigned_abs());
         }
         Ok(None) => {}
         Err(error) => {

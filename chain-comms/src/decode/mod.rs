@@ -5,7 +5,7 @@ use base64::{
 };
 use cosmrs::{
     cosmwasm::MsgExecuteContractResponse, proto::prost::Message,
-    tendermint::abci::response::DeliverTx, tx::Msg as _, Any,
+    tendermint::abci::types::ExecTxResult, tx::Msg as _, Any,
 };
 
 use self::error::Error;
@@ -18,7 +18,7 @@ struct Package {
     data: Vec<u8>,
 }
 
-pub fn exec_tx_data(tx: &DeliverTx) -> Result<Vec<u8>, Error> {
+pub fn exec_tx_data(tx: &ExecTxResult) -> Result<Vec<u8>, Error> {
     Engine::decode(
         &GeneralPurpose::new(&URL_SAFE, GeneralPurposeConfig::new()),
         &tx.data,
@@ -39,7 +39,7 @@ pub fn exec_tx_data(tx: &DeliverTx) -> Result<Vec<u8>, Error> {
 #[test]
 fn test() {
     assert_eq!(
-        exec_tx_data(&DeliverTx {
+        exec_tx_data(&ExecTxResult {
             code: Default::default(),
             data: b"EjQKLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNlEgQKAjE2"
                 .to_vec()

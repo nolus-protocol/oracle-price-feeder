@@ -4,8 +4,8 @@ use cosmrs::{
         response::{CheckTx, DeliverTx},
         Code,
     },
-    tx::{Body, Fee, MessageExt as _, Raw as RawTx},
-    Any,
+    tx::{Body, Fee, Raw as RawTx},
+    Any as ProtobufAny,
 };
 
 use crate::signer::Signer;
@@ -46,21 +46,20 @@ impl ContractTx {
         self
     }
 
-    pub fn serialize(self, signer: &Signer) -> Result<Vec<Any>> {
+    pub fn serialize(self, signer: &Signer) -> Result<Vec<ProtobufAny>> {
         let buf = Vec::with_capacity(self.messages.len());
 
         self.messages
             .into_iter()
             .map(|msg| {
-                MsgExecuteContract {
+                ProtobufAny::from_msg(&MsgExecuteContract {
                     sender: signer.signer_address().into(),
                     contract: self.contract.clone(),
                     msg: msg.message,
                     funds: msg.funds,
-                }
-                .to_any()
+                })
             })
-            .try_fold(buf, |mut acc, msg| -> Result<Vec<Any>> {
+            .try_fold(buf, |mut acc, msg| -> Result<Vec<ProtobufAny>> {
                 acc.push(msg?);
 
                 Ok(acc)

@@ -5,7 +5,6 @@ use astroport::{
     router::{QueryMsg, SwapOperation},
 };
 use async_trait::async_trait;
-use http::Uri;
 use thiserror::Error;
 use tokio::task::JoinSet;
 use tracing::{debug, error};
@@ -13,7 +12,10 @@ use tracing::{debug, error};
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
-    reexport::tonic::transport::{Channel as TonicChannel, Error as TonicError},
+    reexport::tonic::{
+        codegen::http::uri::InvalidUri,
+        transport::{Channel as TonicChannel, Error as TonicError, Uri},
+    },
 };
 
 use crate::{
@@ -220,7 +222,7 @@ pub(crate) enum ConstructError {
     #[error("Failed to fetch gRPC's URI from environment variables! Cause: {0}")]
     FetchGrpcUri(EnvError),
     #[error("Failed to parse gRPC's URI! Cause: {0}")]
-    InvalidGrpcUri(#[from] http::uri::InvalidUri),
+    InvalidGrpcUri(#[from] InvalidUri),
     #[error("Failed to fetch router contract's address from environment variables! Cause: {0}")]
     FetchRouterContract(EnvError),
     #[error("Failed to connect RPC's URI! Cause: {0}")]

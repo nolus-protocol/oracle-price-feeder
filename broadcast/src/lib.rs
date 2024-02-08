@@ -24,7 +24,7 @@ use chain_comms::{
     client::Client as NodeClient,
     config::Node as NodeConfig,
     interact::{error::GetTxResponse as GetTxResponseError, get_tx_response},
-    reexport::cosmrs::tendermint::{abci::response::DeliverTx, Hash as TxHash},
+    reexport::cosmrs::tendermint::{abci::types::ExecTxResult, Hash as TxHash},
     signer::Signer,
 };
 
@@ -115,12 +115,12 @@ pub async fn poll_delivered_tx(
     tick_time: Duration,
     poll_time: Duration,
     hash: TxHash,
-) -> Option<DeliverTx> {
+) -> Option<ExecTxResult> {
     timeout(tick_time, async {
         loop {
             sleep(poll_time).await;
 
-            let result: Result<DeliverTx, GetTxResponseError> =
+            let result: Result<ExecTxResult, GetTxResponseError> =
                 get_tx_response(node_client, hash).await;
 
             match result {

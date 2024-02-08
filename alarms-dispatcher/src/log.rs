@@ -2,7 +2,7 @@ use tracing::{error, info, info_span};
 
 use chain_comms::{
     decode,
-    reexport::cosmrs::tendermint::{abci::response::DeliverTx, Hash},
+    reexport::cosmrs::tendermint::{abci::types::ExecTxResult, Hash},
 };
 
 use crate::messages::DispatchResponse;
@@ -11,7 +11,7 @@ pub fn tx_response(
     contract_type: &str,
     contract_address: &str,
     hash: &Hash,
-    response: &DeliverTx,
+    tx_result: &ExecTxResult,
 ) -> Option<DispatchResponse> {
     info_span!("Tx Response")
         .in_scope(|| {
@@ -23,10 +23,10 @@ pub fn tx_response(
 
             let mut maybe_dispatch_response = None;
 
-            broadcast::log::on_error(response.code, &response.log);
+            broadcast::log::on_error(tx_result.code, &tx_result.log);
 
-            if response.code.is_ok() {
-                match decode::exec_tx_data(response) {
+            if tx_result.code.is_ok() {
+                match decode::exec_tx_data(tx_result) {
                     Ok(dispatch_response) => {
                         match serde_json_wasm::from_slice::<DispatchResponse>(&dispatch_response) {
                             Ok(dispatch_response) => {
@@ -39,7 +39,7 @@ pub fn tx_response(
                             }
                             Err(error) => error!(
                                 error = ?error,
-                                response_data = String::from_utf8_lossy(&response.data).as_ref(),
+                                response_data = String::from_utf8_lossy(&tx_result.data).as_ref(),
                                 "Failed to deserialize transaction response from the JSON format! Cause: {error}",
                             ),
                         }
@@ -51,8 +51,8 @@ pub fn tx_response(
                 }
             }
 
-            info!("Gas limit for transacion: {}", response.gas_wanted);
-            info!("Gas used: {}", response.gas_used);
+            info!("Gas limit for transacion: {}", tx_result.gas_wanted);
+            info!("Gas used: {}", tx_result.gas_used);
 
             maybe_dispatch_response
         })

@@ -9,7 +9,10 @@ use toml::Value;
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
-    reexport::tonic::transport::{Channel as TonicChannel, Error as TonicError},
+    reexport::tonic::{
+        codegen::http::uri::InvalidUri,
+        transport::{Channel as TonicChannel, Error as TonicError},
+    },
 };
 
 use crate::{
@@ -247,7 +250,7 @@ pub(crate) enum ConstructError {
     #[error("Failed to fetch Osmosis node's gRPC URI from environment variables! Cause: {0}")]
     FetchGrpcUri(#[from] EnvError),
     #[error("Failed to parse Osmosis node's gRPC URI! Cause: {0}")]
-    InvalidGrpcUri(#[from] http::uri::InvalidUri),
+    InvalidGrpcUri(#[from] InvalidUri),
     #[error("Failed to connect RPC's URI! Cause: {0}")]
     ConnectToGrpc(#[from] TonicError),
 }

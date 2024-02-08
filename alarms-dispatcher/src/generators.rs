@@ -21,8 +21,7 @@ use chain_comms::{
     interact::query,
     reexport::cosmrs::{
         proto::cosmwasm::wasm::v1::MsgExecuteContract,
-        tendermint::{abci::response::DeliverTx, Hash as TxHash},
-        tx::MessageExt as _,
+        tendermint::{abci::types::ExecTxResult, Hash as TxHash},
         Any as ProtobufAny,
     },
 };
@@ -97,15 +96,14 @@ fn spawn_single(
     poll_time: Duration,
 ) -> Result<(), DispatchAlarmsError> {
     let messages: Box<[ProtobufAny]> = {
-        let mut message: Vec<ProtobufAny> = vec![MsgExecuteContract {
+        let mut message: Vec<ProtobufAny> = vec![ProtobufAny::from_msg(&MsgExecuteContract {
             sender: signer_address,
             contract: contract.address.clone(),
             msg: serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
                 max_count: contract.max_alarms_group.get(),
             })?,
             funds: Vec::new(),
-        }
-        .to_any()?];
+        })?];
 
         message.shrink_to_fit();
 
@@ -190,7 +188,7 @@ async fn task(
             contract_type,
             contract_address,
             tx_hash: hash,
-            response,
+            tx_result: response,
         }) => {
             let contract_address: &str = contract_address.as_ref();
 
@@ -220,7 +218,7 @@ struct FatalError {
     contract_type: &'static str,
     contract_address: Arc<str>,
     tx_hash: TxHash,
-    response: DeliverTx,
+    tx_result: ExecTxResult,
 }
 
 async fn task_inner(
@@ -278,7 +276,7 @@ async fn task_inner(
                     }
                 };
 
-                let Some(response): Option<DeliverTx> =
+                let Some(response): Option<ExecTxResult> =
                     broadcast::poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash).await
                 else {
                     warn!("Transaction not found or couldn't be reported back in the given specified period.");
@@ -293,12 +291,15 @@ async fn task_inner(
                     HandleResponseResult::BreakTxLoop => {
                         break 'generator_loop;
                     }
-                    HandleResponseResult::Fatal { tx_hash, response } => {
+                    HandleResponseResult::Fatal {
+                        tx_hash,
+                        tx_result: response,
+                    } => {
                         break 'runner_loop Err(FatalError {
                             contract_type: context.contract_type,
                             contract_address: context.contract_address,
                             tx_hash,
-                            response,
+                            tx_result: response,
                         });
                     }
                 }
@@ -314,7 +315,7 @@ enum HandleResponseResult {
     BreakTxLoop,
     Fatal {
         tx_hash: TxHash,
-        response: DeliverTx,
+        tx_result: ExecTxResult,
     },
 }
 
@@ -322,28 +323,34 @@ fn handle_response(
     context: &TaskContext,
     fallback_gas_limit: &mut NonZeroU64,
     tx_hash: TxHash,
-    response: DeliverTx,
+    tx_result: ExecTxResult,
 ) -> HandleResponseResult {
     let maybe_dispatched_count: Option<u32> = log::tx_response(
         context.contract_type,
         &context.contract_address,
         &tx_hash,
-        &response,
+        &tx_result,
     )
     .map(|dispatch_response| dispatch_response.dispatched_alarms());
 
     let dispatched_count: u32 = match extract_dispatched_count(
         fallback_gas_limit,
         tx_hash,
-        response,
+        tx_result,
         maybe_dispatched_count,
     ) {
         Ok(dispatched_count) => dispatched_count,
         Err(ExtractDispatchedCountError::OutOfGas) => {
             return HandleResponseResult::ContinueTxLooping;
         }
-        Err(ExtractDispatchedCountError::Fatal { tx_hash, response }) => {
-            return HandleResponseResult::Fatal { tx_hash, response };
+        Err(ExtractDispatchedCountError::Fatal {
+            tx_hash,
+            tx_result: response,
+        }) => {
+            return HandleResponseResult::Fatal {
+                tx_hash,
+                tx_result: response,
+            };
         }
     };
 
@@ -389,21 +396,21 @@ enum ExtractDispatchedCountError {
     OutOfGas,
     Fatal {
         tx_hash: TxHash,
-        response: DeliverTx,
+        tx_result: ExecTxResult,
     },
 }
 
 fn extract_dispatched_count(
     fallback_gas_limit: &mut NonZeroU64,
     tx_hash: TxHash,
-    response: DeliverTx,
+    tx_result: ExecTxResult,
     maybe_dispatched_count: Option<u32>,
 ) -> Result<u32, ExtractDispatchedCountError> {
-    if response.code.is_err() {
-        if response.code.value() == 11 {
+    if tx_result.code.is_err() {
+        if tx_result.code.value() == 11 {
             warn!("Transaction failed. Probable error is out of gas. Retrying transaction.");
 
-            if let Some(gas_used) = NonZeroU64::new(response.gas_used.unsigned_abs()) {
+            if let Some(gas_used) = NonZeroU64::new(tx_result.gas_used.unsigned_abs()) {
                 *fallback_gas_limit = gas_used.max(*fallback_gas_limit);
             }
 
@@ -413,7 +420,7 @@ fn extract_dispatched_count(
         *fallback_gas_limit = NonZeroU64::new({
             let (mut n, overflow): (u64, bool) = fallback_gas_limit
                 .get()
-                .overflowing_add(response.gas_used.unsigned_abs());
+                .overflowing_add(tx_result.gas_used.unsigned_abs());
 
             n >>= 1;
 
@@ -430,7 +437,7 @@ fn extract_dispatched_count(
         }
     }
 
-    Err(ExtractDispatchedCountError::Fatal { tx_hash, response })
+    Err(ExtractDispatchedCountError::Fatal { tx_hash, tx_result })
 }
 
 async fn receive_back_tx_hash(

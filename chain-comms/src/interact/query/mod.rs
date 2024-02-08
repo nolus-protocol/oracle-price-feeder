@@ -8,7 +8,10 @@ use cosmrs::proto::{
     prost,
 };
 use serde::de::DeserializeOwned;
-use tonic::{client::Grpc as GrpcClient, transport::Channel as TonicChannel, IntoRequest as _};
+use tonic::{
+    client::Grpc as GrpcClient, codegen::http::uri::PathAndQuery,
+    transport::Channel as TonicChannel, IntoRequest as _,
+};
 use tracing::debug;
 
 use crate::client::Client;
@@ -55,7 +58,7 @@ where
     grpc_client
         .unary(
             query.into_request(),
-            http::uri::PathAndQuery::from_static(type_url),
+            PathAndQuery::from_static(type_url),
             tonic::codec::ProstCodec::default(),
         )
         .await

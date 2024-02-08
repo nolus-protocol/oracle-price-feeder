@@ -8,9 +8,11 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
-use http::{HeaderMap, HeaderValue};
 use regex::{Captures, Regex, RegexBuilder};
-use reqwest::{Client as ReqwestClient, Error as ReqwestError, Response as ReqwestResponse};
+use reqwest::{
+    header::{HeaderMap, HeaderValue, InvalidHeaderValue},
+    Client as ReqwestClient, Error as ReqwestError, Response as ReqwestResponse,
+};
 use thiserror::Error;
 use tokio::task::{block_in_place, JoinSet};
 use toml::Value;
@@ -415,7 +417,7 @@ pub(crate) enum ConstructError {
     #[error("Failed to deserialize field \"{0}\"! Cause: {1}")]
     DeserializeField(&'static str, toml::de::Error),
     #[error("Failed to construct header value containing API key! Cause: {0}")]
-    ConstructApiKeyHeaderValue(#[from] http::header::InvalidHeaderValue),
+    ConstructApiKeyHeaderValue(#[from] InvalidHeaderValue),
     #[error("Failed to construct HTTP client! Cause: {0}")]
     ConstructHttpClient(ReqwestError),
     #[error("Unknown fields found! Unknown fields: {0}")]
