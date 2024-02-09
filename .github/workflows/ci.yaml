@@ -17,62 +17,55 @@ permissions:
   packages: "write"
 
 jobs:
-  update_toolchain:
-    runs-on: "ubuntu-latest"
-    steps:
-      - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
-      - name: "Update Rust toolchain"
-        shell: "sh"
-        run: "rustup update stable"
   check_formatting:
     runs-on: "ubuntu-latest"
-    needs:
-      - "update_toolchain"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
       - uses: "nolus-protocol/rust-ci-actions/check_formatting@main"
   check_codebase:
     runs-on: "ubuntu-latest"
-    needs:
-      - "update_toolchain"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
       - uses: "nolus-protocol/rust-ci-actions/check_codebase@main"
   # audit_dependencies:
   #   runs-on: "ubuntu-latest"
-  #   needs:
-  #     - "update_toolchain"
   #   steps:
   #     - uses: "actions/checkout@v4"
   #     - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+  #       with:
+  #         update_and_cache_toolchains: "true"
   #     - uses: "nolus-protocol/rust-ci-actions/audit_dependencies@main"
   linting:
     runs-on: ubuntu-latest
-    needs:
-      - "update_toolchain"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
       - name: "Run clippy"
         shell: "sh"
         run: "cargo clippy -- -F unsafe_code -D warnings"
   code_coverage:
     runs-on: "ubuntu-latest"
-    needs:
-      - "update_toolchain"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
       - uses: "nolus-protocol/rust-ci-actions/code_coverage@main"
   test_release_profile:
     runs-on: "ubuntu-latest"
-    needs:
-      - "update_toolchain"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
       - name: "Run tests in release profile"
         shell: "sh"
         run: "cargo test --release"
