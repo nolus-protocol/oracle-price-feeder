@@ -1,6 +1,6 @@
 name: "Build preconfigured Docker images"
 description: "Action for building preconfigured Docker images for direct use."
-author: "The Dev Nolus Team <dev@nolus.io>"
+author: "The Nolus Dev Team <dev@nolus.io>"
 
 inputs:
   config:
@@ -27,13 +27,17 @@ runs:
       run: "mkdir -p ./images/"
     - name: "Build alarms dispatcher image"
       shell: "sh"
+      env:
+        inputs_config: "${{ inputs.config }}"
       run: |
-        docker build --rm --build-arg "config_name=${{ inputs.config }}" \
-          -f Dispatcher.Dockerfile -t "nolus-dispatcher-bot-${{ inputs.config }}" ./artifacts/
+        docker build --rm --build-arg "config_name=${inputs_config}" \
+          -f Dispatcher.Dockerfile -t "nolus-dispatcher-bot-${inputs_config}" ./artifacts/
     - name: "Save alarms dispatcher image"
       shell: "sh"
+      env:
+        inputs_config: "${{ inputs.config }}"
       run: |
-        docker save "nolus-dispatcher-bot-${{ inputs.config }}" > "./images/nolus-dispatcher-bot-${{ inputs.config }}.tar"
+        docker save "nolus-dispatcher-bot-${inputs_config}" > "./images/nolus-dispatcher-bot-${inputs_config}.tar"
     - name: "Archive alarms dispatcher Docker image artifact"
       uses: "actions/upload-artifact@v3"
       with:
@@ -41,13 +45,17 @@ runs:
         path: "images/nolus-dispatcher-bot-${{ inputs.config }}.tar"
     - name: "Build feeder image"
       shell: "sh"
+      env:
+        inputs_config: "${{ inputs.config }}"
       run: |
-        docker build --rm --build-arg "config_name=${{ inputs.config }}" \
-          -f Feeder.Dockerfile -t "nolus-feeder-bot-${{ inputs.config }}" ./artifacts/
+        docker build --rm --build-arg "config_name=${inputs_config}" \
+          -f Feeder.Dockerfile -t "nolus-feeder-bot-${inputs_config}" ./artifacts/
     - name: "Save feeder image"
       shell: "sh"
+      env:
+        inputs_config: "${{ inputs.config }}"
       run: |
-        docker save "nolus-feeder-bot-${{ inputs.config }}" > "./images/nolus-feeder-bot-${{ inputs.config }}.tar"
+        docker save "nolus-feeder-bot-${inputs_config}" > "./images/nolus-feeder-bot-${inputs_config}.tar"
     - name: "Archive feeder Docker image artifact"
       uses: "actions/upload-artifact@v3"
       with:
@@ -55,23 +63,31 @@ runs:
         path: "images/nolus-feeder-bot-${{ inputs.config }}.tar"
     - name: "Docker login Nolus-Protocol"
       shell: "sh"
+      env:
+        inputs_github_token: "${{ inputs.github_token }}"
+        inputs_docker_registry: "${{ inputs.docker_registry }}"
       run: |
-        echo "${{ inputs.github_token }}" | docker login ${{ inputs.docker_registry }} -u $ --password-stdin
-    - name: "Push dispatcher image to github registry"
-      shell: "sh"
+        echo "${inputs_github_token}" | docker login "${inputs_docker_registry}" --username '$' --password-stdin
+    - name: "Push images to Github registry"
+      shell: "bash"
+      env:
+        inputs_config: "${{ inputs.config }}"
+        inputs_docker_registry: "${{ inputs.docker_registry }}"
+        inputs_docker_repository: "${{ inputs.docker_repository }}"
+        inputs_docker_tag: "${{ inputs.docker_tag }}"
       run: |
-        # push version
-        docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
-        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
-        # push latest
-        docker tag nolus-dispatcher-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:latest
-        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-dispatcher-bot-${{ inputs.config }}:latest
-    - name: "Push feeder image to github registry"
-      shell: "sh"
-      run: |
-        # push version
-        docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
-        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:${{ inputs.docker_tag }}
-        # push latest
-        docker tag nolus-feeder-bot-${{ inputs.config }} ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:latest
-        docker push ${{ inputs.docker_registry }}/${{ inputs.docker_repository }}/nolus-feeder-bot-${{ inputs.config }}:latest
+        if [[ "${inputs_docker_tag}" =~ ^\d+\.\d+\.\d+$ ]]
+        then
+          latest_tag='latest'
+        else
+          latest_tag='dev'
+        fi
+
+        for app_name in 'dispatcher' 'feeder'
+        do
+          for image_tag in "${inputs_docker_tag}" "${latest_tag}"
+          do
+            docker tag "nolus-${app_name}-bot-${inputs_config}" "${inputs_docker_registry}/${inputs_docker_repository}/nolus-${app_name}-bot-${inputs_config}:${image_tag}"
+            docker push "${inputs_docker_registry}/${inputs_docker_repository}/nolus-${app_name}-bot-${inputs_config}:${image_tag}"
+          done
+        done
