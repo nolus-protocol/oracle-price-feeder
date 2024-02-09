@@ -3,10 +3,9 @@ use base64::{
     engine::{GeneralPurpose, GeneralPurposeConfig},
     Engine,
 };
-use cosmrs::{
-    cosmwasm::MsgExecuteContractResponse, proto::prost::Message,
-    tendermint::abci::types::ExecTxResult, tx::Msg as _, Any,
-};
+use cosmrs::{cosmwasm::MsgExecuteContractResponse, proto::prost::Message, tx::Msg as _, Any};
+
+use crate::interact::get_tx_response::Response as TxResponse;
 
 use self::error::Error;
 
@@ -18,10 +17,10 @@ struct Package {
     data: Vec<u8>,
 }
 
-pub fn exec_tx_data(tx: &ExecTxResult) -> Result<Vec<u8>, Error> {
+pub fn tx_response_data(tx: &TxResponse) -> Result<Vec<u8>, Error> {
     Engine::decode(
         &GeneralPurpose::new(&URL_SAFE, GeneralPurposeConfig::new()),
-        &tx.data,
+        tx.data.as_bytes(),
     )
     .map_err(Error::DecodeBase64)
     .and_then(|data| {
@@ -39,17 +38,16 @@ pub fn exec_tx_data(tx: &ExecTxResult) -> Result<Vec<u8>, Error> {
 #[test]
 fn test() {
     assert_eq!(
-        exec_tx_data(&ExecTxResult {
+        tx_response_data(&TxResponse {
             code: Default::default(),
+            block_height: 0,
             data: b"EjQKLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNlEgQKAjE2"
                 .to_vec()
                 .into(),
-            log: String::new(),
-            info: String::new(),
+            raw_log: Default::default(),
+            info: Default::default(),
             gas_wanted: 0,
             gas_used: 0,
-            events: Vec::new(),
-            codespace: String::new(),
         })
         .unwrap()
         .as_slice(),

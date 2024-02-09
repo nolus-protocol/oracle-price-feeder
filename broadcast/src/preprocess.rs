@@ -5,7 +5,7 @@ use tracing::error;
 use chain_comms::{
     config::Node as NodeConfig,
     interact::{adjust_gas_limit, calculate_fee, process_simulation_result, simulate},
-    reexport::cosmrs::{tx::Body as TxBody, Any as ProtobufAny},
+    reexport::cosmrs::{proto::prost::Message, tx::Body as TxBody, Any as ProtobufAny},
     signer::Signer,
 };
 
@@ -101,19 +101,12 @@ fn sign_and_serialize_tx(
     gas_limit: NonZeroU64,
     tx_body: TxBody,
 ) -> Option<Vec<u8>> {
-    match signer.sign(tx_body, calculate_fee(node_config, gas_limit)) {
-        Ok(signed_tx) => match signed_tx.to_bytes() {
-            Ok(tx_bytes) => {
-                return Some(tx_bytes);
-            }
-            Err(error) => {
-                error!(error = ?error, "Serializing signed transaction failed! Cause: {}", error);
-            }
-        },
-        Err(error) => {
+    signer
+        .sign(tx_body, calculate_fee(node_config, gas_limit))
+        .inspect_err(|error| {
             error!(error = ?error, "Signing transaction failed! Cause: {}", error);
-        }
-    }
-
-    None
+        })
+        .ok()
+        .as_ref()
+        .map(Message::encode_to_vec)
 }

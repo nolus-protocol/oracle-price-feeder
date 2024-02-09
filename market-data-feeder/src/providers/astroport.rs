@@ -12,9 +12,12 @@ use tracing::{debug, error};
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
-    reexport::tonic::{
-        codegen::http::uri::InvalidUri,
-        transport::{Channel as TonicChannel, Error as TonicError, Uri},
+    reexport::{
+        cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
+        tonic::{
+            codegen::http::uri::InvalidUri,
+            transport::{Channel as TonicChannel, Error as TonicError, Uri},
+        },
     },
 };
 
@@ -27,9 +30,9 @@ use crate::{
 
 pub(super) struct Astroport {
     instance_id: String,
-    node_client: NodeClient,
+    node_wasm_query_client: WasmQueryClient<TonicChannel>,
     oracle_addr: Arc<str>,
-    channel: TonicChannel,
+    astroport_wasm_query_client: WasmQueryClient<TonicChannel>,
     router_contract: Arc<str>,
     currencies: Currencies,
 }
@@ -58,38 +61,35 @@ impl Astroport {
         impl Iterator<Item = (String, Arc<str>, u8, String, Arc<str>, u8)> + '_,
         ProviderError,
     > {
-        self.node_client
-            .with_grpc(|rpc: TonicChannel| {
-                query::wasm::<SupportedCurrencyPairsResponse>(
-                    rpc,
-                    self.oracle_addr.to_string(),
-                    OracleQueryMsg::SUPPORTED_CURRENCY_PAIRS,
-                )
-            })
-            .await
-            .map(|supported_currencies: SupportedCurrencyPairsResponse| {
-                supported_currencies
-                    .into_iter()
-                    .filter_map(|swap_leg: SwapLeg| {
-                        self.currencies.get(&swap_leg.from).and_then(
-                            |base: &SymbolAndDecimalPlaces| {
-                                self.currencies.get(&swap_leg.to.target).map(
-                                    |quote: &SymbolAndDecimalPlaces| {
-                                        (
-                                            swap_leg.from,
-                                            base.denom().clone(),
-                                            base.decimal_places(),
-                                            swap_leg.to.target,
-                                            quote.denom().clone(),
-                                            quote.decimal_places(),
-                                        )
-                                    },
-                                )
-                            },
-                        )
-                    })
-            })
-            .map_err(From::from)
+        query::wasm_smart::<SupportedCurrencyPairsResponse>(
+            &mut self.node_wasm_query_client.clone(),
+            self.oracle_addr.to_string(),
+            OracleQueryMsg::SUPPORTED_CURRENCY_PAIRS,
+        )
+        .await
+        .map(|supported_currencies: SupportedCurrencyPairsResponse| {
+            supported_currencies
+                .into_iter()
+                .filter_map(|swap_leg: SwapLeg| {
+                    self.currencies
+                        .get(&swap_leg.from)
+                        .and_then(|base: &SymbolAndDecimalPlaces| {
+                            self.currencies.get(&swap_leg.to.target).map(
+                                |quote: &SymbolAndDecimalPlaces| {
+                                    (
+                                        swap_leg.from,
+                                        base.denom().clone(),
+                                        base.decimal_places(),
+                                        swap_leg.to.target,
+                                        quote.denom().clone(),
+                                        quote.decimal_places(),
+                                    )
+                                },
+                            )
+                        })
+                })
+        })
+        .map_err(From::from)
     }
 }
 
@@ -116,8 +116,11 @@ impl Provider for Astroport {
             quote_decimal_places,
         ) in supported_currencies_iter
         {
-            let channel: TonicChannel = self.channel.clone();
+            let mut wasm_query_client: WasmQueryClient<TonicChannel> =
+                self.astroport_wasm_query_client.clone();
+
             let router_contract: Arc<str> = self.router_contract.clone();
+
             let max_decimal_places: u8 = base_decimal_places.max(quote_decimal_places);
 
             set.spawn(async move {
@@ -129,7 +132,10 @@ impl Provider for Astroport {
                 let query_result: Result<
                     astroport::router::SimulateSwapOperationsResponse,
                     query::error::Wasm,
-                > = query::wasm(channel, router_contract.to_string(), &{ query_message }).await;
+                > = query::wasm_smart(&mut wasm_query_client, router_contract.to_string(), &{
+                    query_message
+                })
+                .await;
 
                 match query_result {
                     Ok(astroport::router::SimulateSwapOperationsResponse {
@@ -176,7 +182,7 @@ impl FromConfig<false> for Astroport {
         const ROUTER_CONTRACT_ENV_NAME: &str = "router_addr";
         const CURRENCIES_FIELD: &str = "currencies";
 
-        let grpc_url: Uri = Config::fetch_from_env(id, GRPC_URI_ENV_NAME)
+        let grpc_uri: Uri = Config::fetch_from_env(id, GRPC_URI_ENV_NAME)
             .map_err(ConstructError::FetchGrpcUri)
             .and_then(|value: String| value.parse().map_err(ConstructError::InvalidGrpcUri))?;
 
@@ -201,9 +207,12 @@ impl FromConfig<false> for Astroport {
         } else {
             Ok(Self {
                 instance_id: id.to_string(),
-                node_client: node_client.clone(),
+                node_wasm_query_client: node_client.wasm_query_client(),
                 oracle_addr,
-                channel: TonicChannel::builder(grpc_url).connect().await?,
+                astroport_wasm_query_client: TonicChannel::builder(grpc_uri)
+                    .connect()
+                    .await
+                    .map(WasmQueryClient::new)?,
                 router_contract,
                 currencies,
             })

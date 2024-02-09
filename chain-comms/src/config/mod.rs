@@ -34,13 +34,8 @@ impl Node {
     }
 
     #[must_use]
-    pub fn json_rpc_url(&self) -> &str {
-        &self.environment.json_rpc_url
-    }
-
-    #[must_use]
-    pub fn grpc_url(&self) -> &str {
-        &self.environment.grpc_url
+    pub fn grpc_uri(&self) -> &str {
+        &self.environment.grpc_uri
     }
 
     #[must_use]
@@ -149,8 +144,7 @@ struct File {
 #[derive(Debug, Clone)]
 #[must_use]
 struct Environment {
-    json_rpc_url: String,
-    grpc_url: String,
+    grpc_uri: String,
 }
 
 impl<'de> Deserialize<'de> for Environment {
@@ -158,13 +152,9 @@ impl<'de> Deserialize<'de> for Environment {
     where
         D: Deserializer<'de>,
     {
-        let json_rpc_url: String = read_from_env::<'de, _, D>("JSON_RPC_URL")?;
-        let grpc_url: String = read_from_env::<'de, _, D>("GRPC_URL")?;
+        let grpc_uri: String = read_from_env::<'de, _, D>("GRPC_URI")?;
 
-        Ok(Self {
-            json_rpc_url,
-            grpc_url,
-        })
+        Ok(Self { grpc_uri })
     }
 }
 

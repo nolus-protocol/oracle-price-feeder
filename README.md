@@ -146,11 +146,8 @@ They are as follows:
         * y (lowercase)
         * Y (uppercase)
 
-    * `JSON_RPC_URL`
-      JSON-RPC endpoint's URL.
-
-    * `GRPC_URL`
-      gRPC endpoint's URL.
+    * `GRPC_URI`
+      gRPC endpoint's URI.
 
 * For feeder:
     * `PROVIDER_OSMOSIS_LCD_RPC_URL`
@@ -169,13 +166,13 @@ On local network:
 Feeder:
 
 ```shell
-export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ; export PROVIDER_OSMOSIS_LCD_SECONDS_BEFORE_FEEDING=0 ; export PROVIDER_OSMOSIS_LCD_MAX_DEVIATION=1000 ; export PROVIDER_OSMOSIS_LCD_RPC_URL="https://lcd.osmotest5.osmosis.zone/osmosis/poolmanager/" ;
+export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URI="http://localhost:26615" ; export PROVIDER_OSMOSIS_LCD_SECONDS_BEFORE_FEEDING=0 ; export PROVIDER_OSMOSIS_LCD_MAX_DEVIATION=1000 ; export PROVIDER_OSMOSIS_LCD_RPC_URL="https://lcd.osmotest5.osmosis.zone/osmosis/poolmanager/" ;
 ```
 
 Dispatcher:
 
 ```shell
-export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URL="http://localhost:26615" ;
+export DEBUG_LOGGING=1 ; export JSON_RPC_URL="http://localhost:26612" ; export GRPC_URI="http://localhost:26615" ;
 ```
 
 ### Start feeder service
@@ -251,7 +248,7 @@ over time. These are provided as a guide.*
 
     * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
-      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'GRPC_URI=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
       market-data-feeder
@@ -259,7 +256,7 @@ over time. These are provided as a guide.*
 
     * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
-      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'GRPC_URI=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
       market-data-feeder
@@ -268,7 +265,7 @@ over time. These are provided as a guide.*
     * ```shell
       docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
-      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'GRPC_URI=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       --env 'PROVIDER_OSMOSIS_BASE_ADDRESS=https://osmo-test-cl.nolus.network:1317/osmosis/gamm/v1beta1/'
       market-data-feeder
@@ -278,14 +275,14 @@ over time. These are provided as a guide.*
 
     * ```shell
       echo $MNEMONIC | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
-      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'GRPC_URI=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       alarms-dispatcher
     ```
 
     * ```shell
       cat $MNEMONIC_FILE | docker run -i -a stdin --add-host host.docker.internal:host-gateway \
-      --env 'GRPC_URL=https://rila-cl.nolus.network:9090' \
+      --env 'GRPC_URI=https://rila-cl.nolus.network:9090' \
       --env 'JSON_RPC_URL=https://rila-cl.nolus.network:26657' \
       alarms-dispatcher
     ```
@@ -293,7 +290,7 @@ over time. These are provided as a guide.*
     * ```shell
       docker run -i -a stdin --add-host host.docker.internal:host-gateway \
       --env "SIGNING_KEY_MNEMONIC=$MNEMONIC" \
-      --env 'GRPC_URL=https://rila-net.nolus.io:1318' \
+      --env 'GRPC_URI=https://rila-net.nolus.io:1318' \
       --env 'JSON_RPC_URL=https://rila-net.nolus.io:26657' \
       alarms-dispatcher
     ```

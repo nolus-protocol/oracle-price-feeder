@@ -1,20 +1,27 @@
-use std::num::{NonZeroU128, NonZeroU64};
-
-use cosmrs::{
-    proto::cosmos::base::abci::v1beta1::GasInfo,
-    rpc::Client as _,
-    tendermint::{abci::types::ExecTxResult, Hash},
-    tx::Fee,
-    Coin,
+use std::{
+    fmt::{Display, Formatter, Result as FmtResult},
+    num::{NonZeroU128, NonZeroU64},
 };
+
+use cosmrs::{proto::cosmos::base::abci::v1beta1::GasInfo, tx::Fee, Coin};
 use tracing::error;
 
-use crate::{client::Client, config::Node};
+use crate::config::Node;
 
 pub mod commit;
-pub mod error;
+pub mod get_tx_response;
 pub mod query;
 pub mod simulate;
+
+#[derive(Debug, Clone)]
+#[repr(transparent)]
+pub struct TxHash(pub String);
+
+impl Display for TxHash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str(&self.0)
+    }
+}
 
 #[must_use]
 pub fn adjust_gas_limit(
@@ -69,15 +76,4 @@ pub fn calculate_fee(config: &Node, gas_limit: NonZeroU64) -> Fee {
         },
         gas_limit,
     )
-}
-
-pub async fn get_tx_response(
-    client: &Client,
-    tx_hash: Hash,
-) -> Result<ExecTxResult, error::GetTxResponse> {
-    client
-        .with_json_rpc(move |rpc| async move { rpc.tx(tx_hash, false).await })
-        .await
-        .map(|response| response.tx_result)
-        .map_err(From::from)
 }

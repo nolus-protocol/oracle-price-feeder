@@ -7,8 +7,8 @@ use tokio::{
 };
 
 use chain_comms::{
-    interact::commit,
-    reexport::cosmrs::{tendermint::Hash as TxHash, Any as ProtobufAny},
+    interact::{commit, TxHash},
+    reexport::cosmrs::Any as ProtobufAny,
 };
 
 use crate::mode::{self, Blocking, NonBlocking};

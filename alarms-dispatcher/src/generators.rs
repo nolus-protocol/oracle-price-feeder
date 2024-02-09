@@ -18,12 +18,8 @@ use broadcast::{
 };
 use chain_comms::{
     client::Client as NodeClient,
-    interact::query,
-    reexport::cosmrs::{
-        proto::cosmwasm::wasm::v1::MsgExecuteContract,
-        tendermint::{abci::types::ExecTxResult, Hash as TxHash},
-        Any as ProtobufAny,
-    },
+    interact::{get_tx_response::Response as TxResponse, query, TxHash},
+    reexport::cosmrs::{proto::cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny},
 };
 
 use crate::{
@@ -197,7 +193,7 @@ async fn task(
                     %contract_type,
                     %contract_address,
                     code = response.code.value(),
-                    log = response.log,
+                    log = response.raw_log,
                     data = ?response.data,
                     %hash,
                     "Task encountered expected error!"
@@ -218,7 +214,7 @@ struct FatalError {
     contract_type: &'static str,
     contract_address: Arc<str>,
     tx_hash: TxHash,
-    tx_result: ExecTxResult,
+    tx_result: TxResponse,
 }
 
 async fn task_inner(
@@ -232,18 +228,15 @@ async fn task_inner(
     let mut fallback_gas_limit: NonZeroU64 = context.hard_gas_limit;
 
     'runner_loop: loop {
-        let should_send: bool = node_client
-            .with_grpc(|rpc| {
-                query::wasm(
-                    rpc,
-                    context.contract_address.to_string(),
-                    QueryMsg::ALARMS_STATUS,
-                )
-            })
-            .await
-            .map_or(true, |response: StatusResponse| {
-                response.remaining_for_dispatch()
-            });
+        let should_send: bool = query::wasm_smart(
+            &mut node_client.wasm_query_client(),
+            context.contract_address.to_string(),
+            QueryMsg::ALARMS_STATUS,
+        )
+        .await
+        .map_or(true, |response: StatusResponse| {
+            response.remaining_for_dispatch()
+        });
 
         if should_send {
             'generator_loop: loop {
@@ -276,8 +269,13 @@ async fn task_inner(
                     }
                 };
 
-                let Some(response): Option<ExecTxResult> =
-                    broadcast::poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash).await
+                let Some(response): Option<TxResponse> = broadcast::poll_delivered_tx(
+                    &node_client,
+                    tick_time,
+                    poll_time,
+                    tx_hash.clone(),
+                )
+                .await
                 else {
                     warn!("Transaction not found or couldn't be reported back in the given specified period.");
 
@@ -315,7 +313,7 @@ enum HandleResponseResult {
     BreakTxLoop,
     Fatal {
         tx_hash: TxHash,
-        tx_result: ExecTxResult,
+        tx_result: TxResponse,
     },
 }
 
@@ -323,7 +321,7 @@ fn handle_response(
     context: &TaskContext,
     fallback_gas_limit: &mut NonZeroU64,
     tx_hash: TxHash,
-    tx_result: ExecTxResult,
+    tx_result: TxResponse,
 ) -> HandleResponseResult {
     let maybe_dispatched_count: Option<u32> = log::tx_response(
         context.contract_type,
@@ -396,21 +394,21 @@ enum ExtractDispatchedCountError {
     OutOfGas,
     Fatal {
         tx_hash: TxHash,
-        tx_result: ExecTxResult,
+        tx_result: TxResponse,
     },
 }
 
 fn extract_dispatched_count(
     fallback_gas_limit: &mut NonZeroU64,
     tx_hash: TxHash,
-    tx_result: ExecTxResult,
+    tx_result: TxResponse,
     maybe_dispatched_count: Option<u32>,
 ) -> Result<u32, ExtractDispatchedCountError> {
     if tx_result.code.is_err() {
         if tx_result.code.value() == 11 {
             warn!("Transaction failed. Probable error is out of gas. Retrying transaction.");
 
-            if let Some(gas_used) = NonZeroU64::new(tx_result.gas_used.unsigned_abs()) {
+            if let Some(gas_used) = NonZeroU64::new(tx_result.gas_used) {
                 *fallback_gas_limit = gas_used.max(*fallback_gas_limit);
             }
 
@@ -418,9 +416,8 @@ fn extract_dispatched_count(
         }
     } else {
         *fallback_gas_limit = NonZeroU64::new({
-            let (mut n, overflow): (u64, bool) = fallback_gas_limit
-                .get()
-                .overflowing_add(tx_result.gas_used.unsigned_abs());
+            let (mut n, overflow): (u64, bool) =
+                fallback_gas_limit.get().overflowing_add(tx_result.gas_used);
 
             n >>= 1;
 
@@ -456,8 +453,8 @@ async fn receive_back_tx_hash(
                     contract_type = contract_type,
                     address = contract_address.as_ref(),
                     code = tx_response.code.value(),
-                    log = tx_response.log,
-                    data = ?tx_response.data,
+                    log = tx_response.raw_log,
+                    info = tx_response.info,
                     "Failed to commit transaction! Error type: {}",
                     match r#type {
                         CommitErrorType::InvalidAccountSequence => "Invalid account sequence",

@@ -2,7 +2,7 @@ use tracing::{error, info, info_span};
 
 use chain_comms::{
     decode,
-    reexport::cosmrs::tendermint::{abci::types::ExecTxResult, Hash},
+    interact::{get_tx_response::Response as TxResponse, TxHash},
 };
 
 use crate::messages::DispatchResponse;
@@ -10,8 +10,8 @@ use crate::messages::DispatchResponse;
 pub fn tx_response(
     contract_type: &str,
     contract_address: &str,
-    hash: &Hash,
-    tx_result: &ExecTxResult,
+    hash: &TxHash,
+    tx_result: &TxResponse,
 ) -> Option<DispatchResponse> {
     info_span!("Tx Response")
         .in_scope(|| {
@@ -23,10 +23,10 @@ pub fn tx_response(
 
             let mut maybe_dispatch_response = None;
 
-            broadcast::log::on_error(tx_result.code, &tx_result.log);
+            broadcast::log::on_error(tx_result.code, &tx_result.raw_log, &tx_result.info);
 
             if tx_result.code.is_ok() {
-                match decode::exec_tx_data(tx_result) {
+                match decode::tx_response_data(tx_result) {
                     Ok(dispatch_response) => {
                         match serde_json_wasm::from_slice::<DispatchResponse>(&dispatch_response) {
                             Ok(dispatch_response) => {
@@ -39,7 +39,7 @@ pub fn tx_response(
                             }
                             Err(error) => error!(
                                 error = ?error,
-                                response_data = String::from_utf8_lossy(&tx_result.data).as_ref(),
+                                response_data = tx_result.data,
                                 "Failed to deserialize transaction response from the JSON format! Cause: {error}",
                             ),
                         }

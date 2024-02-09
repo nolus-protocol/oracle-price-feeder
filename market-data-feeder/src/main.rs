@@ -24,7 +24,10 @@ use broadcast::broadcast;
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
-    reexport::tonic::transport::Channel as TonicChannel,
+    reexport::{
+        cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
+        tonic::transport::Channel as TonicChannel,
+    },
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
@@ -82,7 +85,7 @@ async fn app_main() -> Result<()> {
         ..
     }: RpcSetup<Config> = prepare_rpc("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
-    check_compatibility(&config, &node_client).await?;
+    check_compatibility(&config, &mut node_client.wasm_query_client()).await?;
 
     let spawn_generators_f = {
         let node_client: NodeClient = node_client.clone();
@@ -124,7 +127,10 @@ async fn app_main() -> Result<()> {
 }
 
 #[allow(clippy::future_not_send)]
-async fn check_compatibility(config: &Config, node_client: &NodeClient) -> Result<()> {
+async fn check_compatibility(
+    config: &Config,
+    wasm_query_client: &mut WasmQueryClient<TonicChannel>,
+) -> Result<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
         major: u64,
@@ -135,11 +141,12 @@ async fn check_compatibility(config: &Config, node_client: &NodeClient) -> Resul
     info!("Checking compatibility with contract version...");
 
     for (oracle_name, oracle_address) in &config.oracles {
-        let version: JsonVersion = node_client
-            .with_grpc(|rpc: TonicChannel| {
-                query::wasm(rpc, oracle_address.to_string(), QueryMsg::CONTRACT_VERSION)
-            })
-            .await?;
+        let version: JsonVersion = query::wasm_smart(
+            wasm_query_client,
+            oracle_address.to_string(),
+            QueryMsg::CONTRACT_VERSION,
+        )
+        .await?;
 
         let version: Version = Version {
             major: version.major,

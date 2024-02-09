@@ -5,10 +5,12 @@
     clippy::significant_drop_tightening
 )]
 
-use std::future::Future;
-use std::pin::pin;
 use std::{
-    collections::btree_map::BTreeMap, convert::Infallible, future::poll_fn, task::Poll,
+    collections::btree_map::BTreeMap,
+    convert::Infallible,
+    future::{poll_fn, Future},
+    pin::pin,
+    task::Poll,
     time::Duration,
 };
 
@@ -23,8 +25,12 @@ use tracing::{error, info};
 use chain_comms::{
     client::Client as NodeClient,
     config::Node as NodeConfig,
-    interact::{error::GetTxResponse as GetTxResponseError, get_tx_response},
-    reexport::cosmrs::tendermint::{abci::types::ExecTxResult, Hash as TxHash},
+    interact::{
+        get_tx_response::{
+            error::Error as GetTxResponseError, get_tx_response, Response as TxResponse,
+        },
+        TxHash,
+    },
     signer::Signer,
 };
 
@@ -114,14 +120,14 @@ pub async fn poll_delivered_tx(
     node_client: &NodeClient,
     tick_time: Duration,
     poll_time: Duration,
-    hash: TxHash,
-) -> Option<ExecTxResult> {
+    tx_hash: TxHash,
+) -> Option<TxResponse> {
     timeout(tick_time, async {
         loop {
             sleep(poll_time).await;
 
-            let result: Result<ExecTxResult, GetTxResponseError> =
-                get_tx_response(node_client, hash).await;
+            let result: Result<TxResponse, GetTxResponseError> =
+                get_tx_response(node_client, tx_hash.0.clone()).await;
 
             match result {
                 Ok(tx) => {
@@ -129,7 +135,7 @@ pub async fn poll_delivered_tx(
                 }
                 Err(error) => {
                     error!(
-                        hash = %hash,
+                        hash = %tx_hash,
                         error = ?error,
                         "Polling delivered transaction failed!",
                     );

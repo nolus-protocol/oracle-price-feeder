@@ -45,7 +45,7 @@ tokio = { version = "1.36.0", default-features = false, features = [
     "macros",
 ] }
 toml = "0.8.10"
-tonic = { version = "0.10.2", default_features = false, features = [
+tonic = { version = "=0.10.2", default_features = false, features = [
     "tls",
     "tls-roots",
     "gzip",
@@ -54,22 +54,6 @@ tracing = "0.1.40"
 tracing-appender = "0.2.3"
 tracing-subscriber = "0.3.18"
 url = { version = "2.5.0", default-features = false }
-
-[patch.crates-io.tendermint]
-git = "https://github.com/nolus-protocol/tendermint-rs.git"
-branch = "0.34-patched"
-
-[patch.crates-io.tendermint-config]
-git = "https://github.com/nolus-protocol/tendermint-rs.git"
-branch = "0.34-patched"
-
-[patch.crates-io.tendermint-proto]
-git = "https://github.com/nolus-protocol/tendermint-rs.git"
-branch = "0.34-patched"
-
-[patch.crates-io.tendermint-rpc]
-git = "https://github.com/nolus-protocol/tendermint-rs.git"
-branch = "0.34-patched"
 
 [profile.release]
 strip = "debuginfo"

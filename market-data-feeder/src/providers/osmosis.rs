@@ -7,11 +7,11 @@ use tokio::task::JoinSet;
 use toml::Value;
 
 use chain_comms::{
-    client::Client as NodeClient,
+    client::{self, Client as NodeClient},
     interact::query,
-    reexport::tonic::{
-        codegen::http::uri::InvalidUri,
-        transport::{Channel as TonicChannel, Error as TonicError},
+    reexport::{
+        cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
+        tonic::transport::Channel as TonicChannel,
     },
 };
 
@@ -37,8 +37,8 @@ impl Osmosis {
         &self,
         node_rpc: TonicChannel,
     ) -> Result<impl Iterator<Item = Route> + '_, query::error::Wasm> {
-        query::wasm::<SupportedCurrencyPairsResponse>(
-            node_rpc,
+        query::wasm_smart::<SupportedCurrencyPairsResponse>(
+            &mut WasmQueryClient::new(node_rpc),
             self.oracle_addr.to_string(),
             QueryMsg::SUPPORTED_CURRENCY_PAIRS,
         )
@@ -101,8 +101,7 @@ impl Provider for Osmosis {
         let mut set: JoinSet<Result<Price<CoinWithDecimalPlaces>, ProviderError>> = JoinSet::new();
 
         let routes_iter = self
-            .node_client
-            .with_grpc(|rpc: TonicChannel| self.query_supported_currencies(rpc))
+            .query_supported_currencies(self.node_client.raw_grpc())
             .await?;
 
         for Route {
@@ -218,19 +217,15 @@ impl FromConfig<false> for Osmosis {
         if let Some(fields) = super::left_over_fields(config.into_misc()) {
             Err(ConstructError::UnknownFields(fields))
         } else {
-            let uri = Config::fetch_from_env(id, "GRPC_URL")
-                .map_err(ConstructError::FetchGrpcUri)
-                .and_then(|grpc_uri: String| {
-                    grpc_uri.try_into().map_err(ConstructError::InvalidGrpcUri)
-                })?;
+            let grpc_uri =
+                Config::fetch_from_env(id, "GRPC_URI").map_err(ConstructError::FetchGrpcUri)?;
 
-            TonicChannel::builder(uri)
-                .connect()
+            NodeClient::new(&grpc_uri, None)
                 .await
-                .map(|channel| Self {
+                .map(|osmosis_client| Self {
                     instance_id: id.to_string(),
                     node_client: node_client.clone(),
-                    channel,
+                    channel: osmosis_client.raw_grpc(),
                     oracle_addr,
                     currencies,
                 })
@@ -249,10 +244,8 @@ pub(crate) enum ConstructError {
     UnknownFields(Box<str>),
     #[error("Failed to fetch Osmosis node's gRPC URI from environment variables! Cause: {0}")]
     FetchGrpcUri(#[from] EnvError),
-    #[error("Failed to parse Osmosis node's gRPC URI! Cause: {0}")]
-    InvalidGrpcUri(#[from] InvalidUri),
-    #[error("Failed to connect RPC's URI! Cause: {0}")]
-    ConnectToGrpc(#[from] TonicError),
+    #[error("Failed to connect gRPC endpoint! Cause: {0}")]
+    ConnectToGrpc(#[from] client::error::Error),
 }
 
 struct Route {

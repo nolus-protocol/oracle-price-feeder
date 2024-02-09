@@ -17,12 +17,11 @@ use broadcast::{
     mode::NonBlocking,
     poll_delivered_tx,
 };
+use chain_comms::interact::TxHash;
 use chain_comms::{
     client::Client as NodeClient,
-    reexport::cosmrs::{
-        proto::{cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny},
-        tendermint::{abci::types::ExecTxResult, Hash as TxHash},
-    },
+    interact::get_tx_response::Response as TxResponse,
+    reexport::cosmrs::proto::{cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny},
 };
 
 use crate::{
@@ -425,7 +424,7 @@ where
 
     let mut fallback_gas_limit: NonZeroU64 = hard_gas_limit;
 
-    let mut poll_delivered_tx_set: JoinSet<Option<(TxHash, ExecTxResult)>> = JoinSet::new();
+    let mut poll_delivered_tx_set: JoinSet<Option<(TxHash, TxResponse)>> = JoinSet::new();
 
     let mut next_tick: Instant = Instant::now();
 
@@ -501,7 +500,7 @@ async fn handle_idle_work(
     node_client: &NodeClient,
     provider_name: &str,
     commit_result_receiver: &mut CommitResultReceiver,
-    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, ExecTxResult)>>,
+    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, TxResponse)>>,
     fallback_gas_limit: &mut NonZeroU64,
     tick_time: Duration,
     poll_time: Duration,
@@ -530,7 +529,7 @@ async fn handle_idle_work(
 
 fn handle_commit_result(
     node_client: &NodeClient,
-    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, ExecTxResult)>>,
+    poll_delivered_tx_set: &mut JoinSet<Option<(TxHash, TxResponse)>>,
     result: CommitResult,
     tick_time: Duration,
     poll_time: Duration,
@@ -540,7 +539,7 @@ fn handle_commit_result(
             let node_client: NodeClient = node_client.clone();
 
             poll_delivered_tx_set.spawn(async move {
-                poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash)
+                poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash.clone())
                     .await
                     .map(|tx| (tx_hash, tx))
             });
@@ -551,8 +550,8 @@ fn handle_commit_result(
         }) => {
             error!(
                 code = tx_response.code.value(),
-                log = tx_response.log,
-                data = ?tx_response.data,
+                raw_log = tx_response.raw_log,
+                info = ?tx_response.info,
                 "Failed to commit transaction! Error type: {}",
                 match r#type {
                     CommitErrorType::InvalidAccountSequence => "Invalid account sequence",
@@ -566,14 +565,14 @@ fn handle_commit_result(
 fn handle_delivered_tx(
     provider_name: &str,
     fallback_gas_limit: &mut NonZeroU64,
-    result: Result<Option<(TxHash, ExecTxResult)>, JoinError>,
+    result: Result<Option<(TxHash, TxResponse)>, JoinError>,
 ) {
     match result {
         Ok(Some((tx_hash, tx_result))) => {
             crate::log::tx_response(provider_name, &tx_hash, &tx_result);
 
             *fallback_gas_limit =
-                update_fallback_gas_limit(*fallback_gas_limit, tx_result.gas_used.unsigned_abs());
+                update_fallback_gas_limit(*fallback_gas_limit, tx_result.gas_used);
         }
         Ok(None) => {}
         Err(error) => {

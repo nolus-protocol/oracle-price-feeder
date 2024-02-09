@@ -2,8 +2,8 @@ use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError)]
 pub enum AccountData {
-    #[error("Connection failure occurred! Cause: {0}")]
-    Connection(#[from] tonic::Status),
+    #[error("RPC error occurred while querying account data! Cause: {0}")]
+    Rpc(#[from] tonic::Status),
     #[error("Node failed to provide information about requested address!")]
     NoAccountData,
     #[error("Failed to deserialize account data from protobuf! Cause: {0}")]

@@ -6,10 +6,10 @@ pub enum CommitTx {
     Signing(#[from] crate::signer::error::Error),
     #[error("Failed committing and signing execution message! Cause: {0}")]
     Commit(#[from] crate::build_tx::error::Error),
-    #[error("Failed to serialize committed transaction! Cause: {0}")]
-    Serialize(#[from] cosmrs::ErrorReport),
     #[error("Failed to broadcast committed transaction! Cause: {0}")]
-    Broadcast(#[from] cosmrs::rpc::Error),
+    Broadcast(#[from] tonic::Status),
+    #[error("Broadcast completed but didn't no response was found! Broadcast may have failed!")]
+    EmptyResponseReceived,
 }
 
 #[derive(Debug, ThisError)]

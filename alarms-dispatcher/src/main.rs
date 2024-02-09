@@ -21,7 +21,6 @@ use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
 use chain_comms::{
     interact::query,
-    reexport::tonic::transport::Channel as TonicChannel,
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
@@ -123,12 +122,12 @@ async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
         );
 
     for (contract, name, compatible) in contracts_iter {
-        let version: JsonVersion = rpc_setup
-            .node_client
-            .with_grpc(|rpc: TonicChannel| {
-                query::wasm(rpc, contract.address.clone(), QueryMsg::CONTRACT_VERSION)
-            })
-            .await?;
+        let version: JsonVersion = query::wasm_smart(
+            &mut rpc_setup.node_client.wasm_query_client(),
+            contract.address.clone(),
+            QueryMsg::CONTRACT_VERSION,
+        )
+        .await?;
 
         let version: Version = Version {
             major: version.major,

@@ -2,9 +2,7 @@ use tokio::time::Instant;
 use tracing::{error, error_span, info, warn};
 
 use chain_comms::{
-    client::Client as NodeClient,
-    interact::commit,
-    reexport::cosmrs::rpc::error::{Error as RpcError, ErrorDetail as RpcErrorDetail},
+    client::Client as NodeClient, interact::commit, reexport::tonic::Code as TonicStatusCode,
     signer::Signer,
 };
 
@@ -125,14 +123,15 @@ where
         Ok(tx_response) => Some(tx_response),
         Err(error) => {
             error_span!("Broadcast").in_scope(|| {
-                if let commit::error::CommitTx::Broadcast(
-                    RpcError(
-                        RpcErrorDetail::Timeout(..),
-                        ..,
-                    ),
-                ) = error {
-                    warn!(error = ?error, "Failed to broadcast transaction due to a timeout! Cause: {}", error);
-                } else {
+                'log_error: {
+                    if let commit::error::CommitTx::Broadcast(error) = &error {
+                        if matches!(error.code(), TonicStatusCode::DeadlineExceeded) {
+                            warn!(error = ?error, "Failed to broadcast transaction due to a timeout! Cause: {}", error);
+
+                            break 'log_error;
+                        }
+                    }
+
                     error!(error = ?error, "Failed to broadcast transaction due to an error! Cause: {}", error);
                 }
 

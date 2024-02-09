@@ -1,10 +1,13 @@
 use cosmrs::{
-    proto::{cosmos::base::v1beta1::Coin, cosmwasm::wasm::v1::MsgExecuteContract},
+    proto::{
+        cosmos::{base::v1beta1::Coin, tx::v1beta1::TxRaw as RawTx},
+        cosmwasm::wasm::v1::MsgExecuteContract,
+    },
     tendermint::abci::{
         response::{CheckTx, DeliverTx},
         Code,
     },
-    tx::{Body, Fee, Raw as RawTx},
+    tx::{Body, Fee},
     Any as ProtobufAny,
 };
 

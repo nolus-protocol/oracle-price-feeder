@@ -8,7 +8,7 @@ use cosmrs::{
         prost::Message,
     },
     tendermint::chain::Id as ChainId,
-    tx::{Body, Fee, Raw, SignerInfo},
+    tx::{Body, Fee, SignerInfo},
 };
 
 use self::error::Result as ModuleResult;
@@ -37,7 +37,7 @@ impl Signer {
         &self.account.address
     }
 
-    pub fn sign(&mut self, body: Body, fee: Fee) -> ModuleResult<Raw> {
+    pub fn sign(&mut self, body: Body, fee: Fee) -> ModuleResult<TxRaw> {
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(
@@ -56,13 +56,10 @@ impl Signer {
                 })
                 .as_slice(),
             )
-            .map(move |signature| {
-                TxRaw {
-                    body_bytes: body,
-                    auth_info_bytes: auth_info,
-                    signatures: vec![signature.to_vec()],
-                }
-                .into()
+            .map(move |signature| TxRaw {
+                body_bytes: body,
+                auth_info_bytes: auth_info,
+                signatures: vec![signature.to_vec()],
             })
             .map_err(Into::into)
     }

@@ -1,7 +1,13 @@
-use std::{future::Future, sync::Arc};
+use std::{num::NonZeroUsize, sync::Arc};
 
-use cosmrs::rpc::HttpClient as TendermintRpcClient;
-use tonic::transport::{Channel, Endpoint};
+use cosmrs::proto::{
+    cosmos::{
+        auth::v1beta1::query_client::QueryClient as AuthQueryClient,
+        tx::v1beta1::service_client::ServiceClient as TxServiceClient,
+    },
+    cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
+};
+use tonic::transport::{Channel as GrpcChannel, Uri};
 
 use crate::config::Node;
 
@@ -11,51 +17,85 @@ pub mod error;
 
 #[derive(Debug, Clone)]
 #[repr(transparent)]
-pub struct Client(Arc<Inner>);
+pub struct Client(Arc<GrpcChannel>);
 
 impl Client {
-    pub async fn from_config(config: &Node) -> Result<Self> {
-        let json_rpc: TendermintRpcClient =
-            TendermintRpcClient::builder(config.json_rpc_url().try_into()?)
-                .set_origin_header(true)
-                .disable_caching(true)
-                .build()?;
+    pub async fn new(grpc_uri: &str, concurrency_limit: Option<NonZeroUsize>) -> Result<Self> {
+        let grpc: GrpcChannel = {
+            let grpc_uri: Uri = grpc_uri.try_into()?;
 
-        let grpc: Channel = {
-            let mut channel_builder: Endpoint = Channel::builder(config.grpc_url().try_into()?);
+            let origin: Uri = format!(
+                "{}://{}:{}",
+                grpc_uri
+                    .scheme_str()
+                    .ok_or(error::Error::GrpcUriNoSchemeSet)?,
+                grpc_uri.host().ok_or(error::Error::GrpcUriNoHostSet)?,
+                grpc_uri.port_u16().map_or_else(
+                    || grpc_uri
+                        .scheme_str()
+                        .and_then(|scheme| match scheme {
+                            "http" | "ws" => Some(80),
+                            "https" | "wss" => Some(443),
+                            _ => None,
+                        })
+                        .ok_or(error::Error::GrpcUriNoPortSet),
+                    Ok,
+                )?,
+            )
+            .try_into()?;
 
-            if let Some(limit) = config.http2_concurrency_limit() {
-                channel_builder = channel_builder.concurrency_limit(limit.get());
-            }
-
-            channel_builder
+            GrpcChannel::builder(grpc_uri)
+                .origin(origin)
+                .pipe_if_some(
+                    |_| concurrency_limit,
+                    |endpoint, limit| endpoint.concurrency_limit(limit.get()),
+                )
                 .keep_alive_while_idle(true)
                 .connect()
                 .await?
         };
 
-        Ok(Self(Arc::new(Inner { json_rpc, grpc })))
+        Ok(Self(Arc::new(grpc)))
     }
 
-    pub async fn with_json_rpc<F, R>(&self, f: F) -> R::Output
-    where
-        F: FnOnce(TendermintRpcClient) -> R + Send,
-        R: Future + Send,
-    {
-        f(self.0.json_rpc.clone()).await
+    pub async fn from_config(config: &Node) -> Result<Self> {
+        Self::new(config.grpc_uri(), config.http2_concurrency_limit()).await
     }
 
-    pub async fn with_grpc<F, R>(&self, f: F) -> R::Output
-    where
-        F: FnOnce(Channel) -> R + Send,
-        R: Future + Send,
-    {
-        f(self.0.grpc.clone()).await
+    pub fn raw_grpc(&self) -> GrpcChannel {
+        GrpcChannel::clone(&self.0)
+    }
+
+    pub fn auth_query_client(&self) -> AuthQueryClient<GrpcChannel> {
+        AuthQueryClient::new(self.raw_grpc())
+    }
+
+    pub fn tx_service_client(&self) -> TxServiceClient<GrpcChannel> {
+        TxServiceClient::new(self.raw_grpc())
+    }
+
+    pub fn wasm_query_client(&self) -> WasmQueryClient<GrpcChannel> {
+        WasmQueryClient::new(self.raw_grpc())
     }
 }
 
-#[derive(Debug, Clone)]
-struct Inner {
-    json_rpc: TendermintRpcClient,
-    grpc: Channel,
+trait PipeIf: Sized {
+    fn pipe_if_some<T, TryF, MapF>(self, try_f: TryF, map_f: MapF) -> Self
+    where
+        TryF: FnOnce(&Self) -> Option<T>,
+        MapF: FnOnce(Self, T) -> Self;
+}
+
+impl<T> PipeIf for T {
+    fn pipe_if_some<U, TryF, MapF>(self, try_f: TryF, map_f: MapF) -> Self
+    where
+        TryF: FnOnce(&Self) -> Option<U>,
+        MapF: FnOnce(Self, U) -> Self,
+    {
+        if let Some(input) = try_f(&self) {
+            map_f(self, input)
+        } else {
+            self
+        }
+    }
 }

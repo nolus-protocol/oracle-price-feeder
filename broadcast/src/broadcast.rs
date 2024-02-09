@@ -106,12 +106,12 @@ fn send_back_tx_hash(
     sender_id: usize,
     tx_response: commit::Response,
 ) -> SendBackTxHashResult {
-    let hash = tx_response.hash;
+    let tx_hash = tx_response.tx_hash.clone();
 
     let channel_closed = if let Some(sender) = tx_result_senders.get(&sender_id) {
         if sender
             .send(if tx_response.code.is_ok() {
-                Ok(tx_response.hash)
+                Ok(tx_response.tx_hash)
             } else {
                 Err(CommitError {
                     r#type: if tx_response.code.value() == 32 {
@@ -136,7 +136,7 @@ fn send_back_tx_hash(
         let node_client = node_client.clone();
 
         async move {
-            crate::poll_delivered_tx(&node_client, tick_time, poll_time, hash).await;
+            crate::poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash).await;
         }
     }));
 

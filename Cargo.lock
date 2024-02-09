@@ -2204,7 +2204,8 @@ dependencies = [
 [[package]]
 name = "tendermint"
 version = "0.34.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=0.34-patched#9be88f72ba6e3389812ccd8d5521a931a9b5222d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc2294fa667c8b548ee27a9ba59115472d0a09c2ba255771092a7f1dcf03a789"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -2234,7 +2235,8 @@ dependencies = [
 [[package]]
 name = "tendermint-config"
 version = "0.34.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=0.34-patched#9be88f72ba6e3389812ccd8d5521a931a9b5222d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a25dbe8b953e80f3d61789fbdb83bf9ad6c0ef16df5ca6546f49912542cc137"
 dependencies = [
  "flex-error",
  "serde",
@@ -2247,7 +2249,8 @@ dependencies = [
 [[package]]
 name = "tendermint-proto"
 version = "0.34.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=0.34-patched#9be88f72ba6e3389812ccd8d5521a931a9b5222d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cc728a4f9e891d71adf66af6ecaece146f9c7a11312288a3107b3e1d6979aaf"
 dependencies = [
  "bytes",
  "flex-error",
@@ -2264,7 +2267,8 @@ dependencies = [
 [[package]]
 name = "tendermint-rpc"
 version = "0.34.0"
-source = "git+https://github.com/nolus-protocol/tendermint-rs.git?branch=0.34-patched#9be88f72ba6e3389812ccd8d5521a931a9b5222d"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfbf0a4753b46a190f367337e0163d0b552a2674a6bac54e74f9f2cdcde2969b"
 dependencies = [
  "async-trait",
  "bytes",
