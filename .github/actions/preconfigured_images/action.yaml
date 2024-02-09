@@ -16,7 +16,7 @@ inputs:
     description: "Docker repository/namespace used to tag the image."
     required: true
   docker_tag:
-    description: "Dockage image version tag."
+    description: "Docker image version tag."
     required: true
 
 runs:
