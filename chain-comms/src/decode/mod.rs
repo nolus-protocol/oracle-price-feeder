@@ -41,9 +41,7 @@ fn test() {
         tx_response_data(&TxResponse {
             code: Default::default(),
             block_height: 0,
-            data: b"EjQKLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNlEgQKAjE2"
-                .to_vec()
-                .into(),
+            data: "EjQKLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNlEgQKAjE2".into(),
             raw_log: Default::default(),
             info: Default::default(),
             gas_wanted: 0,
