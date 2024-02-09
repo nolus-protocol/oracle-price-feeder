@@ -378,7 +378,7 @@ where
 
     let is_error: bool = result.is_err();
 
-    let (error, cause): (String, String) = match { result } {
+    let (error, cause): (String, String) = match result {
         Ok(output) => (format!("{output:?}"), output.to_string()),
         Err(error) => (format!("{error:?}"), error.to_string()),
     };

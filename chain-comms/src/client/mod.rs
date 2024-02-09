@@ -62,18 +62,22 @@ impl Client {
         Self::new(config.grpc_uri(), config.http2_concurrency_limit()).await
     }
 
+    #[must_use]
     pub fn raw_grpc(&self) -> GrpcChannel {
         GrpcChannel::clone(&self.0)
     }
 
+    #[must_use]
     pub fn auth_query_client(&self) -> AuthQueryClient<GrpcChannel> {
         AuthQueryClient::new(self.raw_grpc())
     }
 
+    #[must_use]
     pub fn tx_service_client(&self) -> TxServiceClient<GrpcChannel> {
         TxServiceClient::new(self.raw_grpc())
     }
 
+    #[must_use]
     pub fn wasm_query_client(&self) -> WasmQueryClient<GrpcChannel> {
         WasmQueryClient::new(self.raw_grpc())
     }

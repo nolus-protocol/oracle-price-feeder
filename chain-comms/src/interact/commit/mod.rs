@@ -133,15 +133,16 @@ pub async fn with_signed_body(
 ) -> Result<Response, Error> {
     const SIGNATURE_VERIFICATION_ERROR: u32 = 4;
 
-    match client
+    let result = client
         .tx_service_client()
         .broadcast_tx(BroadcastTxRequest {
             tx_bytes,
             mode: BroadcastMode::Sync.into(),
         })
         .await
-        .map(TonicResponse::into_inner)
-    {
+        .map(TonicResponse::into_inner);
+
+    match result {
         Ok(BroadcastTxResponse {
             tx_response:
                 Some(TxResponse {

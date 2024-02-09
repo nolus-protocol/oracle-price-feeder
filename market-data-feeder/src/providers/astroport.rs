@@ -32,7 +32,7 @@ pub(super) struct Astroport {
     instance_id: String,
     node_wasm_query_client: WasmQueryClient<TonicChannel>,
     oracle_addr: Arc<str>,
-    astroport_wasm_query_client: WasmQueryClient<TonicChannel>,
+    wasm_query_client: WasmQueryClient<TonicChannel>,
     router_contract: Arc<str>,
     currencies: Currencies,
 }
@@ -117,7 +117,7 @@ impl Provider for Astroport {
         ) in supported_currencies_iter
         {
             let mut wasm_query_client: WasmQueryClient<TonicChannel> =
-                self.astroport_wasm_query_client.clone();
+                self.wasm_query_client.clone();
 
             let router_contract: Arc<str> = self.router_contract.clone();
 
@@ -209,7 +209,7 @@ impl FromConfig<false> for Astroport {
                 instance_id: id.to_string(),
                 node_wasm_query_client: node_client.wasm_query_client(),
                 oracle_addr,
-                astroport_wasm_query_client: TonicChannel::builder(grpc_uri)
+                wasm_query_client: TonicChannel::builder(grpc_uri)
                     .connect()
                     .await
                     .map(WasmQueryClient::new)?,
