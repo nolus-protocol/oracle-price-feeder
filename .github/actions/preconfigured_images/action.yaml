@@ -1,6 +1,6 @@
 name: "Build preconfigured Docker images"
 description: "Action for building preconfigured Docker images for direct use."
-author: "The Nolus Dev Team <dev@nolus.io>"
+author: "The Dev Nolus Team <dev@nolus.io>"
 
 inputs:
   config:
