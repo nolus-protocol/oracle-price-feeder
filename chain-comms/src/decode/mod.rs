@@ -1,9 +1,9 @@
-use base64::{
-    alphabet::URL_SAFE,
-    engine::{GeneralPurpose, GeneralPurposeConfig},
-    Engine,
+use cosmrs::{
+    cosmwasm::MsgExecuteContractResponse,
+    proto::{prost::Message, Any as ProtobufAny},
+    tx::Msg as _,
 };
-use cosmrs::{cosmwasm::MsgExecuteContractResponse, proto::prost::Message, tx::Msg as _, Any};
+use data_encoding::HEXUPPER;
 
 use crate::interact::get_tx_response::Response as TxResponse;
 
@@ -18,37 +18,34 @@ struct Package {
 }
 
 pub fn tx_response_data(tx: &TxResponse) -> Result<Vec<u8>, Error> {
-    Engine::decode(
-        &GeneralPurpose::new(&URL_SAFE, GeneralPurposeConfig::new()),
-        tx.data.as_bytes(),
-    )
-    .map_err(Error::DecodeBase64)
-    .and_then(|data| {
-        <Package as cosmrs::proto::traits::Message>::decode(data.as_slice())
-            .map_err(Error::DeserializeData)
-    })
-    .and_then(|Package { data }| {
-        <Any as Message>::decode(data.as_slice()).map_err(Error::DeserializeData)
-    })
-    .and_then(|any| MsgExecuteContractResponse::from_any(&any).map_err(Error::InvalidResponseType))
-    .map(|MsgExecuteContractResponse { data }| data)
+    HEXUPPER
+        .decode(tx.data.as_bytes())
+        .map_err(Error::Decode)
+        .and_then(|data| Message::decode(data.as_slice()).map_err(Error::Deserialize))
+        .and_then(|Package { data }| Message::decode(data.as_slice()).map_err(Error::Deserialize))
+        .and_then(|any: ProtobufAny| {
+            MsgExecuteContractResponse::from_any(&any).map_err(Error::InvalidResponseType)
+        })
+        .map(|MsgExecuteContractResponse { data }| data)
 }
 
 #[cfg(test)]
 #[test]
 fn test() {
     assert_eq!(
-        tx_response_data(&TxResponse {
-            code: Default::default(),
-            block_height: 0,
-            data: "EjQKLC9jb3Ntd2FzbS53YXNtLnYxLk1zZ0V4ZWN1dGVDb250cmFjdFJlc3BvbnNlEgQKAjE2".into(),
-            raw_log: Default::default(),
-            info: Default::default(),
-            gas_wanted: 0,
-            gas_used: 0,
-        })
-        .unwrap()
-        .as_slice(),
-        b"16"
+        String::from_utf8(
+            tx_response_data(&TxResponse {
+                code: Default::default(),
+                block_height: 0,
+                data: "12340A2C2F636F736D7761736D2E7761736D2E76312E4D736745786563757465436F6E7472616374526573706F6E736512040A023332".into(),
+                raw_log: Default::default(),
+                info: Default::default(),
+                gas_wanted: 0,
+                gas_used: 0,
+            })
+                .unwrap()
+        )
+            .unwrap(),
+        "32"
     );
 }
