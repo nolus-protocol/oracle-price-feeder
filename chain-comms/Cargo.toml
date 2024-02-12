@@ -7,9 +7,9 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-base64.workspace = true
 bip32.workspace = true
 cosmrs.workspace = true
+data-encoding.workspace = true
 prost.workspace = true
 serde.workspace = true
 serde-json-wasm.workspace = true

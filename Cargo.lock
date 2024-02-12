@@ -41,7 +41,6 @@ dependencies = [
 name = "alarms-dispatcher"
 version = "0.0.0"
 dependencies = [
- "base64",
  "broadcast",
  "chain-comms",
  "semver",
@@ -329,9 +328,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 name = "chain-comms"
 version = "0.0.0"
 dependencies = [
- "base64",
  "bip32",
  "cosmrs",
+ "data-encoding",
  "prost 0.12.3",
  "serde",
  "serde-json-wasm 1.0.1",
@@ -706,6 +705,12 @@ dependencies = [
  "serde",
  "thiserror",
 ]
+
+[[package]]
+name = "data-encoding"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e962a19be5cfc3f3bf6dd8f61eb50107f356ad6270fbb3ed41476571db78be5"
 
 [[package]]
 name = "der"
