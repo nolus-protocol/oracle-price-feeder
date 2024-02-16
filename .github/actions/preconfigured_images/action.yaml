@@ -76,7 +76,7 @@ runs:
         inputs_docker_repository: "${{ inputs.docker_repository }}"
         inputs_docker_tag: "${{ inputs.docker_tag }}"
       run: |
-        if [[ "${inputs_docker_tag}" =~ ^\d+\.\d+\.\d+$ ]]
+        if [[ "${inputs_docker_tag}" =~ ^[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+$ ]]
         then
           latest_tag='latest'
         else
