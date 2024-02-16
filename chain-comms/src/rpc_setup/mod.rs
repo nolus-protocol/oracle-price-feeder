@@ -1,11 +1,12 @@
 use std::path::Path;
 
-use cosmrs::{crypto::secp256k1::SigningKey, proto::cosmos::auth::v1beta1::BaseAccount};
+use cosmrs::{crypto::secp256k1::SigningKey, proto::cosmos::auth::v1beta1::BaseAccount, AccountId};
 use serde::de::DeserializeOwned;
 use tracing::info;
 
 use crate::{
-    account, client::Client, config, interact::query, signer::Signer, signing_key::signing_key,
+    account, client::Client as NodeClient, config, interact::query, signer::Signer,
+    signing_key::signing_key,
 };
 
 use self::error::Result;
@@ -19,7 +20,7 @@ where
 {
     pub signer: Signer,
     pub config: C,
-    pub node_client: Client,
+    pub node_client: NodeClient,
 }
 
 #[allow(clippy::future_not_send)]
@@ -36,15 +37,13 @@ where
 
     info!("Successfully read configuration file.");
 
-    let node_client: Client = Client::from_config(config.as_ref()).await?;
+    let node_client: NodeClient = NodeClient::from_config(config.as_ref()).await?;
 
     info!("Fetching account data from network...");
 
-    let account_data: BaseAccount = query::account_data(
-        &node_client,
-        account::id(config.as_ref(), &signing_key)?.as_ref(),
-    )
-    .await?;
+    let account_id: AccountId = account::id(config.as_ref(), &signing_key)?;
+
+    let account_data: BaseAccount = query::account_data(&node_client, &account_id).await?;
 
     info!("Successfully fetched account data from network.");
 
@@ -52,6 +51,7 @@ where
         signer: Signer::new(
             signing_key,
             config.as_ref().chain_id().clone(),
+            account_id,
             account_data,
         ),
         config,

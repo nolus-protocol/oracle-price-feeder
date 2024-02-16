@@ -9,7 +9,10 @@ use cosmrs::{
     },
     tendermint::chain::Id as ChainId,
     tx::{Body, Fee, SignerInfo},
+    AccountId,
 };
+
+use crate::{client::Client as NodeClient, interact::query};
 
 use self::error::Result as ModuleResult;
 
@@ -18,16 +21,23 @@ pub mod error;
 pub struct Signer {
     key: SigningKey,
     chain_id: ChainId,
+    account_id: AccountId,
     account: BaseAccount,
 }
 
 impl Signer {
     #[inline]
     #[must_use]
-    pub const fn new(key: SigningKey, chain_id: ChainId, account: BaseAccount) -> Self {
+    pub const fn new(
+        key: SigningKey,
+        chain_id: ChainId,
+        account_id: AccountId,
+        account: BaseAccount,
+    ) -> Self {
         Self {
             key,
             chain_id,
+            account_id,
             account,
         }
     }
@@ -62,6 +72,16 @@ impl Signer {
                 signatures: vec![signature.to_vec()],
             })
             .map_err(Into::into)
+    }
+
+    #[inline]
+    pub async fn fetch_sequence_number(
+        &mut self,
+        node_client: &NodeClient,
+    ) -> Result<(), query::error::AccountData> {
+        query::account_data(node_client, &self.account_id)
+            .await
+            .map(|account_data| self.account = account_data)
     }
 
     #[inline]

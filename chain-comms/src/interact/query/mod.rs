@@ -1,31 +1,36 @@
-use cosmrs::proto::{
-    cosmos::auth::v1beta1::{BaseAccount, QueryAccountRequest, QueryAccountResponse},
-    cosmwasm::wasm::v1::{
-        query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+use cosmrs::{
+    proto::{
+        cosmos::auth::v1beta1::{BaseAccount, QueryAccountRequest, QueryAccountResponse},
+        cosmwasm::wasm::v1::{
+            query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+        },
+        prost::Message,
     },
-    prost::Message,
+    AccountId,
 };
 use serde::de::DeserializeOwned;
-use tonic::codec::ProstCodec;
 use tonic::{
-    client::Grpc as GrpcClient, codegen::http::uri::PathAndQuery,
+    client::Grpc as GrpcClient, codec::ProstCodec, codegen::http::uri::PathAndQuery,
     transport::Channel as TonicChannel, IntoRequest as _, Response as TonicResponse,
 };
 use tracing::debug;
 
-use crate::client::Client;
+use crate::client::Client as NodeClient;
 
 use self::error::{AccountData as AccountError, Raw as RawError, Wasm as WasmError};
 
 pub mod error;
 
-pub async fn account_data(client: &Client, address: &str) -> Result<BaseAccount, AccountError> {
+pub async fn account_data(
+    node_client: &NodeClient,
+    address: &AccountId,
+) -> Result<BaseAccount, AccountError> {
     BaseAccount::decode(
         {
-            let data = client
+            let data = node_client
                 .auth_query_client()
                 .account(QueryAccountRequest {
-                    address: address.into(),
+                    address: address.to_string(),
                 })
                 .await
                 .map(TonicResponse::into_inner)
