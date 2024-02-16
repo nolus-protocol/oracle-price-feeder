@@ -16,6 +16,7 @@ use crate::{
 
 pub(crate) struct ProcessingOutput {
     pub(crate) broadcast_timestamp: Instant,
+    pub(crate) sequence_mismatch: bool,
     pub(crate) channel_closed: Option<usize>,
 }
 
@@ -72,8 +73,13 @@ async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
     sender_id: usize,
     signed_tx_bytes: Vec<u8>,
 ) -> Result<ProcessingOutput, Vec<u8>> {
+    const ACCOUNT_SEQUENCE_MISMATCH_CODE: u32 = 32;
+
     let tx_response: commit::Response =
         Impl::broadcast_commit(node_client, signer, signed_tx_bytes).await?;
+
+    let sequence_mismatch: bool =
+        tx_response.code.is_err() && tx_response.code.value() == ACCOUNT_SEQUENCE_MISMATCH_CODE;
 
     let broadcast_timestamp: Instant = Instant::now();
 
@@ -93,6 +99,7 @@ async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
 
     Ok(ProcessingOutput {
         broadcast_timestamp,
+        sequence_mismatch,
         channel_closed: channel_closed.then_some(sender_id),
     })
 }

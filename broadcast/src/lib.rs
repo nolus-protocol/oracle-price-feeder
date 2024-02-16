@@ -184,6 +184,8 @@ async fn processing_loop<Impl>(
         poll_time: config.poll_time,
     };
 
+    let mut sequence_mismatch_streak_first_timestamp = None;
+
     loop {
         try_join_generator_task(tx_generators_set).await;
 
@@ -231,9 +233,30 @@ async fn processing_loop<Impl>(
             match broadcast_result {
                 Ok(BroadcastProcessingOutput {
                     broadcast_timestamp,
+                    sequence_mismatch,
                     channel_closed,
                 }) => {
                     last_signing_timestamp = broadcast_timestamp;
+
+                    if sequence_mismatch {
+                        if sequence_mismatch_streak_first_timestamp
+                            .get_or_insert(broadcast_timestamp)
+                            .elapsed()
+                            >= config.tick_time
+                        {
+                            if let Err(error) = api_and_configuration
+                                .signer
+                                .fetch_sequence_number(&api_and_configuration.node_client)
+                                .await
+                            {
+                                error!(%error, "Failed to re-fetch account data! Cause: {error}");
+                            } else {
+                                info!("Successfully re-fetched account data.");
+                            }
+                        }
+                    } else {
+                        sequence_mismatch_streak_first_timestamp = None;
+                    }
 
                     if let Some(ref sender_id) = channel_closed {
                         _ = tx_result_senders.remove(sender_id);
