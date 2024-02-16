@@ -39,7 +39,7 @@ runs:
       run: |
         docker save "nolus-dispatcher-bot-${inputs_config}" > "./images/nolus-dispatcher-bot-${inputs_config}.tar"
     - name: "Archive alarms dispatcher Docker image artifact"
-      uses: "actions/upload-artifact@v3"
+      uses: "actions/upload-artifact@v4"
       with:
         name: "nolus-dispatcher-bot-${{ inputs.config }}.tar"
         path: "images/nolus-dispatcher-bot-${{ inputs.config }}.tar"
@@ -57,7 +57,7 @@ runs:
       run: |
         docker save "nolus-feeder-bot-${inputs_config}" > "./images/nolus-feeder-bot-${inputs_config}.tar"
     - name: "Archive feeder Docker image artifact"
-      uses: "actions/upload-artifact@v3"
+      uses: "actions/upload-artifact@v4"
       with:
         name: "nolus-feeder-bot-${{ inputs.config }}.tar"
         path: "images/nolus-feeder-bot-${{ inputs.config }}.tar"
