@@ -5,7 +5,7 @@ between_tx_margin_seconds = 5
 
 [node]
 address_prefix = "nolus"
-chain_id = "vitosha-4"
+chain_id = "vitosha-5"
 fee_denom = "unls"
 #gas_adjustment_numerator = 10125
 #gas_adjustment_denominator = 10000
