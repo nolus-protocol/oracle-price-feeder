@@ -28,6 +28,6 @@ max_alarms_group = 16
 gas_limit_per_alarm = 750_000
 
 [[market_price_oracle]]
-address = "nolus1jj3s603qxxzjwqpytc9pw9nyas4tt2khxkk7c8xqclx3xxhsa44s57wfle"
+address = "nolus1xzdk79z2gtq5vevs2edzyjaw8ue2vf2qmaecu6hyxcr3mwgfchtq8dyfk9"
 max_alarms_group = 16
 gas_limit_per_alarm = 750_000

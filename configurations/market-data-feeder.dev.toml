@@ -18,7 +18,7 @@ fee_adjustment_denominator = 1
 
 [oracles]
 osmosis_osmosis_usdc_axelar = "nolus1ldu3nwcvaqwwfk5za68xpwt4zzsjd74vl8ezx99hhk9rs7lslsvsgq7mm4"
-neutron_astroport_usdc_axelar = "nolus1jj3s603qxxzjwqpytc9pw9nyas4tt2khxkk7c8xqclx3xxhsa44s57wfle"
+neutron_astroport_usdc_axelar = "nolus1xzdk79z2gtq5vevs2edzyjaw8ue2vf2qmaecu6hyxcr3mwgfchtq8dyfk9"
 
 [providers.osmosis_osmosis_usdc_axelar]
 name = "osmosis"
