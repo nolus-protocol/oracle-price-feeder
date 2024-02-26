@@ -22,11 +22,19 @@ max_alarms_group = 32
 #gas_limit_per_alarm = 175_000
 gas_limit_per_alarm = 5_000_000
 
+# OSMOSIS-OSMOSIS-USDC_AXELAR
 [[market_price_oracle]]
 address = "nolus13je4ss56rctm6wazddgch7j6qljkcm8k9uel6nnnr3kllke8e4yqczygxr"
 max_alarms_group = 16
 gas_limit_per_alarm = 5_000_000
 
+# OSMOSIS-OSMOSIS-USDC_NOBLE
+[[market_price_oracle]]
+address = "nolus1r75eyfacv750qkv6j8e5xgmprtmdwgque7xuh9k6h93fed9ngc9qs5rvsl"
+max_alarms_group = 16
+gas_limit_per_alarm = 5_000_000
+
+# NEUTRON-ASTROPORT-USDC_AXELAR
 [[market_price_oracle]]
 address = "nolus1avgvt4mu0tzad09y4nmaw53av9ulqz6yyu78ty82stntv8qy7s8s8e4qrf"
 max_alarms_group = 16
