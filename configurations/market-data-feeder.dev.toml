@@ -17,12 +17,12 @@ fee_adjustment_numerator = 5
 fee_adjustment_denominator = 1
 
 [oracles]
-osmosis_osmosis_usdc_axelar = "nolus1ldu3nwcvaqwwfk5za68xpwt4zzsjd74vl8ezx99hhk9rs7lslsvsgq7mm4"
-neutron_astroport_usdc_axelar = "nolus1xzdk79z2gtq5vevs2edzyjaw8ue2vf2qmaecu6hyxcr3mwgfchtq8dyfk9"
+osmosis-osmosis-usdc_axelar = "nolus1ldu3nwcvaqwwfk5za68xpwt4zzsjd74vl8ezx99hhk9rs7lslsvsgq7mm4"
+neutron-astroport-usdc_axelar = "nolus1xzdk79z2gtq5vevs2edzyjaw8ue2vf2qmaecu6hyxcr3mwgfchtq8dyfk9"
 
 [providers.osmosis_osmosis_usdc_axelar]
 name = "osmosis"
-oracle_id = "osmosis_osmosis_usdc_axelar"
+oracle_id = "osmosis-osmosis-usdc_axelar"
 [providers.osmosis_osmosis_usdc_axelar.currencies]
 AKT = { denom = "ibc/7153C8C55DB988805FAC69E449B680A8BAAC15944B87CF210ADCD1A3A9542857", decimal_places = 6 }
 ATOM = { denom = "ibc/A8C2D23A1E6F95DA4E48BA349667E322BD7A6C996D8A4AAE8BA72E190F3D1477", decimal_places = 6 }
@@ -40,7 +40,7 @@ WETH = { denom = "ibc/8AE11672A7DF38BF7B484AB642C5C85BA4A94810D57AE8945151818CD6
 
 [providers.neutron_astroport_usdc_axelar]
 name = "astroport"
-oracle_id = "neutron_astroport_usdc_axelar"
+oracle_id = "neutron-astroport-usdc_axelar"
 [providers.neutron_astroport_usdc_axelar.currencies]
 ATOM = { denom = "ibc/C4CFF46FD6DE35CA4CF4CE031E643C8FDC9BA4B99AE598E9B0ED98FE3A2319F9", decimal_places = 6 }
 NLS = { denom = "ibc/D1FAFE8009558038F94B9478D5066D633614DCD4CD78D4977BBC855DEDD36C91", decimal_places = 6 }
