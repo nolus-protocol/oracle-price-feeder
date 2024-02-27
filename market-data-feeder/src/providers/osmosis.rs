@@ -5,6 +5,7 @@ use osmosis_std::types::osmosis::poolmanager::v2::{SpotPriceRequest, SpotPriceRe
 use thiserror::Error;
 use tokio::task::JoinSet;
 use toml::Value;
+use tracing::debug;
 
 use chain_comms::{
     client::{self, Client as NodeClient},
@@ -140,6 +141,10 @@ impl Provider for Osmosis {
                     )
                 })
                 .and_then(|SpotPriceResponse { mut spot_price }| {
+                    debug!(
+                        r#"Osmosis returned "{spot_price}" for the pair {from_ticker}/{to_ticker} from pool #{pool_id}."#
+                    );
+
                     if spot_price.is_ascii() {
                         Ok(
                             if let Some(zeroes_needed) =
