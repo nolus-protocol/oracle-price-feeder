@@ -48,7 +48,10 @@ impl FromStr for Ratio {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim_start_matches('0').trim_end_matches('0');
+        let s = s
+            .trim_start_matches('0')
+            .trim_end_matches('0')
+            .trim_end_matches('.');
 
         let point: usize = s.find('.').unwrap_or(s.len());
 
@@ -235,11 +238,11 @@ fn test_ratio_less_than_one() {
     const INPUT: &str = "0.1234";
 
     assert_eq!(
-        INPUT.parse().ok(),
-        Some(Ratio {
+        Ratio::from_str(INPUT).unwrap(),
+        Ratio {
             numerator: 1234,
             denominator: 10000,
-        })
+        }
     );
 }
 
@@ -249,11 +252,11 @@ fn test_ratio_greater_than_one() {
     const INPUT: &str = "1.234";
 
     assert_eq!(
-        INPUT.parse().ok(),
-        Some(Ratio {
+        Ratio::from_str(INPUT).unwrap(),
+        Ratio {
             numerator: 1234,
             denominator: 1000,
-        })
+        }
     );
 }
 
@@ -263,11 +266,11 @@ fn test_ratio_greater_than_ten() {
     const INPUT: &str = "12.34";
 
     assert_eq!(
-        INPUT.parse().ok(),
-        Some(Ratio {
+        Ratio::from_str(INPUT).unwrap(),
+        Ratio {
             numerator: 1234,
             denominator: 100,
-        })
+        }
     );
 }
 
@@ -277,11 +280,25 @@ fn test_ratio_greater_than_hundred() {
     const INPUT: &str = "123.4";
 
     assert_eq!(
-        INPUT.parse().ok(),
-        Some(Ratio {
+        Ratio::from_str(INPUT).unwrap(),
+        Ratio {
             numerator: 1234,
             denominator: 10,
-        })
+        }
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn test_ratio_integer_with_decimal() {
+    const INPUT: &str = "1234.0";
+
+    assert_eq!(
+        Ratio::from_str(INPUT).unwrap(),
+        Ratio {
+            numerator: 1234,
+            denominator: 1,
+        }
     );
 }
 
@@ -291,10 +308,10 @@ fn test_ratio_integer() {
     const INPUT: &str = "1234";
 
     assert_eq!(
-        INPUT.parse().ok(),
-        Some(Ratio {
+        Ratio::from_str(INPUT).unwrap(),
+        Ratio {
             numerator: 1234,
             denominator: 1,
-        })
+        }
     );
 }
