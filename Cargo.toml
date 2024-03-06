@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = ["chain-comms", "market-data-feeder", "alarms-dispatcher", "broadcast"]
+members = ["**/src/.."]
 
 [workspace.package]
 edition = "2021"
