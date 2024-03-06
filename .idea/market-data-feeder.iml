@@ -8,6 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/chain-comms/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/semver/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/broadcast/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/platform/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/artifacts" />
       <excludeFolder url="file://$MODULE_DIR$/dispatcher-logs" />
