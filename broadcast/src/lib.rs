@@ -34,6 +34,8 @@ use chain_comms::{
     signer::Signer,
 };
 
+use crate::broadcast::ProcessingError;
+
 use self::{
     broadcast::{
         ProcessingError as BroadcastProcessingError, ProcessingOutput as BroadcastProcessingOutput,
@@ -241,36 +243,14 @@ async fn processing_loop<Impl>(
                     last_signing_timestamp = broadcast_timestamp;
 
                     if let Some(error) = error {
-                        match error {
-                            BroadcastProcessingError::VerificationFailed => {
-                                if let Err(error) = api_and_configuration
-                                    .signer
-                                    .fetch_chain_id(&api_and_configuration.node_client)
-                                    .await
-                                {
-                                    error!(%error, "Failed to re-fetch chain ID! Cause: {error}");
-                                } else {
-                                    info!("Successfully re-fetched chain ID.");
-                                }
-                            }
-                            BroadcastProcessingError::SequenceMismatch => {
-                                if sequence_mismatch_streak_first_timestamp
-                                    .get_or_insert(broadcast_timestamp)
-                                    .elapsed()
-                                    >= config.tick_time
-                                {
-                                    if let Err(error) = api_and_configuration
-                                        .signer
-                                        .fetch_sequence_number(&api_and_configuration.node_client)
-                                        .await
-                                    {
-                                        error!(%error, "Failed to re-fetch account data! Cause: {error}");
-                                    } else {
-                                        info!("Successfully re-fetched account data.");
-                                    }
-                                }
-                            }
-                        }
+                        handle_mempool_error(
+                            &mut api_and_configuration,
+                            &mut sequence_mismatch_streak_first_timestamp,
+                            broadcast_timestamp,
+                            config.tick_time,
+                            error,
+                        )
+                        .await;
                     } else {
                         sequence_mismatch_streak_first_timestamp = None;
                     }
@@ -285,6 +265,45 @@ async fn processing_loop<Impl>(
                     info!("Placing transaction back in queue front to retry.");
 
                     preprocessed_tx_request = Some(tx_request);
+                }
+            }
+        }
+    }
+}
+
+async fn handle_mempool_error(
+    api_and_configuration: &mut ApiAndConfiguration,
+    sequence_mismatch_streak_first_timestamp: &mut Option<Instant>,
+    broadcast_timestamp: Instant,
+    tick_time: Duration,
+    error: ProcessingError,
+) {
+    match error {
+        BroadcastProcessingError::VerificationFailed => {
+            if let Err(error) = api_and_configuration
+                .signer
+                .fetch_chain_id(&api_and_configuration.node_client)
+                .await
+            {
+                error!(%error, "Failed to re-fetch chain ID! Cause: {error}");
+            } else {
+                info!("Successfully re-fetched chain ID.");
+            }
+        }
+        BroadcastProcessingError::SequenceMismatch => {
+            if sequence_mismatch_streak_first_timestamp
+                .get_or_insert(broadcast_timestamp)
+                .elapsed()
+                >= tick_time
+            {
+                if let Err(error) = api_and_configuration
+                    .signer
+                    .fetch_sequence_number(&api_and_configuration.node_client)
+                    .await
+                {
+                    error!(%error, "Failed to re-fetch account data! Cause: {error}");
+                } else {
+                    info!("Successfully re-fetched account data.");
                 }
             }
         }

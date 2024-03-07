@@ -39,7 +39,7 @@ fn test() {
                 block_height: 0,
                 data: "12340A2C2F636F736D7761736D2E7761736D2E76312E4D736745786563757465436F6E7472616374526573706F6E736512040A023332".into(),
                 raw_log: Default::default(),
-                info: Default::default(),
+                info: Box::default(),
                 gas_wanted: 0,
                 gas_used: 0,
             })

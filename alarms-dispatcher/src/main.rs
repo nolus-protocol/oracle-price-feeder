@@ -19,6 +19,7 @@ use tracing_appender::{
 };
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
+use crate::generators::TasksConfig;
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
@@ -102,11 +103,10 @@ async fn app_main() -> AppResult<()> {
 
 async fn fetch_contracts(node_client: &NodeClient, config: &Config) -> AppResult<Vec<Contract>> {
     let platform_contracts =
-        platform::Platform::fetch(&node_client, config.admin_contract.clone().into_string())
-            .await?;
+        platform::Platform::fetch(node_client, config.admin_contract.clone().into_string()).await?;
 
     let protocols =
-        platform::Protocols::fetch(&node_client, config.admin_contract.clone().into_string())
+        platform::Protocols::fetch(node_client, config.admin_contract.clone().into_string())
             .await?;
 
     let mut contracts = Vec::with_capacity(protocols.0.len() + 1);
@@ -116,7 +116,7 @@ async fn fetch_contracts(node_client: &NodeClient, config: &Config) -> AppResult
     for protocol in protocols.0.into_vec() {
         contracts.push(Contract::Oracle(
             protocol
-                .fetch(&node_client, config.admin_contract.clone().into_string())
+                .fetch(node_client, config.admin_contract.clone().into_string())
                 .await?
                 .contracts
                 .oracle,
@@ -204,11 +204,13 @@ where
                 &node_client,
                 &{ signer_address },
                 &{ tx_sender },
-                config.time_alarms,
-                config.market_price_oracle,
+                &TasksConfig {
+                    time_alarms_config: config.time_alarms,
+                    oracle_alarms_config: config.market_price_oracle,
+                    tick_time,
+                    poll_time,
+                },
                 contracts,
-                tick_time,
-                poll_time,
             )
         }
     };

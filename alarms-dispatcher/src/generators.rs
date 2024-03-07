@@ -34,15 +34,19 @@ pub(crate) enum Contract {
     Oracle(Box<str>),
 }
 
+pub(crate) struct TasksConfig {
+    pub time_alarms_config: AlarmsConfig,
+    pub oracle_alarms_config: AlarmsConfig,
+    pub tick_time: Duration,
+    pub poll_time: Duration,
+}
+
 pub(crate) fn spawn<I>(
     node_client: &NodeClient,
     signer_address: &str,
     tx_sender: &TxRequestSender<Blocking>,
-    time_alarms_config: AlarmsConfig,
-    oracle_alarms_config: AlarmsConfig,
+    tasks_config: &TasksConfig,
     contracts: I,
-    tick_time: Duration,
-    poll_time: Duration,
 ) -> Result<SpawnResult, DispatchAlarmsError>
 where
     I: Iterator<Item = Contract>,
@@ -53,8 +57,10 @@ where
 
     contracts
         .map(|contract| match contract {
-            Contract::TimeAlarms(address) => (address, "time_alarms", &time_alarms_config),
-            Contract::Oracle(address) => (address, "oracle", &oracle_alarms_config),
+            Contract::TimeAlarms(address) => {
+                (address, "time_alarms", &tasks_config.time_alarms_config)
+            }
+            Contract::Oracle(address) => (address, "oracle", &tasks_config.oracle_alarms_config),
         })
         .enumerate()
         .try_for_each(
@@ -71,8 +77,8 @@ where
                         contract_type,
                         alarms_config,
                     },
-                    tick_time,
-                    poll_time,
+                    tasks_config.tick_time,
+                    tasks_config.poll_time,
                 )
             },
         )

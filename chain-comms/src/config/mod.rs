@@ -34,12 +34,12 @@ impl Node {
     }
 
     #[must_use]
-    pub fn grpc_uri(&self) -> &str {
+    pub const fn grpc_uri(&self) -> &str {
         &self.environment.grpc_uri
     }
 
     #[must_use]
-    pub fn address_prefix(&self) -> &str {
+    pub const fn address_prefix(&self) -> &str {
         &self.file.address_prefix
     }
 
