@@ -1,3 +1,5 @@
+admin_contract = "nolus1ghd753shjuwexxywmgs4xz7x2q732vcnkm6h2pyv9s6ah3hylvrq8welhp"
+
 [broadcast]
 tick_time_seconds = 60
 poll_time_seconds = 15
@@ -5,7 +7,6 @@ between_tx_margin_seconds = 5
 
 [node]
 address_prefix = "nolus"
-chain_id = "vitosha-5"
 fee_denom = "unls"
 #gas_adjustment_numerator = 10125
 #gas_adjustment_denominator = 10000
@@ -16,18 +17,10 @@ gas_price_denominator = 390
 fee_adjustment_numerator = 5
 fee_adjustment_denominator = 1
 
-[[time_alarms]]
-address = "nolus1nc5tatafv6eyq7llkr2gv50ff9e22mnf70qgjlv737ktmt4eswrqrr2r7y"
+[time_alarms]
 max_alarms_group = 32
-#gas_limit_per_alarm = 87_500
 gas_limit_per_alarm = 750_000
 
-[[market_price_oracle]]
-address = "nolus1ldu3nwcvaqwwfk5za68xpwt4zzsjd74vl8ezx99hhk9rs7lslsvsgq7mm4"
-max_alarms_group = 16
-gas_limit_per_alarm = 750_000
-
-[[market_price_oracle]]
-address = "nolus1xzdk79z2gtq5vevs2edzyjaw8ue2vf2qmaecu6hyxcr3mwgfchtq8dyfk9"
+[market_price_oracle]
 max_alarms_group = 16
 gas_limit_per_alarm = 750_000

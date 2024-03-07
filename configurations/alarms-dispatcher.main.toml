@@ -1,3 +1,5 @@
+admin_contract = "nolus1gurgpv8savnfw66lckwzn4zk7fp394lpe667dhu7aw48u40lj6jsqxf8nd"
+
 [broadcast]
 tick_time_seconds = 60
 poll_time_seconds = 15
@@ -5,7 +7,6 @@ between_tx_margin_seconds = 2
 
 [node]
 address_prefix = "nolus"
-chain_id = "pirin-1"
 fee_denom = "unls"
 gas_adjustment_numerator = 12
 gas_adjustment_denominator = 10
@@ -14,17 +15,10 @@ gas_price_denominator = 390
 fee_adjustment_numerator = 5
 fee_adjustment_denominator = 1
 
-[[time_alarms]]
-address = "nolus1zwv6feuzhy6a9wekh96cd57lsarmqlwxdypdsplw6zhfncqw6ftqmx7chl"
+[time_alarms]
 max_alarms_group = 24
 gas_limit_per_alarm = 750_000
 
-[[market_price_oracle]]
-address = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
-max_alarms_group = 24
-gas_limit_per_alarm = 750_000
-
-[[market_price_oracle]]
-address = "nolus1jew4l5nq7m3xhkqzy8j7cc99083m5j8d9w004ayyv8xl3yv4h0dql2dd4e"
+[market_price_oracle]
 max_alarms_group = 24
 gas_limit_per_alarm = 750_000
