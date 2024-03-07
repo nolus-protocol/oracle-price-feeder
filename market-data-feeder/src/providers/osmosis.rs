@@ -41,7 +41,7 @@ impl Osmosis {
         query::wasm_smart::<SupportedCurrencyPairsResponse>(
             &mut WasmQueryClient::new(node_rpc),
             self.oracle_addr.to_string(),
-            QueryMsg::SUPPORTED_CURRENCY_PAIRS,
+            QueryMsg::SUPPORTED_CURRENCY_PAIRS.to_vec(),
         )
         .await
         .map(|swap_legs: Vec<SwapLeg>| {

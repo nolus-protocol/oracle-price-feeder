@@ -64,7 +64,7 @@ impl Astroport {
         query::wasm_smart::<SupportedCurrencyPairsResponse>(
             &mut self.node_wasm_query_client.clone(),
             self.oracle_addr.to_string(),
-            OracleQueryMsg::SUPPORTED_CURRENCY_PAIRS,
+            OracleQueryMsg::SUPPORTED_CURRENCY_PAIRS.to_vec(),
         )
         .await
         .map(|supported_currencies: SupportedCurrencyPairsResponse| {
@@ -132,9 +132,11 @@ impl Provider for Astroport {
                 let query_result: Result<
                     astroport::router::SimulateSwapOperationsResponse,
                     query::error::Wasm,
-                > = query::wasm_smart(&mut wasm_query_client, router_contract.to_string(), &{
-                    query_message
-                })
+                > = query::wasm_smart(
+                    &mut wasm_query_client,
+                    router_contract.to_string(),
+                    query_message,
+                )
                 .await;
 
                 match query_result {

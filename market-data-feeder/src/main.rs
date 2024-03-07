@@ -144,7 +144,7 @@ async fn check_compatibility(
         let version: JsonVersion = query::wasm_smart(
             wasm_query_client,
             oracle_address.to_string(),
-            QueryMsg::CONTRACT_VERSION,
+            QueryMsg::CONTRACT_VERSION.to_vec(),
         )
         .await?;
 
