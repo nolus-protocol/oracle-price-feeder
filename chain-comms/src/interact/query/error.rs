@@ -1,4 +1,17 @@
+use cosmrs::tendermint::Error as TendermintError;
 use thiserror::Error as ThisError;
+
+#[derive(Debug, ThisError)]
+pub enum ChainId {
+    #[error("RPC error occurred while querying account data! Cause: {0}")]
+    Rpc(#[from] tonic::Status),
+    #[error("Node failed to provide information about requested address!")]
+    NoBlockReturned,
+    #[error("Node failed to provide information about requested address!")]
+    BlockHeaderMissing,
+    #[error("Failed to parse chain ID! Cause: {0}")]
+    ParseChainId(TendermintError),
+}
 
 #[derive(Debug, ThisError)]
 pub enum AccountData {

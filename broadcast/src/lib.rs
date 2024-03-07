@@ -35,7 +35,9 @@ use chain_comms::{
 };
 
 use self::{
-    broadcast::ProcessingOutput as BroadcastProcessingOutput,
+    broadcast::{
+        ProcessingError as BroadcastProcessingError, ProcessingOutput as BroadcastProcessingOutput,
+    },
     config::Config,
     generators::{CommitResultSender, SpawnResult, TxRequest, TxRequestSender},
     mode::FilterResult,
@@ -233,25 +235,40 @@ async fn processing_loop<Impl>(
             match broadcast_result {
                 Ok(BroadcastProcessingOutput {
                     broadcast_timestamp,
-                    sequence_mismatch,
+                    error,
                     channel_closed,
                 }) => {
                     last_signing_timestamp = broadcast_timestamp;
 
-                    if sequence_mismatch {
-                        if sequence_mismatch_streak_first_timestamp
-                            .get_or_insert(broadcast_timestamp)
-                            .elapsed()
-                            >= config.tick_time
-                        {
-                            if let Err(error) = api_and_configuration
-                                .signer
-                                .fetch_sequence_number(&api_and_configuration.node_client)
-                                .await
-                            {
-                                error!(%error, "Failed to re-fetch account data! Cause: {error}");
-                            } else {
-                                info!("Successfully re-fetched account data.");
+                    if let Some(error) = error {
+                        match error {
+                            BroadcastProcessingError::VerificationFailed => {
+                                if let Err(error) = api_and_configuration
+                                    .signer
+                                    .fetch_chain_id(&api_and_configuration.node_client)
+                                    .await
+                                {
+                                    error!(%error, "Failed to re-fetch chain ID! Cause: {error}");
+                                } else {
+                                    info!("Successfully re-fetched chain ID.");
+                                }
+                            }
+                            BroadcastProcessingError::SequenceMismatch => {
+                                if sequence_mismatch_streak_first_timestamp
+                                    .get_or_insert(broadcast_timestamp)
+                                    .elapsed()
+                                    >= config.tick_time
+                                {
+                                    if let Err(error) = api_and_configuration
+                                        .signer
+                                        .fetch_sequence_number(&api_and_configuration.node_client)
+                                        .await
+                                    {
+                                        error!(%error, "Failed to re-fetch account data! Cause: {error}");
+                                    } else {
+                                        info!("Successfully re-fetched account data.");
+                                    }
+                                }
                             }
                         }
                     } else {

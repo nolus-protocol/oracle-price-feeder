@@ -6,7 +6,7 @@ use std::{
     str::FromStr,
 };
 
-use cosmrs::{tendermint::chain::Id as ChainId, Denom};
+use cosmrs::Denom;
 use serde::{
     de::{DeserializeOwned, Error as DeserializeError},
     Deserialize, Deserializer, Serialize,
@@ -41,11 +41,6 @@ impl Node {
     #[must_use]
     pub fn address_prefix(&self) -> &str {
         &self.file.address_prefix
-    }
-
-    #[must_use]
-    pub const fn chain_id(&self) -> &ChainId {
-        &self.file.chain_id
     }
 
     #[must_use]
@@ -129,9 +124,7 @@ where
 struct File {
     #[serde(default)]
     http2_concurrency_limit: Option<NonZeroUsize>,
-    address_prefix: String,
-    #[serde(deserialize_with = "deserialize_chain_id")]
-    chain_id: ChainId,
+    address_prefix: Box<str>,
     fee_denom: Denom,
     gas_adjustment_numerator: NonZeroU64,
     gas_adjustment_denominator: NonZeroU64,
@@ -144,7 +137,7 @@ struct File {
 #[derive(Debug, Clone)]
 #[must_use]
 struct Environment {
-    grpc_uri: String,
+    grpc_uri: Box<str>,
 }
 
 impl<'de> Deserialize<'de> for Environment {
@@ -152,9 +145,9 @@ impl<'de> Deserialize<'de> for Environment {
     where
         D: Deserializer<'de>,
     {
-        let grpc_uri: String = read_from_env::<'de, _, D>("GRPC_URI")?;
-
-        Ok(Self { grpc_uri })
+        read_from_env::<'de, String, D>("GRPC_URI").map(|grpc_uri| Self {
+            grpc_uri: grpc_uri.into_boxed_str(),
+        })
     }
 }
 
@@ -163,13 +156,4 @@ impl<'de> Deserialize<'de> for Environment {
 struct CoinDTO {
     amount: String,
     denom: String,
-}
-
-fn deserialize_chain_id<'de, D>(deserializer: D) -> Result<ChainId, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    String::deserialize(deserializer)?
-        .parse()
-        .map_err(DeserializeError::custom)
 }

@@ -39,21 +39,21 @@ where
 
     let node_client: NodeClient = NodeClient::from_config(config.as_ref()).await?;
 
+    info!("Fetching chain ID from network...");
+
+    let chain_id = query::chain_id(&mut node_client.tendermint_service_client()).await?;
+
     info!("Fetching account data from network...");
 
     let account_id: AccountId = account::id(config.as_ref(), &signing_key)?;
 
-    let account_data: BaseAccount = query::account_data(&node_client, &account_id).await?;
+    let account_data: BaseAccount =
+        query::account_data(&mut node_client.auth_query_client(), &account_id).await?;
 
     info!("Successfully fetched account data from network.");
 
     Ok(RpcSetup {
-        signer: Signer::new(
-            signing_key,
-            config.as_ref().chain_id().clone(),
-            account_id,
-            account_data,
-        ),
+        signer: Signer::new(signing_key, chain_id, account_id, account_data),
         config,
         node_client,
     })

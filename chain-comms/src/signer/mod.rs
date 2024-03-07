@@ -75,11 +75,21 @@ impl Signer {
     }
 
     #[inline]
+    pub async fn fetch_chain_id(
+        &mut self,
+        node_client: &NodeClient,
+    ) -> Result<(), query::error::ChainId> {
+        query::chain_id(&mut node_client.tendermint_service_client())
+            .await
+            .map(|chain_id| self.chain_id = chain_id)
+    }
+
+    #[inline]
     pub async fn fetch_sequence_number(
         &mut self,
         node_client: &NodeClient,
     ) -> Result<(), query::error::AccountData> {
-        query::account_data(node_client, &self.account_id)
+        query::account_data(&mut node_client.auth_query_client(), &self.account_id)
             .await
             .map(|account_data| self.account = account_data)
     }

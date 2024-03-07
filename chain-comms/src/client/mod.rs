@@ -3,6 +3,7 @@ use std::{num::NonZeroUsize, sync::Arc};
 use cosmrs::proto::{
     cosmos::{
         auth::v1beta1::query_client::QueryClient as AuthQueryClient,
+        base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient,
         tx::v1beta1::service_client::ServiceClient as TxServiceClient,
     },
     cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
@@ -70,6 +71,11 @@ impl Client {
     #[must_use]
     pub fn auth_query_client(&self) -> AuthQueryClient<GrpcChannel> {
         AuthQueryClient::new(self.raw_grpc())
+    }
+
+    #[must_use]
+    pub fn tendermint_service_client(&self) -> TendermintServiceClient<GrpcChannel> {
+        TendermintServiceClient::new(self.raw_grpc())
     }
 
     #[must_use]

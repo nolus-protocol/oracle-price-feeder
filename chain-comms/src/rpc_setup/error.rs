@@ -8,6 +8,8 @@ pub enum Error {
     Configuration(#[from] crate::config::error::Error),
     #[error("Failed to set up RPC client! Cause: {0}")]
     RpcClient(#[from] crate::client::error::Error),
+    #[error("Failed to resolve chain ID! Cause: {0}")]
+    ChainId(#[from] crate::interact::query::error::ChainId),
     #[error("Failed to resolve account ID! Cause: {0}")]
     AccountId(#[from] crate::account::error::AccountId),
     #[error("Failed to resolve account state data! Cause: {0}")]

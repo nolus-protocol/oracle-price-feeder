@@ -1,11 +1,19 @@
 use cosmrs::{
     proto::{
-        cosmos::auth::v1beta1::{BaseAccount, QueryAccountRequest, QueryAccountResponse},
+        cosmos::{
+            auth::v1beta1::{
+                query_client::QueryClient as AuthQueryClient, BaseAccount, QueryAccountRequest,
+                QueryAccountResponse,
+            },
+            base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient,
+            base::tendermint::v1beta1::GetLatestBlockRequest,
+        },
         cosmwasm::wasm::v1::{
             query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
         },
         prost::Message,
     },
+    tendermint::chain::Id as ChainId,
     AccountId,
 };
 use serde::de::DeserializeOwned;
@@ -15,20 +23,35 @@ use tonic::{
 };
 use tracing::debug;
 
-use crate::client::Client as NodeClient;
-
 use self::error::{AccountData as AccountError, Raw as RawError, Wasm as WasmError};
 
 pub mod error;
 
+pub async fn chain_id(
+    service_client: &mut TendermintServiceClient<TonicChannel>,
+) -> Result<ChainId, error::ChainId> {
+    service_client
+        .get_latest_block(GetLatestBlockRequest {})
+        .await?
+        .into_inner()
+        .sdk_block
+        .ok_or(error::ChainId::NoBlockReturned)
+        .and_then(|block| block.header.ok_or(error::ChainId::BlockHeaderMissing))
+        .and_then(|header| {
+            header
+                .chain_id
+                .try_into()
+                .map_err(error::ChainId::ParseChainId)
+        })
+}
+
 pub async fn account_data(
-    node_client: &NodeClient,
+    query_client: &mut AuthQueryClient<TonicChannel>,
     address: &AccountId,
 ) -> Result<BaseAccount, AccountError> {
     BaseAccount::decode(
         {
-            let data = node_client
-                .auth_query_client()
+            let data = query_client
                 .account(QueryAccountRequest {
                     address: address.to_string(),
                 })
@@ -72,7 +95,7 @@ where
 pub async fn wasm_smart<R>(
     query_client: &mut WasmQueryClient<TonicChannel>,
     address: String,
-    query: &[u8],
+    query_data: Vec<u8>,
 ) -> Result<R, WasmError>
 where
     R: DeserializeOwned,
@@ -80,7 +103,7 @@ where
     query_client
         .smart_contract_state(QuerySmartContractStateRequest {
             address,
-            query_data: query.to_vec(),
+            query_data,
         })
         .await
         .map_err(|error| WasmError::RawQuery(RawError::Response(error)))
