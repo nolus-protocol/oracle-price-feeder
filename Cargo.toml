@@ -15,7 +15,7 @@ chain-comms = { path = "./chain-comms" }
 astroport = "3.11.1"
 async-trait = "0.1.77"
 bip32 = "0.5.1"
-bnum = "0.10.0"
+bnum = "0.11.0"
 bytes = "1.5.0"
 cosmrs = { version = "0.15.0", default-features = false, features = [
     "rpc",
