@@ -10,6 +10,7 @@ license = "Apache-2.0"
 [workspace.dependencies]
 broadcast = { path = "./broadcast" }
 chain-comms = { path = "./chain-comms" }
+ platform = { path = "./platform" }
 
 astroport = "3.11.1"
 async-trait = "0.1.77"
