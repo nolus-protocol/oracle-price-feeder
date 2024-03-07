@@ -7,7 +7,6 @@ between_tx_margin_seconds = 2
 
 [node]
 address_prefix = "nolus"
-chain_id = "pirin-1"
 fee_denom = "unls"
 gas_adjustment_numerator = 2
 gas_adjustment_denominator = 1
