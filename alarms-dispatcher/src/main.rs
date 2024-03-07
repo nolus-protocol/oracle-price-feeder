@@ -20,16 +20,13 @@ use tracing_appender::{
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
 use chain_comms::{
+    client::Client as NodeClient,
     interact::query,
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 
-use self::{
-    config::{Config, Contract},
-    error::AppResult,
-    messages::QueryMsg,
-};
+use self::{config::Config, error::AppResult, generators::Contract, messages::QueryMsg};
 
 mod config;
 mod error;
@@ -82,13 +79,17 @@ async fn app_main() -> AppResult<()> {
     let rpc_setup: RpcSetup<Config> =
         prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
+    info!("Fetching all relevant contracts...");
+
+    let contracts = fetch_contracts(&rpc_setup.node_client, &rpc_setup.config).await?;
+
     info!("Checking compatibility with contract version...");
 
-    check_compatibility(&rpc_setup).await?;
+    check_compatibility(&rpc_setup, &contracts).await?;
 
     info!("Contract is compatible with feeder version.");
 
-    let result = dispatch_alarms(rpc_setup).await;
+    let result = dispatch_alarms(rpc_setup, contracts.into_iter()).await;
 
     if let Err(error) = &result {
         error!("{error}");
@@ -99,8 +100,37 @@ async fn app_main() -> AppResult<()> {
     result.map_err(Into::into)
 }
 
+async fn fetch_contracts(node_client: &NodeClient, config: &Config) -> AppResult<Vec<Contract>> {
+    let platform_contracts =
+        platform::Platform::fetch(&node_client, config.admin_contract.clone().into_string())
+            .await?;
+
+    let protocols =
+        platform::Protocols::fetch(&node_client, config.admin_contract.clone().into_string())
+            .await?;
+
+    let mut contracts = Vec::with_capacity(protocols.0.len() + 1);
+
+    contracts.push(Contract::TimeAlarms(platform_contracts.time_alarms));
+
+    for protocol in protocols.0.into_vec() {
+        contracts.push(Contract::Oracle(
+            protocol
+                .fetch(&node_client, config.admin_contract.clone().into_string())
+                .await?
+                .contracts
+                .oracle,
+        ));
+    }
+
+    Ok(contracts)
+}
+
 #[allow(clippy::future_not_send)]
-async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
+async fn check_compatibility(
+    rpc_setup: &RpcSetup<Config>,
+    contracts: &[Contract],
+) -> AppResult<()> {
     #[derive(Deserialize)]
     struct JsonVersion {
         major: u64,
@@ -108,24 +138,16 @@ async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
         patch: u64,
     }
 
-    let contracts_iter = rpc_setup
-        .config
-        .time_alarms
-        .iter()
-        .map(|contract: &Contract| (contract, "timealarms", TIME_ALARMS_COMPATIBLE_VERSION))
-        .chain(
-            rpc_setup
-                .config
-                .market_price_oracle
-                .iter()
-                .map(|contract: &Contract| (contract, "oracle", ORACLE_COMPATIBLE_VERSION)),
-        );
+    let contracts_iter = contracts.iter().map(|contract| match contract {
+        Contract::TimeAlarms(contract) => (contract, "time_alarms", TIME_ALARMS_COMPATIBLE_VERSION),
+        Contract::Oracle(contract) => (contract, "oracle", ORACLE_COMPATIBLE_VERSION),
+    });
 
     for (contract, name, compatible) in contracts_iter {
         let version: JsonVersion = query::wasm_smart(
             &mut rpc_setup.node_client.wasm_query_client(),
-            contract.address.clone(),
-            QueryMsg::CONTRACT_VERSION,
+            contract.clone().into_string(),
+            QueryMsg::CONTRACT_VERSION.to_vec(),
         )
         .await?;
 
@@ -156,14 +178,18 @@ async fn check_compatibility(rpc_setup: &RpcSetup<Config>) -> AppResult<()> {
 }
 
 #[allow(clippy::future_not_send)]
-async fn dispatch_alarms(
+async fn dispatch_alarms<I>(
     RpcSetup {
         signer,
         config,
         node_client,
         ..
     }: RpcSetup<Config>,
-) -> Result<(), error::DispatchAlarms> {
+    contracts: I,
+) -> Result<(), error::DispatchAlarms>
+where
+    I: Iterator<Item = Contract> + Send,
+{
     let spawn_generators = {
         let node_client = node_client.clone();
 
@@ -178,8 +204,9 @@ async fn dispatch_alarms(
                 &node_client,
                 &{ signer_address },
                 &{ tx_sender },
-                config.market_price_oracle,
                 config.time_alarms,
+                config.market_price_oracle,
+                contracts,
                 tick_time,
                 poll_time,
             )

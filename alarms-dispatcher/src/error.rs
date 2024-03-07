@@ -9,6 +9,8 @@ pub enum Application {
     SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
+    #[error("Failed to query admin contract! Cause: {0}")]
+    QueryAdminContract(#[from] platform::error::Error),
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]

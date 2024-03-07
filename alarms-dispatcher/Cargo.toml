@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 broadcast.workspace = true
 chain-comms.workspace = true
+platform.workspace = true
 
 semver.workspace = true
 serde.workspace = true

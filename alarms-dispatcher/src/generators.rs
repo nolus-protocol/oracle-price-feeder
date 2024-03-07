@@ -23,58 +23,68 @@ use chain_comms::{
 };
 
 use crate::{
-    config::Contract,
+    config::AlarmsConfig,
     error::DispatchAlarms as DispatchAlarmsError,
     log,
     messages::{ExecuteMsg, QueryMsg, StatusResponse},
 };
 
-pub fn spawn(
+pub(crate) enum Contract {
+    TimeAlarms(Box<str>),
+    Oracle(Box<str>),
+}
+
+pub(crate) fn spawn<I>(
     node_client: &NodeClient,
     signer_address: &str,
     tx_sender: &TxRequestSender<Blocking>,
-    market_price_oracle_contracts: Vec<Contract>,
-    time_alarms_contracts: Vec<Contract>,
+    time_alarms_config: AlarmsConfig,
+    oracle_alarms_config: AlarmsConfig,
+    contracts: I,
     tick_time: Duration,
     poll_time: Duration,
-) -> Result<SpawnResult, DispatchAlarmsError> {
+) -> Result<SpawnResult, DispatchAlarmsError>
+where
+    I: Iterator<Item = Contract>,
+{
     let mut tx_generators_set: JoinSet<Infallible> = JoinSet::new();
 
     let mut tx_result_senders = BTreeMap::new();
 
-    market_price_oracle_contracts
-        .into_iter()
-        .map(|contract| (contract, "oracle"))
-        .chain(
-            time_alarms_contracts
-                .into_iter()
-                .map(|contract| (contract, "time_alarms")),
-        )
-        .enumerate()
-        .try_for_each(|(monotonic_id, (contract, contract_type))| {
-            spawn_single(
-                signer_address.to_owned(),
-                node_client,
-                &mut tx_generators_set,
-                &mut tx_result_senders,
-                SpawnTxGeneratorContext {
-                    tx_sender: tx_sender.clone(),
-                    monotonic_id,
-                    contract,
-                    contract_type,
-                },
-                tick_time,
-                poll_time,
-            )
+    contracts
+        .map(|contract| match contract {
+            Contract::TimeAlarms(address) => (address, "time_alarms", &time_alarms_config),
+            Contract::Oracle(address) => (address, "oracle", &oracle_alarms_config),
         })
+        .enumerate()
+        .try_for_each(
+            |(monotonic_id, (contract, contract_type, &alarms_config))| {
+                spawn_single(
+                    signer_address.to_owned(),
+                    node_client,
+                    &mut tx_generators_set,
+                    &mut tx_result_senders,
+                    SpawnTxGeneratorContext {
+                        tx_sender: tx_sender.clone(),
+                        monotonic_id,
+                        contract,
+                        contract_type,
+                        alarms_config,
+                    },
+                    tick_time,
+                    poll_time,
+                )
+            },
+        )
         .map(|()| SpawnResult::new(tx_generators_set, tx_result_senders))
 }
 
 struct SpawnTxGeneratorContext {
     tx_sender: TxRequestSender<Blocking>,
     monotonic_id: usize,
-    contract: Contract,
+    contract: Box<str>,
     contract_type: &'static str,
+    alarms_config: AlarmsConfig,
 }
 
 fn spawn_single(
@@ -87,6 +97,7 @@ fn spawn_single(
         monotonic_id,
         contract,
         contract_type,
+        alarms_config,
     }: SpawnTxGeneratorContext,
     tick_time: Duration,
     poll_time: Duration,
@@ -94,9 +105,9 @@ fn spawn_single(
     let messages: Box<[ProtobufAny]> = {
         let mut message: Vec<ProtobufAny> = vec![ProtobufAny::from_msg(&MsgExecuteContract {
             sender: signer_address,
-            contract: contract.address.clone(),
+            contract: contract.clone().into_string(),
             msg: serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
-                max_count: contract.max_alarms_group.get(),
+                max_count: alarms_config.max_alarms_group.get(),
             })?,
             funds: Vec::new(),
         })?];
@@ -106,11 +117,11 @@ fn spawn_single(
         message.into()
     };
 
-    let contract_address: Arc<str> = contract.address.into();
+    let contract_address: Arc<str> = contract.into();
 
-    let hard_gas_limit = contract
+    let hard_gas_limit = alarms_config
         .gas_limit_per_alarm
-        .saturating_mul(contract.max_alarms_group.into());
+        .saturating_mul(alarms_config.max_alarms_group.into());
 
     let (tx_result_sender, tx_result_receiver): (CommitResultSender, CommitResultReceiver) =
         unbounded_channel();
@@ -124,7 +135,7 @@ fn spawn_single(
         TaskContext {
             monotonic_id,
             contract_address,
-            max_alarms_count: contract.max_alarms_group,
+            max_alarms_count: alarms_config.max_alarms_group,
             messages,
             contract_type,
             hard_gas_limit,
@@ -231,7 +242,7 @@ async fn task_inner(
         let should_send: bool = query::wasm_smart(
             &mut node_client.wasm_query_client(),
             context.contract_address.to_string(),
-            QueryMsg::ALARMS_STATUS,
+            QueryMsg::ALARMS_STATUS.to_vec(),
         )
         .await
         .map_or(true, |response: StatusResponse| {
