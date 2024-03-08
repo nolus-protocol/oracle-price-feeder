@@ -5,8 +5,9 @@ use cosmrs::{
                 query_client::QueryClient as AuthQueryClient, BaseAccount, QueryAccountRequest,
                 QueryAccountResponse,
             },
-            base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient,
-            base::tendermint::v1beta1::GetLatestBlockRequest,
+            base::tendermint::v1beta1::{
+                service_client::ServiceClient as TendermintServiceClient, GetNodeInfoRequest,
+            },
         },
         cosmwasm::wasm::v1::{
             query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
@@ -31,15 +32,13 @@ pub async fn chain_id(
     service_client: &mut TendermintServiceClient<TonicChannel>,
 ) -> Result<ChainId, error::ChainId> {
     service_client
-        .get_latest_block(GetLatestBlockRequest {})
+        .get_node_info(GetNodeInfoRequest {})
         .await?
         .into_inner()
-        .sdk_block
-        .ok_or(error::ChainId::NoBlockReturned)
-        .and_then(|block| block.header.ok_or(error::ChainId::BlockHeaderMissing))
-        .and_then(|header| {
-            header
-                .chain_id
+        .default_node_info
+        .ok_or(error::ChainId::NoDefaultNodeInfoReturned)
+        .and_then(|info| {
+            info.network
                 .try_into()
                 .map_err(error::ChainId::ParseChainId)
         })

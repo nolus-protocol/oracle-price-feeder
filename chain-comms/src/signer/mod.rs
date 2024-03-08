@@ -11,6 +11,7 @@ use cosmrs::{
     tx::{Body, Fee, SignerInfo},
     AccountId,
 };
+use tracing::info;
 
 use crate::{client::Client as NodeClient, interact::query};
 
@@ -81,7 +82,11 @@ impl Signer {
     ) -> Result<(), query::error::ChainId> {
         query::chain_id(&mut node_client.tendermint_service_client())
             .await
-            .map(|chain_id| self.chain_id = chain_id)
+            .map(|chain_id| {
+                info!("Signer now connected to: {chain_id}");
+
+                self.chain_id = chain_id;
+            })
     }
 
     #[inline]

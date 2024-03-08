@@ -43,6 +43,8 @@ where
 
     let chain_id = query::chain_id(&mut node_client.tendermint_service_client()).await?;
 
+    info!("Connected to: {chain_id}");
+
     info!("Fetching account data from network...");
 
     let account_id: AccountId = account::id(config.as_ref(), &signing_key)?;
