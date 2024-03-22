@@ -148,5 +148,5 @@ jobs:
           do
             docker tag "service" "${image_url}:${image_tag}"
 
-            docker push "${base_url}:${image_tag}"
+            docker push "${image_url}:${image_tag}"
           done
