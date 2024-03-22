@@ -78,9 +78,12 @@ async fn main() -> AppResult<()> {
 #[allow(clippy::future_not_send)]
 async fn app_main() -> AppResult<()> {
     let rpc_setup: RpcSetup<Config> =
-        prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH).await?;
-
-    info!("Fetching all relevant contracts...");
+        prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH)
+            .await
+            .inspect(|_| info!("Connected to RPC successfully."))
+            .inspect_err(|error| {
+                error!(?error, "Failed to connect to RPC! Cause: {error}");
+            })?;
 
     let contracts = fetch_contracts(&rpc_setup.node_client, &rpc_setup.config).await?;
 
@@ -90,15 +93,11 @@ async fn app_main() -> AppResult<()> {
 
     info!("Contract is compatible with feeder version.");
 
-    let result = dispatch_alarms(rpc_setup, contracts.into_iter()).await;
-
-    if let Err(error) = &result {
-        error!("{error}");
-    }
-
-    info!("Shutting down...");
-
-    result.map_err(Into::into)
+    dispatch_alarms(rpc_setup, contracts.into_iter())
+        .await
+        .map_err(Into::into)
+        .inspect(|&()| info!("Shutting down..."))
+        .inspect_err(|error| error!("{error}"))
 }
 
 async fn fetch_contracts(node_client: &NodeClient, config: &Config) -> AppResult<Vec<Contract>> {

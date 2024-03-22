@@ -12,14 +12,12 @@ pub fn commit_response(response: &Response) {
 
 pub fn on_error(code: Code, raw_log: &str, info: &str) {
     if code.is_ok() {
-        debug!("Raw Log: {}", raw_log);
-
-        debug!("Info: {}", info);
+        debug!("Raw Log: {raw_log}\nInfo: {info}");
     } else {
-        error!("Raw Log: {}", raw_log);
-
-        error!("Info: {}", info);
-
-        error!("Error with code {} has occurred!", code.value());
+        error!(
+            "Raw Log: {raw_log}\nInfo: {info}\nError with code {code_value} \
+            has occurred!",
+            code_value = code.value()
+        );
     }
 }
