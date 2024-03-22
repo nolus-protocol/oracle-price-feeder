@@ -56,7 +56,7 @@ const COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
 #[tokio::main]
 async fn main() -> Result<()> {
     let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
-        NonBlocking::new(rolling::hourly("./feeder-logs", "log"));
+        NonBlocking::new(rolling::hourly("./logs/", "feeder"));
 
     chain_comms::log::setup(io::stdout.and(log_writer));
 

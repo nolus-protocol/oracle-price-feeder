@@ -55,7 +55,7 @@ pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
 #[tokio::main]
 async fn main() -> AppResult<()> {
     let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
-        NonBlocking::new(rolling::hourly("./dispatcher-logs", "log"));
+        NonBlocking::new(rolling::hourly("./logs/", "dispatcher"));
 
     chain_comms::log::setup(io::stdout.and(log_writer));
 
