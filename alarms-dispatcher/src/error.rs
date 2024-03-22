@@ -15,7 +15,11 @@ pub enum Application {
     SerializeVersionQueryMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to query contract's version! Cause: {0}")]
     ContractVersionQuery(#[from] chain_comms::interact::query::error::Wasm),
-    #[error("Version of \"{contract}\" contract is not compatible! Minimum compatible version is {compatible}, but contract's actual version is {actual}!")]
+    #[error(
+        "Version of \"{contract}\" contract is not compatible! \
+        Minimum compatible version is {compatible}, but contract's actual \
+        version is {actual}!"
+    )]
     IncompatibleContractVersion {
         contract: &'static str,
         compatible: semver::Comparator,
