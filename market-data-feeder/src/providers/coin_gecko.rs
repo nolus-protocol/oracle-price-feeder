@@ -327,7 +327,9 @@ impl ComparisonProvider for SanityCheck {
                 result
                     .map_err(BenchmarkError::JoinQueryTask)
                     .and_then(identity)
-                    .map(|price: Price<CoinWithoutDecimalPlaces>| comparison_prices.push(price))
+                    .map(|price: Price<CoinWithoutDecimalPlaces>| {
+                        comparison_prices.push(price);
+                    })
                     .map_err(|error: BenchmarkError| {
                         PriceComparisonGuardError::ComparisonProviderSpecific(Box::new(error))
                     })?;
