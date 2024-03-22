@@ -87,9 +87,16 @@ target/
 ### Visual Studio Code / VSCodium
 .vscode
 
+### Application Configurations
+alarms-dispatcher.toml
+market-data-feeder.toml
+
 ### Application Logs
 dispatcher-logs/
 feeder-logs/
 
-### Docker images
-images/
+### Container build files
+Dockerfile
+*.Dockerfile
+Containerfile
+*.Containerfile
