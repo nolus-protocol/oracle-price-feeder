@@ -15,7 +15,10 @@ pub mod result;
 pub struct Platform;
 
 impl Platform {
-    pub async fn fetch(node: &NodeClient, admin: String) -> Result<PlatformContracts> {
+    pub async fn fetch(
+        node: &NodeClient,
+        admin: String,
+    ) -> Result<PlatformContracts> {
         query_contract(
             node,
             admin,
@@ -56,7 +59,11 @@ impl Protocols {
 pub struct Protocol(Box<str>);
 
 impl Protocol {
-    pub async fn fetch(self, node: &NodeClient, admin: String) -> Result<ProtocolDefinition> {
+    pub async fn fetch(
+        self,
+        node: &NodeClient,
+        admin: String,
+    ) -> Result<ProtocolDefinition> {
         query_contract(
             node,
             admin,
@@ -82,7 +89,11 @@ pub struct ProtocolContracts {
     pub profit: Box<str>,
 }
 
-async fn query_contract<T>(node: &NodeClient, admin: String, query_data: Vec<u8>) -> Result<T>
+async fn query_contract<T>(
+    node: &NodeClient,
+    admin: String,
+    query_data: Vec<u8>,
+) -> Result<T>
 where
     T: DeserializeOwned,
 {
@@ -148,11 +159,15 @@ impl<'r> AdminContractQueryMsg<'r> {
                 // Strong locking optimistic route.
                 // Handles race conditions between unlocking and locking.
                 if let Ok(mut messages) = QUERY_MESSAGES.write() {
-                    let query_message = if let Some(query_message) = messages.get(&protocol) {
-                        Ok(query_message.clone().into_vec())
-                    } else {
-                        Self::insert_protocol_query_message(&mut messages, protocol)
-                    };
+                    let query_message =
+                        if let Some(query_message) = messages.get(&protocol) {
+                            Ok(query_message.clone().into_vec())
+                        } else {
+                            Self::insert_protocol_query_message(
+                                &mut messages,
+                                protocol,
+                            )
+                        };
 
                     query_message
                 } else {
@@ -168,14 +183,18 @@ impl<'r> AdminContractQueryMsg<'r> {
         messages: &mut RwLockWriteGuard<'_, ProtocolQueryMessagesMap>,
         protocol: Box<str>,
     ) -> Result<Vec<u8>> {
-        let query_message = serde_json_wasm::to_vec(&AdminContractQueryMsg::Protocol(&protocol))
-            .map_err(error::Error::SerializeQueryMsg)?;
+        let query_message = serde_json_wasm::to_vec(
+            &AdminContractQueryMsg::Protocol(&protocol),
+        )
+        .map_err(error::Error::SerializeQueryMsg)?;
 
         if messages
             .insert(protocol, query_message.clone().into_boxed_slice())
             .is_some()
         {
-            unreachable!("Message already set but wasn't found in optimistic routes!");
+            unreachable!(
+                "Message already set but wasn't found in optimistic routes!"
+            );
         }
 
         Ok(query_message)

@@ -42,12 +42,14 @@ pub(crate) async fn purge_and_update<Impl>(
 where
     Impl: mode::Impl,
 {
-    let mut recv_result: Result<ReceivedTxRequest<Impl>, TryRecvError> =
-        if matches!(Impl::purge_cache(requests_cache), PurgeResult::Exhausted) {
-            tx_receiver.recv().await.ok_or(TryRecvError::Disconnected)
-        } else {
-            tx_receiver.try_recv()
-        };
+    let mut recv_result: Result<ReceivedTxRequest<Impl>, TryRecvError> = if matches!(
+        Impl::purge_cache(requests_cache),
+        PurgeResult::Exhausted
+    ) {
+        tx_receiver.recv().await.ok_or(TryRecvError::Disconnected)
+    } else {
+        tx_receiver.try_recv()
+    };
 
     loop {
         match recv_result {
@@ -58,7 +60,8 @@ where
                 hard_gas_limit,
                 expiration,
             }) => {
-                if matches!(Impl::filter(&expiration), FilterResult::NotExpired) {
+                if matches!(Impl::filter(&expiration), FilterResult::NotExpired)
+                {
                     let tx_request = Some(TxRequest {
                         messages,
                         fallback_gas_limit,
@@ -69,21 +72,21 @@ where
                     match requests_cache.entry(sender_id) {
                         BTreeMapEntry::Occupied(entry) => {
                             entry.into_mut().set(tx_request);
-                        }
+                        },
                         BTreeMapEntry::Vacant(entry) => {
                             entry.insert(Cell::new(tx_request));
-                        }
+                        },
                     }
                 } else {
                     warn!("Transaction already expired. Skipping over.");
                 }
-            }
+            },
             Err(TryRecvError::Empty) => {
                 return Ok(());
-            }
+            },
             Err(TryRecvError::Disconnected) => {
                 return Err(ChannelClosed);
-            }
+            },
         }
 
         recv_result = tx_receiver.try_recv();

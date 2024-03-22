@@ -10,7 +10,8 @@ pub(crate) enum QueryMsg {}
 impl QueryMsg {
     pub const CONTRACT_VERSION: &'static [u8] = br#"{"contract_version":{}}"#;
 
-    pub const SUPPORTED_CURRENCY_PAIRS: &'static [u8] = br#"{"supported_currency_pairs":{}}"#;
+    pub const SUPPORTED_CURRENCY_PAIRS: &'static [u8] =
+        br#"{"supported_currency_pairs":{}}"#;
 }
 
 pub(crate) type PoolId = u64;

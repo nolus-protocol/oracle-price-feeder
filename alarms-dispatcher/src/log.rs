@@ -13,8 +13,9 @@ pub fn tx_response(
     hash: &TxHash,
     tx_result: &TxResponse,
 ) -> Option<DispatchResponse> {
-    info_span!("Tx Response")
-        .in_scope(|| tx_response_inner(contract_type, contract_address, hash, tx_result))
+    info_span!("Tx Response").in_scope(|| {
+        tx_response_inner(contract_type, contract_address, hash, tx_result)
+    })
 }
 
 fn tx_response_inner(
@@ -27,13 +28,18 @@ fn tx_response_inner(
 
     let mut maybe_dispatch_response = None;
 
-    broadcast::log::on_error(tx_result.code, &tx_result.raw_log, &tx_result.info);
+    broadcast::log::on_error(
+        tx_result.code,
+        &tx_result.raw_log,
+        &tx_result.info,
+    );
 
     if tx_result.code.is_ok() {
         match decode::tx_response_data(tx_result) {
             Ok(dispatch_response) => {
-                maybe_dispatch_response = deserialize_and_log(tx_result, &dispatch_response);
-            }
+                maybe_dispatch_response =
+                    deserialize_and_log(tx_result, &dispatch_response);
+            },
             Err(error) => error!(
                 error = ?error,
                 "Failed to decode transaction response from the Protobuf \

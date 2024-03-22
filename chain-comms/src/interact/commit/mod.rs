@@ -4,7 +4,10 @@ use cosmrs::{
     proto::{
         cosmos::{
             base::abci::v1beta1::TxResponse,
-            tx::v1beta1::{BroadcastMode, BroadcastTxRequest, BroadcastTxResponse, TxRaw as RawTx},
+            tx::v1beta1::{
+                BroadcastMode, BroadcastTxRequest, BroadcastTxResponse,
+                TxRaw as RawTx,
+            },
         },
         prost::Message as _,
     },
@@ -14,14 +17,18 @@ use cosmrs::{
 };
 use tonic::Response as TonicResponse;
 
-use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
-
-use super::{
-    adjust_gas_limit, calculate_fee, process_simulation_result, simulate, simulate::simulate,
-    TxHash,
+use crate::{
+    build_tx::ContractTx, client::Client, config::Node, signer::Signer,
 };
 
-use self::error::{CommitTx as Error, GasEstimatingTxCommit as ErrorWithEstimation};
+use super::{
+    adjust_gas_limit, calculate_fee, process_simulation_result, simulate,
+    simulate::simulate, TxHash,
+};
+
+use self::error::{
+    CommitTx as Error, GasEstimatingTxCommit as ErrorWithEstimation,
+};
 
 pub mod error;
 
@@ -120,9 +127,15 @@ pub async fn with_gas_estimation_and_serialized_message(
         hard_gas_limit,
     );
 
-    with_serialized_messages(signer, client, node_config, gas_limit, unsigned_tx)
-        .await
-        .map_err(Into::into)
+    with_serialized_messages(
+        signer,
+        client,
+        node_config,
+        gas_limit,
+        unsigned_tx,
+    )
+    .await
+    .map_err(Into::into)
 }
 
 #[allow(clippy::future_not_send)]
@@ -165,8 +178,10 @@ pub async fn with_signed_body(
                 info: info.into_boxed_str(),
                 tx_hash: TxHash(tx_hash),
             })
-        }
-        Ok(BroadcastTxResponse { tx_response: None }) => Err(Error::EmptyResponseReceived),
+        },
+        Ok(BroadcastTxResponse { tx_response: None }) => {
+            Err(Error::EmptyResponseReceived)
+        },
         Err(status) => Err(Error::Broadcast(status)),
     }
 }

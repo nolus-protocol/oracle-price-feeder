@@ -27,7 +27,9 @@ use chain_comms::{
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 
-use self::{config::Config, error::AppResult, generators::Contract, messages::QueryMsg};
+use self::{
+    config::Config, error::AppResult, generators::Contract, messages::QueryMsg,
+};
 
 mod config;
 mod error;
@@ -77,15 +79,18 @@ async fn main() -> AppResult<()> {
 
 #[allow(clippy::future_not_send)]
 async fn app_main() -> AppResult<()> {
-    let rpc_setup: RpcSetup<Config> =
-        prepare_rpc::<Config, _>("alarms-dispatcher.toml", DEFAULT_COSMOS_HD_PATH)
-            .await
-            .inspect(|_| info!("Connected to RPC successfully."))
-            .inspect_err(|error| {
-                error!(?error, "Failed to connect to RPC! Cause: {error}");
-            })?;
+    let rpc_setup: RpcSetup<Config> = prepare_rpc::<Config, _>(
+        "alarms-dispatcher.toml",
+        DEFAULT_COSMOS_HD_PATH,
+    )
+    .await
+    .inspect(|_| info!("Connected to RPC successfully."))
+    .inspect_err(|error| {
+        error!(?error, "Failed to connect to RPC! Cause: {error}");
+    })?;
 
-    let contracts = fetch_contracts(&rpc_setup.node_client, &rpc_setup.config).await?;
+    let contracts =
+        fetch_contracts(&rpc_setup.node_client, &rpc_setup.config).await?;
 
     info!("Checking compatibility with contract version...");
 
@@ -100,13 +105,21 @@ async fn app_main() -> AppResult<()> {
         .inspect_err(|error| error!("{error}"))
 }
 
-async fn fetch_contracts(node_client: &NodeClient, config: &Config) -> AppResult<Vec<Contract>> {
-    let platform_contracts =
-        platform::Platform::fetch(node_client, config.admin_contract.clone().into_string()).await?;
+async fn fetch_contracts(
+    node_client: &NodeClient,
+    config: &Config,
+) -> AppResult<Vec<Contract>> {
+    let platform_contracts = platform::Platform::fetch(
+        node_client,
+        config.admin_contract.clone().into_string(),
+    )
+    .await?;
 
-    let protocols =
-        platform::Protocols::fetch(node_client, config.admin_contract.clone().into_string())
-            .await?;
+    let protocols = platform::Protocols::fetch(
+        node_client,
+        config.admin_contract.clone().into_string(),
+    )
+    .await?;
 
     let mut contracts = Vec::with_capacity(protocols.0.len() + 1);
 
@@ -138,8 +151,12 @@ async fn check_compatibility(
     }
 
     let contracts_iter = contracts.iter().map(|contract| match contract {
-        Contract::TimeAlarms(contract) => (contract, "time_alarms", TIME_ALARMS_COMPATIBLE_VERSION),
-        Contract::Oracle(contract) => (contract, "oracle", ORACLE_COMPATIBLE_VERSION),
+        Contract::TimeAlarms(contract) => {
+            (contract, "time_alarms", TIME_ALARMS_COMPATIBLE_VERSION)
+        },
+        Contract::Oracle(contract) => {
+            (contract, "oracle", ORACLE_COMPATIBLE_VERSION)
+        },
     });
 
     for (contract, name, compatible) in contracts_iter {

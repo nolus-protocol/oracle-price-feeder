@@ -2,15 +2,17 @@ use cosmrs::{
     proto::{
         cosmos::{
             auth::v1beta1::{
-                query_client::QueryClient as AuthQueryClient, BaseAccount, QueryAccountRequest,
-                QueryAccountResponse,
+                query_client::QueryClient as AuthQueryClient, BaseAccount,
+                QueryAccountRequest, QueryAccountResponse,
             },
             base::tendermint::v1beta1::{
-                service_client::ServiceClient as TendermintServiceClient, GetNodeInfoRequest,
+                service_client::ServiceClient as TendermintServiceClient,
+                GetNodeInfoRequest,
             },
         },
         cosmwasm::wasm::v1::{
-            query_client::QueryClient as WasmQueryClient, QuerySmartContractStateRequest,
+            query_client::QueryClient as WasmQueryClient,
+            QuerySmartContractStateRequest,
         },
         prost::Message,
     },
@@ -19,12 +21,15 @@ use cosmrs::{
 };
 use serde::de::DeserializeOwned;
 use tonic::{
-    client::Grpc as GrpcClient, codec::ProstCodec, codegen::http::uri::PathAndQuery,
-    transport::Channel as TonicChannel, IntoRequest as _, Response as TonicResponse,
+    client::Grpc as GrpcClient, codec::ProstCodec,
+    codegen::http::uri::PathAndQuery, transport::Channel as TonicChannel,
+    IntoRequest as _, Response as TonicResponse,
 };
 use tracing::debug;
 
-use self::error::{AccountData as AccountError, Raw as RawError, Wasm as WasmError};
+use self::error::{
+    AccountData as AccountError, Raw as RawError, Wasm as WasmError,
+};
 
 pub mod error;
 
@@ -71,12 +76,17 @@ pub async fn account_data(
     .map_err(Into::into)
 }
 
-pub async fn raw<Q, R>(rpc: TonicChannel, query: Q, type_url: &'static str) -> Result<R, RawError>
+pub async fn raw<Q, R>(
+    rpc: TonicChannel,
+    query: Q,
+    type_url: &'static str,
+) -> Result<R, RawError>
 where
     Q: Message + 'static,
     R: Message + Default + 'static,
 {
-    let mut grpc_client: GrpcClient<TonicChannel> = GrpcClient::new(rpc.clone());
+    let mut grpc_client: GrpcClient<TonicChannel> =
+        GrpcClient::new(rpc.clone());
 
     grpc_client.ready().await?;
 
@@ -107,6 +117,7 @@ where
         .await
         .map_err(|error| WasmError::RawQuery(RawError::Response(error)))
         .and_then(|response| {
-            serde_json_wasm::from_slice(&response.into_inner().data).map_err(From::from)
+            serde_json_wasm::from_slice(&response.into_inner().data)
+                .map_err(From::from)
         })
 }

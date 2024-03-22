@@ -8,7 +8,9 @@ use crate::provider::PriceComparisonGuardError;
 #[derive(Debug, ThisError)]
 pub(crate) enum Application {
     #[error("Couldn't register global default tracing dispatcher! Cause: {0}")]
-    SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
+    SettingGlobalLogDispatcher(
+        #[from] tracing::dispatcher::SetGlobalDefaultError,
+    ),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]
@@ -28,7 +30,9 @@ pub(crate) enum Application {
     #[error("Failed to instantiate provider! Cause: {0}")]
     InvalidProviderUrl(#[from] url::ParseError),
     #[error("Failed to commit price feeding transaction! Cause: {0}")]
-    CommitTx(#[from] chain_comms::interact::commit::error::GasEstimatingTxCommit),
+    CommitTx(
+        #[from] chain_comms::interact::commit::error::GasEstimatingTxCommit,
+    ),
     #[error("A worker thread has exited due to an error! Cause: {0}")]
     Worker(#[from] Worker),
 }
@@ -40,11 +44,18 @@ pub(crate) enum Worker {
     #[error("Failed to instantiate provider with id: {0}! Cause: {1}")]
     InstantiateProvider(Box<str>, Box<dyn StdError + Send + 'static>),
     #[error("Failed to instantiate price comparison provider with id: {0}! Cause: {1}")]
-    InstantiatePriceComparisonProvider(Arc<str>, Box<dyn StdError + Send + 'static>),
+    InstantiatePriceComparisonProvider(
+        Arc<str>,
+        Box<dyn StdError + Send + 'static>,
+    ),
     #[error("Price comparison guard failure! Cause: {0}")]
     PriceComparisonGuard(#[from] PriceComparisonGuardError),
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
-    #[error("Failed to encode price feed message as Protobuf message! Cause: {0}")]
-    EncodeExecuteMessage(#[from] chain_comms::reexport::cosmrs::proto::prost::EncodeError),
+    #[error(
+        "Failed to encode price feed message as Protobuf message! Cause: {0}"
+    )]
+    EncodeExecuteMessage(
+        #[from] chain_comms::reexport::cosmrs::proto::prost::EncodeError,
+    ),
 }

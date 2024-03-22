@@ -1,6 +1,8 @@
 use tracing::{debug, error, info, info_span};
 
-use chain_comms::{interact::commit::Response, reexport::cosmrs::tendermint::abci::Code};
+use chain_comms::{
+    interact::commit::Response, reexport::cosmrs::tendermint::abci::Code,
+};
 
 pub fn commit_response(response: &Response) {
     info_span!("Mempool Response").in_scope(|| {

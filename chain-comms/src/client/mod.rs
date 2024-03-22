@@ -21,7 +21,10 @@ pub mod error;
 pub struct Client(Arc<GrpcChannel>);
 
 impl Client {
-    pub async fn new(grpc_uri: &str, concurrency_limit: Option<NonZeroUsize>) -> Result<Self> {
+    pub async fn new(
+        grpc_uri: &str,
+        concurrency_limit: Option<NonZeroUsize>,
+    ) -> Result<Self> {
         let grpc: GrpcChannel = {
             let grpc_uri: Uri = grpc_uri.try_into()?;
 
@@ -74,7 +77,9 @@ impl Client {
     }
 
     #[must_use]
-    pub fn tendermint_service_client(&self) -> TendermintServiceClient<GrpcChannel> {
+    pub fn tendermint_service_client(
+        &self,
+    ) -> TendermintServiceClient<GrpcChannel> {
         TendermintServiceClient::new(self.raw_grpc())
     }
 

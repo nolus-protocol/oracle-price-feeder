@@ -22,32 +22,38 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
     let mut max_quote_whole_width: usize = 0;
     let mut max_quote_fraction_width: usize = 0;
 
-    let mut prices: Vec<(&Price<CoinWithDecimalPlaces>, String, String)> = prices
-        .iter()
-        .map(|price: &Price<CoinWithDecimalPlaces>| {
-            assign_max(&mut max_base_denom_width, price.amount().ticker().len());
+    let mut prices: Vec<(&Price<CoinWithDecimalPlaces>, String, String)> =
+        prices
+            .iter()
+            .map(|price: &Price<CoinWithDecimalPlaces>| {
+                assign_max(
+                    &mut max_base_denom_width,
+                    price.amount().ticker().len(),
+                );
 
-            let quote_amount: String = normalize_and_stringify_quote(price);
+                let quote_amount: String = normalize_and_stringify_quote(price);
 
-            let Some((quote_whole, quote_fraction)) = quote_amount.split_once('.') else {
-                unreachable!()
-            };
+                let Some((quote_whole, quote_fraction)) =
+                    quote_amount.split_once('.')
+                else {
+                    unreachable!()
+                };
 
-            assign_max(&mut max_quote_fraction_width, quote_fraction.len());
+                assign_max(&mut max_quote_fraction_width, quote_fraction.len());
 
-            let quote_whole_owned: String = if quote_whole.len() > 3 {
-                format_large(quote_whole, &mut max_quote_whole_width)
-            } else {
-                if max_quote_whole_width < quote_whole.len() {
-                    max_quote_whole_width = quote_whole.len();
-                }
+                let quote_whole_owned: String = if quote_whole.len() > 3 {
+                    format_large(quote_whole, &mut max_quote_whole_width)
+                } else {
+                    if max_quote_whole_width < quote_whole.len() {
+                        max_quote_whole_width = quote_whole.len();
+                    }
 
-                quote_whole.to_owned()
-            };
+                    quote_whole.to_owned()
+                };
 
-            (price, quote_whole_owned, quote_fraction.to_owned())
-        })
-        .collect();
+                (price, quote_whole_owned, quote_fraction.to_owned())
+            })
+            .collect();
 
     prices.sort_unstable_by(cmp_price_tickers);
 
@@ -65,12 +71,16 @@ fn do_print(prices: &[Price<CoinWithDecimalPlaces>]) {
     }
 }
 
-fn format_large(quote_whole: &str, max_quote_whole_width: &mut usize) -> String {
+fn format_large(
+    quote_whole: &str,
+    max_quote_whole_width: &mut usize,
+) -> String {
     let divided_len: usize = quote_whole.len() / 3;
 
     assign_max(max_quote_whole_width, quote_whole.len() + divided_len);
 
-    let mut quote_whole_owned: String = String::with_capacity(quote_whole.len() + divided_len);
+    let mut quote_whole_owned: String =
+        String::with_capacity(quote_whole.len() + divided_len);
 
     let mut index: usize = quote_whole.len() % 3;
 
@@ -115,7 +125,9 @@ fn cmp_price_tickers(
         })
 }
 
-fn normalize_and_stringify_quote(price: &Price<CoinWithDecimalPlaces>) -> String {
+fn normalize_and_stringify_quote(
+    price: &Price<CoinWithDecimalPlaces>,
+) -> String {
     #[allow(clippy::cast_precision_loss)]
     let base_f64: f64 = (price.amount_quote().amount()
         * 10_u128.pow(

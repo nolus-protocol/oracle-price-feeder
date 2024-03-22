@@ -15,7 +15,8 @@ pub(super) fn reconstruct<'r, 'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let mut comparison_providers: BTreeMap<Arc<str>, ComparisonProvider> = BTreeMap::new();
+    let mut comparison_providers: BTreeMap<Arc<str>, ComparisonProvider> =
+        BTreeMap::new();
 
     for (
         raw_id,
@@ -50,7 +51,7 @@ where
                     "Comparison provider with ID \"{id}\" already exists!",
                     id = entry.key()
                 )));
-            }
+            },
         };
     }
 

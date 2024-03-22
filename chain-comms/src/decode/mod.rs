@@ -21,10 +21,15 @@ pub fn tx_response_data(tx: &TxResponse) -> Result<Vec<u8>, Error> {
     HEXUPPER
         .decode(tx.data.as_bytes())
         .map_err(Error::Decode)
-        .and_then(|data| Message::decode(data.as_slice()).map_err(Error::Deserialize))
-        .and_then(|Package { data }| Message::decode(data.as_slice()).map_err(Error::Deserialize))
+        .and_then(|data| {
+            Message::decode(data.as_slice()).map_err(Error::Deserialize)
+        })
+        .and_then(|Package { data }| {
+            Message::decode(data.as_slice()).map_err(Error::Deserialize)
+        })
         .and_then(|any: ProtobufAny| {
-            MsgExecuteContractResponse::from_any(&any).map_err(Error::InvalidResponseType)
+            MsgExecuteContractResponse::from_any(&any)
+                .map_err(Error::InvalidResponseType)
         })
         .map(|MsgExecuteContractResponse { data }| data)
 }

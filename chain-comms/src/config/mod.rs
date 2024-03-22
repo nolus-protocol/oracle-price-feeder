@@ -91,11 +91,14 @@ where
     T::Err: StdError,
     D: Deserializer<'de>,
 {
-    maybe_read_from_env::<'de, T, D>(var_name)
-        .and_then(|maybe_value| maybe_value.ok_or_else(|| D::Error::missing_field(var_name)))
+    maybe_read_from_env::<'de, T, D>(var_name).and_then(|maybe_value| {
+        maybe_value.ok_or_else(|| D::Error::missing_field(var_name))
+    })
 }
 
-pub fn maybe_read_from_env<'de, T, D>(var_name: &'static str) -> Result<Option<T>, D::Error>
+pub fn maybe_read_from_env<'de, T, D>(
+    var_name: &'static str,
+) -> Result<Option<T>, D::Error>
 where
     T: FromStr,
     T::Err: StdError,

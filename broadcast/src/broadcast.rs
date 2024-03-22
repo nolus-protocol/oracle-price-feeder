@@ -50,7 +50,10 @@ pub(crate) async fn sleep_and_broadcast_tx<Impl: mode::Impl>(
 }
 
 #[inline]
-async fn sleep_between_txs(between_tx_margin_time: Duration, last_signing_timestamp: Instant) {
+async fn sleep_between_txs(
+    between_tx_margin_time: Duration,
+    last_signing_timestamp: Instant,
+) {
     let time_left_since_last_signing: Duration =
         between_tx_margin_time.saturating_sub(last_signing_timestamp.elapsed());
 
@@ -88,8 +91,12 @@ async fn broadcast_and_send_back_tx_hash<Impl: mode::Impl>(
         let code = tx_response.code.value();
 
         match code {
-            VERIFICATION_FAILED_CODE => Some(ProcessingError::VerificationFailed),
-            ACCOUNT_SEQUENCE_MISMATCH_CODE => Some(ProcessingError::SequenceMismatch),
+            VERIFICATION_FAILED_CODE => {
+                Some(ProcessingError::VerificationFailed)
+            },
+            ACCOUNT_SEQUENCE_MISMATCH_CODE => {
+                Some(ProcessingError::SequenceMismatch)
+            },
             _ => None,
         }
     } else {
@@ -130,7 +137,8 @@ fn send_back_tx_hash(
 ) -> SendBackTxHashResult {
     let tx_hash = tx_response.tx_hash.clone();
 
-    let channel_closed = if let Some(sender) = tx_result_senders.get(&sender_id) {
+    let channel_closed = if let Some(sender) = tx_result_senders.get(&sender_id)
+    {
         if sender
             .send(if tx_response.code.is_ok() {
                 Ok(tx_response.tx_hash)
@@ -158,7 +166,13 @@ fn send_back_tx_hash(
         let node_client = node_client.clone();
 
         async move {
-            crate::poll_delivered_tx(&node_client, tick_time, poll_time, tx_hash).await;
+            crate::poll_delivered_tx(
+                &node_client,
+                tick_time,
+                poll_time,
+                tx_hash,
+            )
+            .await;
         }
     }));
 

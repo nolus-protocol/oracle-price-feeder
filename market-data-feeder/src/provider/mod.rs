@@ -13,7 +13,8 @@ use crate::{
 };
 
 pub(crate) use self::error::{
-    PriceComparisonGuard as PriceComparisonGuardError, Provider as ProviderError,
+    PriceComparisonGuard as PriceComparisonGuardError,
+    Provider as ProviderError,
 };
 
 mod error;
@@ -72,7 +73,9 @@ where
 }
 
 #[async_trait]
-pub(crate) trait FromConfig<const COMPARISON: bool>: Sync + Send + Sized + 'static {
+pub(crate) trait FromConfig<const COMPARISON: bool>:
+    Sync + Send + Sized + 'static
+{
     const ID: &'static str;
 
     type ConstructError: StdError + Send + 'static;
@@ -100,13 +103,20 @@ impl<T: FromConfig<false>> FromConfig<true> for T {
     where
         Config: ProviderConfigExt<true>,
     {
-        <T as FromConfig<false>>::from_config(id, ProviderConfigWrapper(config), node_client).await
+        <T as FromConfig<false>>::from_config(
+            id,
+            ProviderConfigWrapper(config),
+            node_client,
+        )
+        .await
     }
 }
 
 struct ProviderConfigWrapper<Config: ProviderConfigExt<true>>(Config);
 
-impl<Config: ProviderConfigExt<true>> ProviderConfig for ProviderConfigWrapper<Config> {
+impl<Config: ProviderConfigExt<true>> ProviderConfig
+    for ProviderConfigWrapper<Config>
+{
     fn name(&self) -> &Arc<str> {
         self.0.name()
     }
@@ -132,8 +142,13 @@ impl<Config: ProviderConfigExt<true>> ProviderConfig for ProviderConfigWrapper<C
     }
 }
 
-impl<Config: ProviderConfigExt<true>> ProviderConfigExt<false> for ProviderConfigWrapper<Config> {
-    fn fetch_from_env(id: &str, name: &str) -> Result<String, crate::config::EnvError> {
+impl<Config: ProviderConfigExt<true>> ProviderConfigExt<false>
+    for ProviderConfigWrapper<Config>
+{
+    fn fetch_from_env(
+        id: &str,
+        name: &str,
+    ) -> Result<String, crate::config::EnvError> {
         Config::fetch_from_env(id, name)
     }
 }

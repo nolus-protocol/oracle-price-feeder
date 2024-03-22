@@ -34,7 +34,9 @@ pub fn adjust_gas_limit(
         .map(|result: NonZeroU128| {
             result
                 .get()
-                .checked_div(node_config.gas_adjustment_denominator().get().into())
+                .checked_div(
+                    node_config.gas_adjustment_denominator().get().into(),
+                )
                 .and_then(NonZeroU128::new)
                 .unwrap_or(NonZeroU128::MIN)
         })
@@ -50,7 +52,9 @@ pub fn process_simulation_result(
     fallback_gas_limit: NonZeroU64,
 ) -> NonZeroU64 {
     match simulated_tx_result {
-        Ok(gas_info) => NonZeroU64::new(gas_info.gas_used).unwrap_or(NonZeroU64::MIN),
+        Ok(gas_info) => {
+            NonZeroU64::new(gas_info.gas_used).unwrap_or(NonZeroU64::MIN)
+        },
         Err(error) => {
             error!(
                 error = %error,
@@ -59,7 +63,7 @@ pub fn process_simulation_result(
             );
 
             fallback_gas_limit
-        }
+        },
     }
 }
 
@@ -72,7 +76,9 @@ pub fn calculate_fee(config: &Node, gas_limit: NonZeroU64) -> Fee {
                 .saturating_mul(config.gas_price_numerator().get().into())
                 .saturating_div(config.gas_price_denominator().get().into())
                 .saturating_mul(config.fee_adjustment_numerator().get().into())
-                .saturating_div(config.fee_adjustment_denominator().get().into()),
+                .saturating_div(
+                    config.fee_adjustment_denominator().get().into(),
+                ),
         },
         gas_limit,
     )

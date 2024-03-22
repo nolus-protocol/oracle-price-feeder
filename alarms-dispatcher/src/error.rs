@@ -6,7 +6,9 @@ use chain_comms::reexport::cosmrs::proto::prost::EncodeError;
 #[derive(Debug, ThisError)]
 pub enum Application {
     #[error("Couldn't register global default tracing dispatcher! Cause: {0}")]
-    SettingGlobalLogDispatcher(#[from] tracing::dispatcher::SetGlobalDefaultError),
+    SettingGlobalLogDispatcher(
+        #[from] tracing::dispatcher::SetGlobalDefaultError,
+    ),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
     #[error("Failed to query admin contract! Cause: {0}")]
@@ -54,7 +56,9 @@ pub enum CommitDispatchTx {
     #[error("Failed to serialize dispatch message as JSON! Cause: {0}")]
     SerializeDispatchMessage(#[from] serde_json_wasm::ser::Error),
     #[error("Failed to commit transaction! Cause: {0}")]
-    CommitTx(#[from] chain_comms::interact::commit::error::GasEstimatingTxCommit),
+    CommitTx(
+        #[from] chain_comms::interact::commit::error::GasEstimatingTxCommit,
+    ),
     #[error("Failed to deserialize response data! Cause: {0}")]
     DeserializeTxData(#[from] chain_comms::decode::error::Error),
 }

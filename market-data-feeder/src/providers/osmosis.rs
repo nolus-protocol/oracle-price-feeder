@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use osmosis_std::types::osmosis::poolmanager::v2::{SpotPriceRequest, SpotPriceResponse};
+use osmosis_std::types::osmosis::poolmanager::v2::{
+    SpotPriceRequest, SpotPriceResponse,
+};
 use thiserror::Error;
 use tokio::task::JoinSet;
 use toml::Value;
@@ -18,7 +20,8 @@ use chain_comms::{
 
 use crate::{
     config::{
-        Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces, SymbolUnsized, Ticker,
+        Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces,
+        SymbolUnsized, Ticker,
     },
     messages::{PoolId, QueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
     price::{CoinWithDecimalPlaces, Price, Ratio},
@@ -48,25 +51,29 @@ impl Osmosis {
             swap_legs
                 .into_iter()
                 .filter_map(|swap: SwapLeg| -> Option<Route> {
-                    let (from_symbol, from_decimal_places): (Arc<SymbolUnsized>, u8) = self
-                        .currencies
-                        .get(&swap.from)
-                        .map(|symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
+                    let (from_symbol, from_decimal_places): (
+                        Arc<SymbolUnsized>,
+                        u8,
+                    ) = self.currencies.get(&swap.from).map(
+                        |symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
                             (
                                 symbol_and_decimal_places.denom().clone(),
                                 symbol_and_decimal_places.decimal_places(),
                             )
-                        })?;
+                        },
+                    )?;
 
-                    let (to_symbol, to_decimal_places): (Arc<SymbolUnsized>, u8) = self
-                        .currencies
-                        .get(&swap.to.target)
-                        .map(|symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
+                    let (to_symbol, to_decimal_places): (
+                        Arc<SymbolUnsized>,
+                        u8,
+                    ) = self.currencies.get(&swap.to.target).map(
+                        |symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
                             (
                                 symbol_and_decimal_places.denom().clone(),
                                 symbol_and_decimal_places.decimal_places(),
                             )
-                        })?;
+                        },
+                    )?;
 
                     Some(Route {
                         pool_id: swap.to.pool_id,
@@ -99,7 +106,9 @@ impl Provider for Osmosis {
         const DECIMAL_PLACES_IN_RESPONSE: usize = 36;
         const MAX_U128_DECIMAL_DIGITS: usize = 38;
 
-        let mut set: JoinSet<Result<Price<CoinWithDecimalPlaces>, ProviderError>> = JoinSet::new();
+        let mut set: JoinSet<
+            Result<Price<CoinWithDecimalPlaces>, ProviderError>,
+        > = JoinSet::new();
 
         let routes_iter = self
             .query_supported_currencies(self.node_client.raw_grpc())
@@ -222,8 +231,8 @@ impl FromConfig<false> for Osmosis {
         if let Some(fields) = super::left_over_fields(config.into_misc()) {
             Err(ConstructError::UnknownFields(fields))
         } else {
-            let grpc_uri =
-                Config::fetch_from_env(id, "GRPC_URI").map_err(ConstructError::FetchGrpcUri)?;
+            let grpc_uri = Config::fetch_from_env(id, "GRPC_URI")
+                .map_err(ConstructError::FetchGrpcUri)?;
 
             NodeClient::new(&grpc_uri, None)
                 .await

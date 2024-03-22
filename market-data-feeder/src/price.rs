@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
-use serde::{de::Error as DeserializeError, Deserialize, Deserializer, Serialize};
+use serde::{
+    de::Error as DeserializeError, Deserialize, Deserializer, Serialize,
+};
 use thiserror::Error;
 
 use crate::config::{Ticker, TickerUnsized};
@@ -12,7 +14,11 @@ pub(crate) struct Ratio {
 }
 
 impl Ratio {
-    pub const fn to_price(self, base: Ticker, quote: Ticker) -> Price<CoinWithoutDecimalPlaces> {
+    pub const fn to_price(
+        self,
+        base: Ticker,
+        quote: Ticker,
+    ) -> Price<CoinWithoutDecimalPlaces> {
         Price::new(
             CoinWithoutDecimalPlaces::new(self.denominator, base),
             CoinWithoutDecimalPlaces::new(self.numerator, quote),
@@ -27,8 +33,16 @@ impl Ratio {
         quote_decimal_places: u8,
     ) -> Price<CoinWithDecimalPlaces> {
         Price::new(
-            CoinWithDecimalPlaces::new(self.denominator, base_ticker, base_decimal_places),
-            CoinWithDecimalPlaces::new(self.numerator, quote_ticker, quote_decimal_places),
+            CoinWithDecimalPlaces::new(
+                self.denominator,
+                base_ticker,
+                base_decimal_places,
+            ),
+            CoinWithDecimalPlaces::new(
+                self.numerator,
+                quote_ticker,
+                quote_decimal_places,
+            ),
         )
     }
 }
@@ -39,8 +53,9 @@ impl<'de> Deserialize<'de> for Ratio {
     where
         D: Deserializer<'de>,
     {
-        <&str>::deserialize(deserializer)
-            .and_then(|price: &str| Self::from_str(price).map_err(DeserializeError::custom))
+        <&str>::deserialize(deserializer).and_then(|price: &str| {
+            Self::from_str(price).map_err(DeserializeError::custom)
+        })
     }
 }
 
@@ -63,33 +78,38 @@ impl FromStr for Ratio {
                     denominator: 1,
                 })
                 .map_err(Error::ParseNumerator),
-            exponent @ 1.. => {
-                (exponent - 1)
-                    .try_into()
-                    .map_err(Error::from)
-                    .and_then(|exp: u32| 10_u128.checked_pow(exp).ok_or(Error::ExponentTooBig))
-                    .and_then(|denominator: u128| {
-                        let result = s[point + 1..].trim_start_matches('0').parse();
+            exponent @ 1.. => (exponent - 1)
+                .try_into()
+                .map_err(Error::from)
+                .and_then(|exp: u32| {
+                    10_u128.checked_pow(exp).ok_or(Error::ExponentTooBig)
+                })
+                .and_then(|denominator: u128| {
+                    let result = s[point + 1..].trim_start_matches('0').parse();
 
-                        if point == 0 {
-                            result.map(Some)
-                        } else {
-                            result.and_then(|after_decimal: u128| {
-                                s[..point].parse().map(|before_decimal: u128| {
-                                    before_decimal.checked_mul(denominator).and_then(
-                                        |before_decimal| before_decimal.checked_add(after_decimal),
-                                    )
-                                })
+                    if point == 0 {
+                        result.map(Some)
+                    } else {
+                        result.and_then(|after_decimal: u128| {
+                            s[..point].parse().map(|before_decimal: u128| {
+                                before_decimal
+                                    .checked_mul(denominator)
+                                    .and_then(|before_decimal| {
+                                        before_decimal
+                                            .checked_add(after_decimal)
+                                    })
                             })
-                        }
-                        .map_err(Error::ParseNumerator)
-                        .and_then(|maybe_numerator| maybe_numerator.ok_or(Error::NumeratorTooBig))
-                        .map(|numerator: u128| Self {
-                            numerator,
-                            denominator,
                         })
+                    }
+                    .map_err(Error::ParseNumerator)
+                    .and_then(|maybe_numerator| {
+                        maybe_numerator.ok_or(Error::NumeratorTooBig)
                     })
-            }
+                    .map(|numerator: u128| Self {
+                        numerator,
+                        denominator,
+                    })
+                }),
         }
     }
 }
@@ -185,7 +205,9 @@ struct CoinDTO {
 }
 
 impl From<CoinWithoutDecimalPlaces> for CoinDTO {
-    fn from(CoinWithoutDecimalPlaces { amount, ticker }: CoinWithoutDecimalPlaces) -> Self {
+    fn from(
+        CoinWithoutDecimalPlaces { amount, ticker }: CoinWithoutDecimalPlaces,
+    ) -> Self {
         Self {
             amount: amount.to_string(),
             ticker,
@@ -194,7 +216,9 @@ impl From<CoinWithoutDecimalPlaces> for CoinDTO {
 }
 
 impl From<CoinWithDecimalPlaces> for CoinDTO {
-    fn from(CoinWithDecimalPlaces { amount, ticker, .. }: CoinWithDecimalPlaces) -> Self {
+    fn from(
+        CoinWithDecimalPlaces { amount, ticker, .. }: CoinWithDecimalPlaces,
+    ) -> Self {
         Self {
             amount: amount.to_string(),
             ticker,

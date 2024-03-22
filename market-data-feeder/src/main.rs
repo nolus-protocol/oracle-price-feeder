@@ -32,7 +32,9 @@ use chain_comms::{
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
 
-use self::{config::Config, messages::QueryMsg, result::Result, workers::SpawnContext};
+use self::{
+    config::Config, messages::QueryMsg, result::Result, workers::SpawnContext,
+};
 
 mod config;
 mod deviation;
@@ -83,7 +85,8 @@ async fn app_main() -> Result<()> {
         config,
         node_client,
         ..
-    }: RpcSetup<Config> = prepare_rpc("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
+    }: RpcSetup<Config> =
+        prepare_rpc("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
 
     check_compatibility(&config, &mut node_client.wasm_query_client()).await?;
 

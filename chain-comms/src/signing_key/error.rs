@@ -2,7 +2,9 @@ use thiserror::Error as ThisError;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
-    #[error("Couldn't read secret mnemonic from the standard input! Cause: {0}")]
+    #[error(
+        "Couldn't read secret mnemonic from the standard input! Cause: {0}"
+    )]
     ReadingMnemonic(#[from] tokio::io::Error),
     #[error("Couldn't read secret mnemonic from environment variable because it can't be encoded as valid UTF-8!")]
     NonUnicodeMnemonic,

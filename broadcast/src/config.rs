@@ -21,7 +21,9 @@ pub struct Config {
     pub between_tx_margin_time: Duration,
 }
 
-fn deserialize_duration_in_seconds<'de, D>(deserializer: D) -> Result<Duration, D::Error>
+fn deserialize_duration_in_seconds<'de, D>(
+    deserializer: D,
+) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {

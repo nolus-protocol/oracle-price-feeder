@@ -13,7 +13,9 @@ use cosmrs::{
 };
 use tonic::Response as TonicResponse;
 
-use crate::{build_tx::ContractTx, client::Client, config::Node, signer::Signer};
+use crate::{
+    build_tx::ContractTx, client::Client, config::Node, signer::Signer,
+};
 
 use super::calculate_fee;
 

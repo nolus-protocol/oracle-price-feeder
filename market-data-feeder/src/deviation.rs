@@ -36,7 +36,8 @@ where
         ])
     }
 
-    let mut map: BTreeMap<Ticker, BTreeMap<Ticker, (u128, u128)>> = BTreeMap::new();
+    let mut map: BTreeMap<Ticker, BTreeMap<Ticker, (u128, u128)>> =
+        BTreeMap::new();
 
     for (price, inverted) in comparison_prices
         .iter()
@@ -64,7 +65,9 @@ where
     for price in prices {
         let (comparison_base, comparison_quote): (u128, u128) = map
             .get(price.amount().ticker())
-            .and_then(|map: &BTreeMap<Ticker, (u128, u128)>| map.get(price.amount_quote().ticker()))
+            .and_then(|map: &BTreeMap<Ticker, (u128, u128)>| {
+                map.get(price.amount_quote().ticker())
+            })
             .copied()
             .ok_or_else(|| {
                 PriceComparisonGuardError::MissingComparisonPrice(
@@ -85,14 +88,18 @@ where
         Deviation = ABS(100 - X)
         */
         let percentage_of_comparison_price: UInt =
-            (to_big_uint(comparison_base) * to_big_uint(price.amount_quote().amount()) * HUNDRED)
-                / (to_big_uint(comparison_quote) * to_big_uint(price.amount().amount()));
+            (to_big_uint(comparison_base)
+                * to_big_uint(price.amount_quote().amount())
+                * HUNDRED)
+                / (to_big_uint(comparison_quote)
+                    * to_big_uint(price.amount().amount()));
 
-        let deviation_percent: UInt = if percentage_of_comparison_price < HUNDRED {
-            HUNDRED - percentage_of_comparison_price
-        } else {
-            percentage_of_comparison_price - HUNDRED
-        };
+        let deviation_percent: UInt =
+            if percentage_of_comparison_price < HUNDRED {
+                HUNDRED - percentage_of_comparison_price
+            } else {
+                percentage_of_comparison_price - HUNDRED
+            };
 
         if deviation_percent >= UInt::from_digit(max_deviation_exclusive) {
             return Err(PriceComparisonGuardError::DeviationTooBig(

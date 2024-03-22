@@ -27,7 +27,8 @@ use chain_comms::{
     config::Node as NodeConfig,
     interact::{
         get_tx_response::{
-            error::Error as GetTxResponseError, get_tx_response, Response as TxResponse,
+            error::Error as GetTxResponseError, get_tx_response,
+            Response as TxResponse,
         },
         TxHash,
     },
@@ -38,7 +39,8 @@ use crate::broadcast::ProcessingError;
 
 use self::{
     broadcast::{
-        ProcessingError as BroadcastProcessingError, ProcessingOutput as BroadcastProcessingOutput,
+        ProcessingError as BroadcastProcessingError,
+        ProcessingOutput as BroadcastProcessingOutput,
     },
     config::Config,
     generators::{CommitResultSender, SpawnResult, TxRequest, TxRequestSender},
@@ -63,7 +65,8 @@ pub async fn broadcast<Impl, SpawnGeneratorsF, SpawnE>(
 ) -> Result<(), SpawnE>
 where
     Impl: mode::Impl,
-    SpawnGeneratorsF: FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult, SpawnE> + Send,
+    SpawnGeneratorsF:
+        FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult, SpawnE> + Send,
 {
     let (tx_sender, tx_receiver): (
         UnboundedSender<TxRequest<Impl>>,
@@ -77,11 +80,12 @@ where
 
     let mut signal = pin!(tokio::signal::ctrl_c());
 
-    let signal_installed: bool = if let Err(error) = poll_fn(|cx| match signal.as_mut().poll(cx) {
-        result @ Poll::Ready(_) => result,
-        Poll::Pending => Poll::Ready(Ok(())),
-    })
-    .await
+    let signal_installed: bool = if let Err(error) =
+        poll_fn(|cx| match signal.as_mut().poll(cx) {
+            result @ Poll::Ready(_) => result,
+            Poll::Pending => Poll::Ready(Ok(())),
+        })
+        .await
     {
         error!(
             ?error,
@@ -136,14 +140,14 @@ pub async fn poll_delivered_tx(
             match result {
                 Ok(tx) => {
                     break tx;
-                }
+                },
                 Err(error) => {
                     error!(
                         hash = %tx_hash,
                         error = ?error,
                         "Polling delivered transaction failed!",
                     );
-                }
+                },
             }
         }
     })
@@ -194,7 +198,8 @@ async fn processing_loop<Impl>(
         try_join_generator_task(tx_generators_set).await;
 
         if matches!(
-            cache::purge_and_update(&mut tx_receiver, &mut requests_cache).await,
+            cache::purge_and_update(&mut tx_receiver, &mut requests_cache)
+                .await,
             Err(cache::ChannelClosed {})
         ) {
             info!("All generator threads stopped. Exiting.");
@@ -210,7 +215,12 @@ async fn processing_loop<Impl>(
                  ..
              }| {
                 requests_cache.get_mut(sender_id).map_or_else(
-                    || matches!(Impl::filter(expiration), FilterResult::Expired),
+                    || {
+                        matches!(
+                            Impl::filter(expiration),
+                            FilterResult::Expired
+                        )
+                    },
                     |slot| slot.get_mut().is_some(),
                 )
             },
@@ -224,15 +234,17 @@ async fn processing_loop<Impl>(
         }
 
         if let Some(tx_request) = preprocessed_tx_request.take() {
-            let broadcast_result: Result<BroadcastProcessingOutput, preprocess::TxRequest<Impl>> =
-                broadcast::sleep_and_broadcast_tx(
-                    &mut api_and_configuration,
-                    config.between_tx_margin_time,
-                    tx_request,
-                    &tx_result_senders,
-                    last_signing_timestamp,
-                )
-                .await;
+            let broadcast_result: Result<
+                BroadcastProcessingOutput,
+                preprocess::TxRequest<Impl>,
+            > = broadcast::sleep_and_broadcast_tx(
+                &mut api_and_configuration,
+                config.between_tx_margin_time,
+                tx_request,
+                &tx_result_senders,
+                last_signing_timestamp,
+            )
+            .await;
 
             match broadcast_result {
                 Ok(BroadcastProcessingOutput {
@@ -260,12 +272,12 @@ async fn processing_loop<Impl>(
 
                         _ = requests_cache.remove(sender_id);
                     }
-                }
+                },
                 Err(tx_request) => {
                     info!("Placing transaction back in queue front to retry.");
 
                     preprocessed_tx_request = Some(tx_request);
-                }
+                },
             }
         }
     }
@@ -289,7 +301,7 @@ async fn handle_mempool_error(
             } else {
                 info!("Successfully re-fetched chain ID.");
             }
-        }
+        },
         BroadcastProcessingError::SequenceMismatch => {
             if sequence_mismatch_streak_first_timestamp
                 .get_or_insert(broadcast_timestamp)
@@ -306,17 +318,20 @@ async fn handle_mempool_error(
                     info!("Successfully re-fetched account data.");
                 }
             }
-        }
+        },
     }
 }
 
 #[allow(clippy::needless_pass_by_ref_mut)]
 async fn try_join_generator_task(tx_generators_set: &mut JoinSet<Infallible>) {
-    if let Some(error) = poll_fn(move |cx| match tx_generators_set.poll_join_next(cx) {
-        Poll::Pending => Poll::Ready(None),
-        Poll::Ready(maybe_joined) => Poll::Ready(maybe_joined.and_then(Result::err)),
-    })
-    .await
+    if let Some(error) =
+        poll_fn(move |cx| match tx_generators_set.poll_join_next(cx) {
+            Poll::Pending => Poll::Ready(None),
+            Poll::Ready(maybe_joined) => {
+                Poll::Ready(maybe_joined.and_then(Result::err))
+            },
+        })
+        .await
     {
         error!(
             "Generator task {}!",

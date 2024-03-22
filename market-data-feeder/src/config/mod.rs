@@ -77,7 +77,8 @@ impl<'de> Deserialize<'de> for Config {
         }: raw::Config = raw::Config::deserialize(deserializer)?;
 
         let time_before_feeding: Duration =
-            read_from_env::<u64, D>("SECONDS_BEFORE_FEEDING").map(Duration::from_secs)?;
+            read_from_env::<u64, D>("SECONDS_BEFORE_FEEDING")
+                .map(Duration::from_secs)?;
 
         let mut oracles: BTreeMap<Arc<str>, Arc<str>> = BTreeMap::new();
 
@@ -124,7 +125,9 @@ where
     Ok(oracles
         .get(oracle_id)
         .ok_or_else(|| {
-            DeserializeError::custom(format_args!("Unknown oracle ID: \"{oracle_id}\"!"))
+            DeserializeError::custom(format_args!(
+                "Unknown oracle ID: \"{oracle_id}\"!"
+            ))
         })?
         .clone())
 }
@@ -149,7 +152,9 @@ pub(crate) trait ProviderConfig: Sync + Send {
     fn into_misc(self) -> BTreeMap<String, toml::Value>;
 }
 
-pub(crate) trait ProviderConfigExt<const COMPARISON: bool>: ProviderConfig {
+pub(crate) trait ProviderConfigExt<const COMPARISON: bool>:
+    ProviderConfig
+{
     fn fetch_from_env(id: &str, name: &str) -> Result<String, EnvError>;
 }
 

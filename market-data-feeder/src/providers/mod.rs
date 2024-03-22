@@ -8,7 +8,8 @@ use crate::{
 };
 
 use self::{
-    astroport::Astroport, coin_gecko::SanityCheck as CoinGeckoSanityCheck, osmosis::Osmosis,
+    astroport::Astroport, coin_gecko::SanityCheck as CoinGeckoSanityCheck,
+    osmosis::Osmosis,
 };
 
 mod astroport;
@@ -23,18 +24,25 @@ impl Providers {
         V: ProviderVisitor,
     {
         match id {
-            <Astroport as FromConfig<false>>::ID => Some(visitor.on::<Astroport>()),
+            <Astroport as FromConfig<false>>::ID => {
+                Some(visitor.on::<Astroport>())
+            },
             <Osmosis as FromConfig<false>>::ID => Some(visitor.on::<Osmosis>()),
             _ => None,
         }
     }
 
-    pub fn visit_comparison_provider<V>(id: &str, visitor: V) -> Option<V::Return>
+    pub fn visit_comparison_provider<V>(
+        id: &str,
+        visitor: V,
+    ) -> Option<V::Return>
     where
         V: ComparisonProviderVisitor,
     {
         match id {
-            CoinGeckoSanityCheck::ID => Some(visitor.on::<CoinGeckoSanityCheck>()),
+            CoinGeckoSanityCheck::ID => {
+                Some(visitor.on::<CoinGeckoSanityCheck>())
+            },
             _ => Self::visit_provider(id, ProviderConversionVisitor(visitor)),
         }
     }
@@ -42,7 +50,9 @@ impl Providers {
 
 struct ProviderConversionVisitor<V: ComparisonProviderVisitor>(V);
 
-impl<V: ComparisonProviderVisitor> ProviderVisitor for ProviderConversionVisitor<V> {
+impl<V: ComparisonProviderVisitor> ProviderVisitor
+    for ProviderConversionVisitor<V>
+{
     type Return = V::Return;
 
     fn on<P>(self) -> Self::Return
@@ -97,13 +107,13 @@ where
         match result.map_err(From::from).and_then(identity) {
             Ok(price) => {
                 prices.push(price);
-            }
+            },
             Err(error) if fault_tolerant => {
                 tracing::error!(error = %error, "Couldn't resolve price!");
-            }
+            },
             Err(error) => {
                 return Err(error);
-            }
+            },
         }
     }
 

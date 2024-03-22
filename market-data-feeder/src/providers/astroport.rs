@@ -22,8 +22,13 @@ use chain_comms::{
 };
 
 use crate::{
-    config::{Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces, SymbolUnsized},
-    messages::{QueryMsg as OracleQueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
+    config::{
+        Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces,
+        SymbolUnsized,
+    },
+    messages::{
+        QueryMsg as OracleQueryMsg, SupportedCurrencyPairsResponse, SwapLeg,
+    },
     price::{CoinWithDecimalPlaces, Price},
     provider::{FromConfig, Provider, ProviderError},
 };
@@ -71,9 +76,8 @@ impl Astroport {
             supported_currencies
                 .into_iter()
                 .filter_map(|swap_leg: SwapLeg| {
-                    self.currencies
-                        .get(&swap_leg.from)
-                        .and_then(|base: &SymbolAndDecimalPlaces| {
+                    self.currencies.get(&swap_leg.from).and_then(
+                        |base: &SymbolAndDecimalPlaces| {
                             self.currencies.get(&swap_leg.to.target).map(
                                 |quote: &SymbolAndDecimalPlaces| {
                                     (
@@ -86,7 +90,8 @@ impl Astroport {
                                     )
                                 },
                             )
-                        })
+                        },
+                    )
                 })
         })
         .map_err(From::from)
@@ -103,9 +108,12 @@ impl Provider for Astroport {
         &self,
         fault_tolerant: bool,
     ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError> {
-        let mut set: JoinSet<Result<Price<CoinWithDecimalPlaces>, ProviderError>> = JoinSet::new();
+        let mut set: JoinSet<
+            Result<Price<CoinWithDecimalPlaces>, ProviderError>,
+        > = JoinSet::new();
 
-        let supported_currencies_iter = self.supported_currencies_intersection().await?;
+        let supported_currencies_iter =
+            self.supported_currencies_intersection().await?;
 
         for (
             base_ticker,
@@ -121,7 +129,8 @@ impl Provider for Astroport {
 
             let router_contract: Arc<str> = self.router_contract.clone();
 
-            let max_decimal_places: u8 = base_decimal_places.max(quote_decimal_places);
+            let max_decimal_places: u8 =
+                base_decimal_places.max(quote_decimal_places);
 
             set.spawn(async move {
                 let query_message =
@@ -186,11 +195,14 @@ impl FromConfig<false> for Astroport {
 
         let grpc_uri: Uri = Config::fetch_from_env(id, GRPC_URI_ENV_NAME)
             .map_err(ConstructError::FetchGrpcUri)
-            .and_then(|value: String| value.parse().map_err(ConstructError::InvalidGrpcUri))?;
+            .and_then(|value: String| {
+                value.parse().map_err(ConstructError::InvalidGrpcUri)
+            })?;
 
-        let router_contract: Arc<str> = Config::fetch_from_env(id, ROUTER_CONTRACT_ENV_NAME)
-            .map_err(ConstructError::FetchRouterContract)
-            .map(Into::into)?;
+        let router_contract: Arc<str> =
+            Config::fetch_from_env(id, ROUTER_CONTRACT_ENV_NAME)
+                .map_err(ConstructError::FetchRouterContract)
+                .map(Into::into)?;
 
         let oracle_addr: Arc<str> = config.oracle_addr().clone();
 
@@ -230,7 +242,9 @@ pub(crate) enum ConstructError {
     DeserializeField(&'static str, toml::de::Error),
     #[error("Unknown fields found! Unknown fields: {0}")]
     UnknownFields(Box<str>),
-    #[error("Failed to fetch gRPC's URI from environment variables! Cause: {0}")]
+    #[error(
+        "Failed to fetch gRPC's URI from environment variables! Cause: {0}"
+    )]
     FetchGrpcUri(EnvError),
     #[error("Failed to parse gRPC's URI! Cause: {0}")]
     InvalidGrpcUri(#[from] InvalidUri),

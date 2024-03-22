@@ -11,15 +11,17 @@ use tracing::{error, info, warn};
 
 use broadcast::{
     generators::{
-        CommitError, CommitErrorType, CommitResultReceiver, CommitResultSender, SpawnResult,
-        TxRequest, TxRequestSender,
+        CommitError, CommitErrorType, CommitResultReceiver, CommitResultSender,
+        SpawnResult, TxRequest, TxRequestSender,
     },
     mode::Blocking,
 };
 use chain_comms::{
     client::Client as NodeClient,
     interact::{get_tx_response::Response as TxResponse, query, TxHash},
-    reexport::cosmrs::{proto::cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny},
+    reexport::cosmrs::{
+        proto::cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny,
+    },
 };
 
 use crate::{
@@ -59,8 +61,10 @@ where
         .map(|contract| match contract {
             Contract::TimeAlarms(address) => {
                 (address, "time_alarms", &tasks_config.time_alarms_config)
-            }
-            Contract::Oracle(address) => (address, "oracle", &tasks_config.oracle_alarms_config),
+            },
+            Contract::Oracle(address) => {
+                (address, "oracle", &tasks_config.oracle_alarms_config)
+            },
         })
         .enumerate()
         .try_for_each(
@@ -109,14 +113,15 @@ fn spawn_single(
     poll_time: Duration,
 ) -> Result<(), DispatchAlarmsError> {
     let messages: Box<[ProtobufAny]> = {
-        let mut message: Vec<ProtobufAny> = vec![ProtobufAny::from_msg(&MsgExecuteContract {
-            sender: signer_address,
-            contract: contract.clone().into_string(),
-            msg: serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
-                max_count: alarms_config.max_alarms_group.get(),
-            })?,
-            funds: Vec::new(),
-        })?];
+        let mut message: Vec<ProtobufAny> =
+            vec![ProtobufAny::from_msg(&MsgExecuteContract {
+                sender: signer_address,
+                contract: contract.clone().into_string(),
+                msg: serde_json_wasm::to_vec(&ExecuteMsg::DispatchAlarms {
+                    max_count: alarms_config.max_alarms_group.get(),
+                })?,
+                funds: Vec::new(),
+            })?];
 
         message.shrink_to_fit();
 
@@ -129,8 +134,10 @@ fn spawn_single(
         .gas_limit_per_alarm
         .saturating_mul(alarms_config.max_alarms_group.into());
 
-    let (tx_result_sender, tx_result_receiver): (CommitResultSender, CommitResultReceiver) =
-        unbounded_channel();
+    let (tx_result_sender, tx_result_receiver): (
+        CommitResultSender,
+        CommitResultReceiver,
+    ) = unbounded_channel();
 
     tx_result_senders.insert(monotonic_id, tx_result_sender);
 
@@ -196,7 +203,7 @@ async fn task(
 
                 sleep(tick_time).await;
             }
-        }
+        },
         Err(FatalError {
             contract_type,
             contract_address,
@@ -218,7 +225,7 @@ async fn task(
 
                 sleep(tick_time).await;
             }
-        }
+        },
     }
 }
 
@@ -277,35 +284,41 @@ async fn task_inner(
                     Ok(Some(hash)) => hash,
                     Ok(None) => {
                         continue 'generator_loop;
-                    }
+                    },
                     Err(ChannelClosedError {}) => {
                         break 'runner_loop Ok(ChannelClosed {
                             contract_type: context.contract_type,
                             contract_address: context.contract_address,
                         });
-                    }
+                    },
                 };
 
-                let Some(response): Option<TxResponse> = broadcast::poll_delivered_tx(
-                    &node_client,
-                    tick_time,
-                    poll_time,
-                    tx_hash.clone(),
-                )
-                .await
+                let Some(response): Option<TxResponse> =
+                    broadcast::poll_delivered_tx(
+                        &node_client,
+                        tick_time,
+                        poll_time,
+                        tx_hash.clone(),
+                    )
+                    .await
                 else {
                     warn!("Transaction not found or couldn't be reported back in the given specified period.");
 
                     continue 'generator_loop;
                 };
 
-                match handle_response(&context, &mut fallback_gas_limit, tx_hash, response) {
+                match handle_response(
+                    &context,
+                    &mut fallback_gas_limit,
+                    tx_hash,
+                    response,
+                ) {
                     HandleResponseResult::ContinueTxLooping => {
                         continue 'generator_loop;
-                    }
+                    },
                     HandleResponseResult::BreakTxLoop => {
                         break 'generator_loop;
-                    }
+                    },
                     HandleResponseResult::Fatal {
                         tx_hash,
                         tx_result: response,
@@ -316,7 +329,7 @@ async fn task_inner(
                             tx_hash,
                             tx_result: response,
                         });
-                    }
+                    },
                 }
             }
         }
@@ -357,7 +370,7 @@ fn handle_response(
         Ok(dispatched_count) => dispatched_count,
         Err(ExtractDispatchedCountError::OutOfGas) => {
             return HandleResponseResult::ContinueTxLooping;
-        }
+        },
         Err(ExtractDispatchedCountError::Fatal {
             tx_hash,
             tx_result: response,
@@ -366,7 +379,7 @@ fn handle_response(
                 tx_hash,
                 tx_result: response,
             };
-        }
+        },
     };
 
     if dispatched_count < context.max_alarms_count.get() {
@@ -474,11 +487,12 @@ async fn receive_back_tx_hash(
                     info = tx_response.info,
                     "Failed to commit transaction! Error type: {}",
                     match r#type {
-                        CommitErrorType::InvalidAccountSequence => "Invalid account sequence",
+                        CommitErrorType::InvalidAccountSequence =>
+                            "Invalid account sequence",
                         CommitErrorType::Unknown => "Unknown",
                     },
                 );
-            }
+            },
         }
     } else {
         info!(

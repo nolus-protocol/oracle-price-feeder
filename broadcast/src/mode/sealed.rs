@@ -1,6 +1,8 @@
 use std::future::Future;
 
-use chain_comms::{client::Client as NodeClient, interact::commit, signer::Signer};
+use chain_comms::{
+    client::Client as NodeClient, interact::commit, signer::Signer,
+};
 
 use crate::cache;
 

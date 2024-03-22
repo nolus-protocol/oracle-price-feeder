@@ -23,7 +23,10 @@ pub struct Response {
     pub gas_used: u64,
 }
 
-pub async fn get_tx_response(client: &Client, tx_hash: String) -> Result<Response, Error> {
+pub async fn get_tx_response(
+    client: &Client,
+    tx_hash: String,
+) -> Result<Response, Error> {
     client
         .tx_service_client()
         .get_tx(GetTxRequest { hash: tx_hash })

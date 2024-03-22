@@ -6,8 +6,8 @@ use std::{
 use serde::de::{Deserializer, Error as DeserializeError};
 
 use super::{
-    get_oracle, raw, str_pool::StrPool, ComparisonProviderIdAndMaxDeviation, Provider,
-    ProviderConfigExt, ProviderWithComparison,
+    get_oracle, raw, str_pool::StrPool, ComparisonProviderIdAndMaxDeviation,
+    Provider, ProviderConfigExt, ProviderWithComparison,
 };
 
 pub(super) fn reconstruct<'r, 'de, D>(
@@ -18,7 +18,8 @@ pub(super) fn reconstruct<'r, 'de, D>(
 where
     D: Deserializer<'de>,
 {
-    let mut providers: BTreeMap<Box<str>, ProviderWithComparison> = BTreeMap::new();
+    let mut providers: BTreeMap<Box<str>, ProviderWithComparison> =
+        BTreeMap::new();
 
     for (
         raw_id,
@@ -45,7 +46,11 @@ where
                 oracle_address,
                 misc,
             },
-            comparison: map_comparison_provider_option::<D>(comparison, &id, &mut str_pool)?,
+            comparison: map_comparison_provider_option::<D>(
+                comparison,
+                &id,
+                &mut str_pool,
+            )?,
         };
 
         match providers.entry(id) {
@@ -55,7 +60,7 @@ where
                     "Provider with ID \"{id}\" already exists!",
                     id = entry.key()
                 )));
-            }
+            },
         };
     }
 

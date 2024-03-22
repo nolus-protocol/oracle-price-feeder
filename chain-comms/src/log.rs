@@ -13,7 +13,8 @@ where
 
             if var_os("DEBUG_LOGGING")
                 .map(|value| {
-                    [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")].contains(&value.as_os_str())
+                    [OsStr::new("1"), OsStr::new("y"), OsStr::new("Y")]
+                        .contains(&value.as_os_str())
                 })
                 .unwrap_or(cfg!(debug_assertions))
             {

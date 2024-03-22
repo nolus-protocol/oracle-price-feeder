@@ -2,8 +2,8 @@ use tokio::time::Instant;
 use tracing::{error, error_span, info, warn};
 
 use chain_comms::{
-    client::Client as NodeClient, interact::commit, reexport::tonic::Code as TonicStatusCode,
-    signer::Signer,
+    client::Client as NodeClient, interact::commit,
+    reexport::tonic::Code as TonicStatusCode, signer::Signer,
 };
 
 use crate::cache;
@@ -63,13 +63,14 @@ impl Impl for NonBlocking {
 
         cache.values_mut().for_each({
             |slot| {
-                let expired: bool = slot.get_mut().as_ref().map_or(false, |tx_request| {
-                    let expired: bool = tx_request.expiration <= now;
+                let expired: bool =
+                    slot.get_mut().as_ref().map_or(false, |tx_request| {
+                        let expired: bool = tx_request.expiration <= now;
 
-                    exhausted &= expired;
+                        exhausted &= expired;
 
-                    expired
-                });
+                        expired
+                    });
 
                 if expired {
                     _ = slot.take();
@@ -139,6 +140,6 @@ where
             });
 
             None
-        }
+        },
     }
 }

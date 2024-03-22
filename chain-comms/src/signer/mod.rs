@@ -52,9 +52,12 @@ impl Signer {
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(
-            &SignerInfo::single_direct(Some(self.key.public_key()), self.account.sequence)
-                .auth_info(fee)
-                .into_proto(),
+            &SignerInfo::single_direct(
+                Some(self.key.public_key()),
+                self.account.sequence,
+            )
+            .auth_info(fee)
+            .into_proto(),
         );
 
         self.key
@@ -94,9 +97,12 @@ impl Signer {
         &mut self,
         node_client: &NodeClient,
     ) -> Result<(), query::error::AccountData> {
-        query::account_data(&mut node_client.auth_query_client(), &self.account_id)
-            .await
-            .map(|account_data| self.account = account_data)
+        query::account_data(
+            &mut node_client.auth_query_client(),
+            &self.account_id,
+        )
+        .await
+        .map(|account_data| self.account = account_data)
     }
 
     #[inline]
