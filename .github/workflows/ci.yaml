@@ -13,8 +13,9 @@ on:
     paths-ignore:
       - "README.md"
 
-permissions:
-  packages: "write"
+defaults:
+  run:
+    shell: "sh"
 
 jobs:
   check_formatting:
@@ -33,16 +34,16 @@ jobs:
         with:
           update_and_cache_toolchains: "true"
       - uses: "nolus-protocol/rust-ci-actions/check_codebase@main"
-  # audit_dependencies:
-  #   runs-on: "ubuntu-latest"
-  #   steps:
-  #     - uses: "actions/checkout@v4"
-  #     - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
-  #       with:
-  #         update_and_cache_toolchains: "true"
-  #     - uses: "nolus-protocol/rust-ci-actions/audit_dependencies@main"
+  audit_dependencies:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+      - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
+      - uses: "nolus-protocol/rust-ci-actions/audit_dependencies@main"
   linting:
-    runs-on: ubuntu-latest
+    runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
@@ -74,76 +75,78 @@ jobs:
     needs:
       - "check_formatting"
       - "check_codebase"
-      # - "audit_dependencies"
+      - "audit_dependencies"
       - "linting"
       - "code_coverage"
       - "test_release_profile"
-    if: "github.ref_type == 'tag'"
+    if: |-
+      github.ref_type == 'tag'
+    strategy:
+      fail-fast: true
+      matrix:
+        package:
+          - "alarms-dispatcher"
+          - "market-data-feeder"
+        configuration:
+          - "dev"
+          - "test"
+          - "main"
+    # GitHub Actions escaped string evaluation
+    name: "Build image [${{ matrix.package }}; ${{ matrix.configuration }}]"
+    permissions:
+      packages: write
+    env:
+      container_registry: "ghcr.io"
+      container_repository: "nolus-protocol"
+      package: |-
+        ${{ matrix.package }}
+      configuration: |-
+        ${{ matrix.configuration }}
+      tag: |-
+        ${{ github.ref_name }}
     steps:
       - uses: "actions/checkout@v4"
-      - name: "Build compiling image"
-        shell: "sh"
-        run: "docker build --rm -f Compile.Dockerfile -t compile ."
-      - name: "Compile binaries"
-        shell: "sh"
-        run: 'docker run -v "$(pwd):/code/" -v "$(pwd)/artifacts/:/artifacts/" --name compile compile'
-      - name: "Archive Alpine Linux feeder binary artifact"
-        uses: "actions/upload-artifact@v4"
-        with:
-          name: "alpine-linux-feeder"
-          path: "artifacts/feeder"
-      - name: "Archive Alpine Linux alarms dispatcher binary artifact"
-        uses: "actions/upload-artifact@v4"
-        with:
-          name: "alpine-linux-alarms-dispatcher"
-          path: "artifacts/alarms-dispatcher"
-      - name: "Build pre-configured Docker images for dev-net"
-        if: "github.ref_type == 'tag' || ${{ github.event_name }} == 'workflow_dispatch'"
-        uses: "./.github/actions/preconfigured_images"
-        with:
-          config: "dev"
-          github_token: "${{ secrets.GITHUB_TOKEN }}"
-          docker_registry: "ghcr.io"
-          docker_repository: "nolus-protocol"
-          docker_tag: "${{ github.ref_name }}"
-      - name: "Build pre-configured Docker images for test-net"
-        if: "github.ref_type == 'tag'"
-        uses: "./.github/actions/preconfigured_images"
-        with:
-          config: "test"
-          github_token: "${{ secrets.GITHUB_TOKEN }}"
-          docker_registry: "ghcr.io"
-          docker_repository: "nolus-protocol"
-          docker_tag: "${{ github.ref_name }}"
-      - name: "Build pre-configured Docker images for main-net"
-        if: "github.ref_type == 'tag'"
-        uses: "./.github/actions/preconfigured_images"
-        with:
-          config: "main"
-          github_token: "${{ secrets.GITHUB_TOKEN }}"
-          docker_registry: "ghcr.io"
-          docker_repository: "nolus-protocol"
-          docker_tag: "${{ github.ref_name }}"
-  release:
-    name: "draft_release"
-    runs-on: "ubuntu-latest"
-    needs:
-      - "build"
-    permissions: "write-all"
-    if: "github.ref_type == 'tag'"
-    steps:
-      - uses: "actions/checkout@v4"
-      - name: "Download artifacts"
-        uses: "actions/download-artifact@v4"
-      - name: "Display structure of downloaded files"
-        run: "ls -R"
-      # temporary using commit as version until it is merged. Updates node version v12 -> v16
-      - uses: "marvinpinto/action-automatic-releases@6273874b61ebc8c71f1a61b2d98e234cf389b303"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          prerelease: false
-          draft: true
-          files: |
-            alpine-linux-alarms-dispatcher
-            alpine-linux-feeder
-            ./configurations/
+      - name: "Build image"
+        run: |-
+          set -e
+
+          docker build -t "service" -f "./Containerfile" --pull \
+            --build-arg "package=${package}" \
+            --build-arg "configuration=${configuration}" .
+      - name: "Login at container registry"
+        env:
+          github_token: |-
+            ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+
+          echo "${github_token}" \
+            | docker login "${container_registry}" --username "\$" \
+                --password-stdin
+      - name: "Push image to container registry"
+        run: |
+          set -e
+
+          readonly image_name="nolus-${package}-${configuration}"
+
+          readonly base_url="${container_registry}/${container_repository}"
+
+          readonly image_url="${base_url}/${image_name}"
+
+          readonly digits="[[:digit:]]\{1,\}"
+
+          readonly regex="^${digits}\.${digits}\.${digits}\$"
+
+          if echo "${tag}" | grep -q -s "${regex}"
+          then
+            readonly latest_tag="latest"
+          else
+            readonly latest_tag="dev"
+          fi
+
+          for image_tag in "${tag}" "${latest_tag}"
+          do
+            docker tag "service" "${image_url}:${image_tag}"
+
+            docker push "${base_url}:${image_tag}"
+          done
