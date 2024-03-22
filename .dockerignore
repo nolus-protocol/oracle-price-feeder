@@ -92,8 +92,7 @@ alarms-dispatcher.toml
 market-data-feeder.toml
 
 ### Application Logs
-dispatcher-logs/
-feeder-logs/
+logs/
 
 ### Container build files
 Dockerfile
