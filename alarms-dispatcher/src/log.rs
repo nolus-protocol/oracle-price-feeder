@@ -1,3 +1,5 @@
+use std::fmt::Arguments;
+
 use tracing::{error, info, info_span};
 
 use chain_comms::{
@@ -24,7 +26,11 @@ fn tx_response_inner(
     hash: &TxHash,
     tx_result: &TxResponse,
 ) -> Option<DispatchResponse> {
-    info!("Contract type: {contract_type}\nContract: {contract_address}\nHash: {hash}");
+    info_logs(&[
+        format_args!("Contract type: {contract_type}"),
+        format_args!("Contract: {contract_address}"),
+        format_args!("Hash: {hash}"),
+    ]);
 
     let mut maybe_dispatch_response = None;
 
@@ -48,11 +54,10 @@ fn tx_response_inner(
         }
     }
 
-    info!(
-        "Gas limit for transacion: {gas_wanted}\nGas used: {gas_used}",
-        gas_wanted = tx_result.gas_wanted,
-        gas_used = tx_result.gas_used,
-    );
+    info_logs(&[
+        format_args!("Gas limit for transacion: {}", tx_result.gas_wanted),
+        format_args!("Gas used: {}", tx_result.gas_used),
+    ]);
 
     maybe_dispatch_response
 }
@@ -77,4 +82,10 @@ fn deserialize_and_log(
             );
         })
         .ok()
+}
+
+fn info_logs(formatted_arguments: &[Arguments<'_>]) {
+    for formatted_arguments in formatted_arguments {
+        info!("{}", formatted_arguments);
+    }
 }

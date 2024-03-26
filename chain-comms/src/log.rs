@@ -1,12 +1,20 @@
+use tracing_subscriber::fmt::format;
+
 pub fn setup<W>(writer: W)
 where
     W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
 {
     tracing_subscriber::fmt()
-        .with_level(true)
-        .with_ansi(true)
-        .with_file(false)
-        .with_line_number(false)
+        .event_format(
+            format()
+                .with_ansi(true)
+                .with_level(true)
+                .with_target(false)
+                .with_source_location(false)
+                .with_file(false)
+                .with_line_number(false)
+                .compact(),
+        )
         .with_writer(writer)
         .with_max_level({
             use std::{env::var_os, ffi::OsStr};
