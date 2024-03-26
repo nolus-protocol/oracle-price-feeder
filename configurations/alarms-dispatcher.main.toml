@@ -16,9 +16,9 @@ fee_adjustment_numerator = 5
 fee_adjustment_denominator = 1
 
 [time_alarms]
-max_alarms_group = 24
-gas_limit_per_alarm = 750_000
+max_alarms_group = 68
+gas_limit_per_alarm = 100_000
 
 [market_price_oracle]
-max_alarms_group = 24
-gas_limit_per_alarm = 750_000
+max_alarms_group = 68
+gas_limit_per_alarm = 300_000
