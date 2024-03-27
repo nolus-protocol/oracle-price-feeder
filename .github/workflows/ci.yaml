@@ -17,6 +17,9 @@ defaults:
   run:
     shell: "sh"
 
+env:
+  CARGO_INCREMENTAL: "0"
+
 jobs:
   check_formatting:
     runs-on: "ubuntu-latest"
