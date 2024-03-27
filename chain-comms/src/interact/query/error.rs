@@ -12,6 +12,20 @@ pub enum ChainId {
 }
 
 #[derive(Debug, ThisError)]
+pub enum Syncing {
+    #[error("RPC error occurred while querying syncing status! Cause: {0}")]
+    Rpc(#[from] tonic::Status),
+}
+
+#[derive(Debug, ThisError)]
+pub enum LatestBlock {
+    #[error("RPC error occurred while querying latest block! Cause: {0}")]
+    Rpc(#[from] tonic::Status),
+    #[error("Node didn't return block information!")]
+    NoBlockInfoReturned,
+}
+
+#[derive(Debug, ThisError)]
 pub enum AccountData {
     #[error("RPC error occurred while querying account data! Cause: {0}")]
     Rpc(#[from] tonic::Status),

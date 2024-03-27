@@ -7,7 +7,8 @@ use cosmrs::{
             },
             base::tendermint::v1beta1::{
                 service_client::ServiceClient as TendermintServiceClient,
-                GetNodeInfoRequest,
+                Block as ProtobufBlock, GetLatestBlockRequest,
+                GetNodeInfoRequest, GetSyncingRequest,
             },
         },
         cosmwasm::wasm::v1::{
@@ -46,6 +47,31 @@ pub async fn chain_id(
             info.network
                 .try_into()
                 .map_err(error::ChainId::ParseChainId)
+        })
+}
+
+pub async fn syncing(
+    service_client: &mut TendermintServiceClient<TonicChannel>,
+) -> Result<bool, error::Syncing> {
+    service_client
+        .get_syncing(GetSyncingRequest {})
+        .await
+        .map(|response| response.into_inner().syncing)
+        .map_err(error::Syncing::Rpc)
+}
+
+pub async fn latest_block(
+    service_client: &mut TendermintServiceClient<TonicChannel>,
+) -> Result<ProtobufBlock, error::LatestBlock> {
+    service_client
+        .get_latest_block(GetLatestBlockRequest {})
+        .await
+        .map(TonicResponse::into_inner)
+        .map_err(error::LatestBlock::Rpc)
+        .and_then(|response| {
+            response
+                .sdk_block
+                .ok_or(error::LatestBlock::NoBlockInfoReturned)
         })
 }
 

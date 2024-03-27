@@ -68,7 +68,7 @@ impl Client {
 
     #[must_use]
     pub fn raw_grpc(&self) -> GrpcChannel {
-        GrpcChannel::clone(&self.0)
+        (*self.0).clone()
     }
 
     #[must_use]

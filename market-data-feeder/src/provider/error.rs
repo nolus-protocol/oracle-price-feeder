@@ -6,19 +6,27 @@ use thiserror::Error;
 pub enum Provider {
     #[error("Failed to join task into worker's own task! Cause: {0}")]
     TaskSetJoin(#[from] tokio::task::JoinError),
-
     #[error("URL operation failed! Cause: {0}")]
     UrlOperationFailed(#[from] url::ParseError),
-
-    #[error("Response contains non-ASCII characters!{}{}", if _0.is_empty() { "" } else { " Additional context: " }, _0)]
+    #[error("Healthcheck failed! Cause: {0}")]
+    Healthcheck(#[from] chain_comms::interact::healthcheck::error::Error),
+    #[error(
+        "Response contains non-ASCII characters!{}{_0}",
+        if _0.is_empty() { "" } else { " Additional context: " },
+    )]
     NonAsciiResponse(String),
-
-    #[error("Failed to parse price!{}{}{} Cause: {}", if _0.is_empty() { "" } else { " Additional context: " }, _0, if _0.is_empty() { "" } else { ";" }, _1)]
+    #[error(
+        "Failed to parse price!{}{_0}{} Cause: {_1}",
+        if _0.is_empty() { "" } else { " Additional context: " },
+        if _0.is_empty() { "" } else { ";" },
+    )]
     ParsePrice(String, crate::price::Error),
-
-    #[error(r#"Failed to query WASM contract!{}{}{} Cause: {}"#, if _0.is_empty() { "" } else { " Additional context: " }, _0, if _0.is_empty() { "" } else { ";" }, _1)]
+    #[error(
+        "Failed to query WASM contract!{}{_0}{} Cause: {_1}",
+        if _0.is_empty() { "" } else { " Additional context: " },
+        if _0.is_empty() { "" } else { ";" },
+    )]
     WasmQuery(String, chain_comms::interact::query::error::Wasm),
-
     #[error("Serialization failed! Cause: {0}")]
     Serialization(#[from] serde_json_wasm::ser::Error),
 }

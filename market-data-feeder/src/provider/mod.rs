@@ -1,11 +1,12 @@
 use std::{collections::BTreeMap, error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
-use futures::{FutureExt as _, TryFutureExt as _};
 use tokio::task::block_in_place;
 use tracing::{error, info};
 
-use chain_comms::client::Client as NodeClient;
+use chain_comms::{
+    client::Client as NodeClient, interact::healthcheck::Healthcheck,
+};
 
 use crate::{
     config::{ProviderConfig, ProviderConfigExt},
@@ -23,16 +24,20 @@ mod error;
 pub(crate) trait Provider: Sync + Send + 'static {
     fn instance_id(&self) -> &str;
 
+    fn healthcheck(&mut self) -> &mut Healthcheck;
+
     async fn get_prices(
-        &self,
+        &mut self,
         fault_tolerant: bool,
     ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError>;
 }
 
 #[async_trait]
 pub(crate) trait ComparisonProvider: Sync + Send + 'static {
+    fn healthcheck(&mut self) -> Option<&mut Healthcheck>;
+
     async fn benchmark_prices(
-        &self,
+        &mut self,
         benchmarked_provider_id: &str,
         prices: &[Price<CoinWithDecimalPlaces>],
         max_deviation_exclusive: u64,
@@ -44,31 +49,28 @@ impl<T> ComparisonProvider for T
 where
     T: Provider + ?Sized,
 {
+    fn healthcheck(&mut self) -> Option<&mut Healthcheck> {
+        Some(Provider::healthcheck(self))
+    }
+
     async fn benchmark_prices(
-        &self,
+        &mut self,
         benchmarked_provider_id: &str,
         prices: &[Price<CoinWithDecimalPlaces>],
         max_deviation_exclusive: u64,
     ) -> Result<(), PriceComparisonGuardError> {
-        self.get_prices(false)
-            .map(|result: Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError>| {
-                result.map_err(PriceComparisonGuardError::FetchPrices)
-            })
-            .and_then(|comparison_prices: Box<[Price<CoinWithDecimalPlaces>]>| async move {
-                let result: Result<(), PriceComparisonGuardError> = block_in_place(|| crate::deviation::compare_prices(
-                    prices,
-                    &comparison_prices,
-                    max_deviation_exclusive,
-                ));
-
-                match &result {
-                    Ok(()) => info!("Price comparison guard check of \"{benchmarked_provider_id}\" passed against \"{self_id}\".", self_id = self.instance_id()),
-                    Err(error) => error!(error = ?error, "Price comparison guard check of \"{benchmarked_provider_id}\" failed against \"{self_id}\"! Cause: {error}", self_id = self.instance_id()),
-                }
-
-                result
-            })
+        let comparison_prices = self
+            .get_prices(false)
             .await
+            .map_err(PriceComparisonGuardError::FetchPrices)?;
+
+        block_in_place(|| crate::deviation::compare_prices(
+            prices,
+            &comparison_prices,
+            max_deviation_exclusive,
+        ))
+            .map(|()| info!("Price comparison guard check of \"{benchmarked_provider_id}\" passed against \"{self_id}\".", self_id = self.instance_id()))
+            .inspect_err(|error| error!(error = ?error, "Price comparison guard check of \"{benchmarked_provider_id}\" failed against \"{self_id}\"! Cause: {error}", self_id = self.instance_id()))
     }
 }
 

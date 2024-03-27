@@ -19,6 +19,7 @@ use tokio::task::{block_in_place, JoinSet};
 use toml::Value;
 
 use chain_comms::client::Client as NodeClient;
+use chain_comms::interact::healthcheck::Healthcheck;
 
 use crate::{
     config::{self, ProviderConfigExt, Ticker, TickerUnsized},
@@ -311,8 +312,12 @@ struct Mappings {
 
 #[async_trait]
 impl ComparisonProvider for SanityCheck {
+    fn healthcheck(&mut self) -> Option<&mut Healthcheck> {
+        None
+    }
+
     async fn benchmark_prices(
-        &self,
+        &mut self,
         benchmarked_provider_id: &str,
         prices: &[Price<CoinWithDecimalPlaces>],
         max_deviation_exclusive: u64,

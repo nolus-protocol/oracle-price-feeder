@@ -7,6 +7,7 @@ use thiserror::Error;
 use tokio::{
     runtime::Handle,
     select,
+    sync::Mutex,
     task::{block_in_place, JoinError, JoinSet},
     time::{error::Elapsed, sleep, timeout_at, Instant},
 };
@@ -20,10 +21,12 @@ use broadcast::{
     mode::NonBlocking,
     poll_delivered_tx,
 };
-use chain_comms::interact::TxHash;
 use chain_comms::{
     client::Client as NodeClient,
-    interact::get_tx_response::Response as TxResponse,
+    interact::{
+        get_tx_response::Response as TxResponse,
+        healthcheck::error::Error as HealthcheckError, TxHash,
+    },
     reexport::cosmrs::proto::{
         cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny,
     },
@@ -41,7 +44,6 @@ use crate::{
     price::{CoinWithDecimalPlaces, Price},
     provider::{
         ComparisonProvider, FromConfig, PriceComparisonGuardError, Provider,
-        ProviderError,
     },
     providers::{self, ComparisonProviderVisitor, ProviderVisitor},
     result::Result as AppResult,
@@ -79,7 +81,7 @@ pub fn spawn(
 
     let price_comparison_providers: BTreeMap<
         Arc<str>,
-        Arc<dyn ComparisonProvider>,
+        Arc<Mutex<dyn ComparisonProvider>>,
     > = block_in_place(|| {
         price_comparison_providers
             .into_iter()
@@ -112,7 +114,7 @@ fn construct_comparison_provider_f(
     node_client: &NodeClient,
 ) -> impl Fn(
     (Arc<str>, ComparisonProviderConfig),
-) -> AppResult<(Arc<str>, Arc<dyn ComparisonProvider>)> {
+) -> AppResult<(Arc<str>, Arc<Mutex<dyn ComparisonProvider>>)> {
     let node_client: NodeClient = node_client.clone();
 
     move |(id, config): (Arc<str>, ComparisonProviderConfig)| {
@@ -125,9 +127,7 @@ fn construct_comparison_provider_f(
             },
         ) {
             result
-                .map(|comparison_provider: Arc<dyn ComparisonProvider>| {
-                    (id, comparison_provider)
-                })
+                .map(|comparison_provider| (id, comparison_provider))
                 .map_err(error_mod::Application::Worker)
         } else {
             Err(error_mod::Application::UnknownPriceComparisonProviderId(id))
@@ -141,7 +141,8 @@ struct TryForEachProviderContext<'r> {
     tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
     tx_request_sender: TxRequestSender<NonBlocking>,
     signer_address: Arc<str>,
-    price_comparison_providers: BTreeMap<Arc<str>, Arc<dyn ComparisonProvider>>,
+    price_comparison_providers:
+        BTreeMap<Arc<str>, Arc<Mutex<dyn ComparisonProvider>>>,
     hard_gas_limit: NonZeroU64,
     time_before_feeding: Duration,
     tick_time: Duration,
@@ -174,23 +175,19 @@ fn try_for_each_provider_f(
                      provider_id: comparison_provider_id,
                      max_deviation_exclusive,
                  }: ComparisonProviderIdAndMaxDeviation| {
-                    price_comparison_providers
-                        .get(&comparison_provider_id)
-                        .map_or_else(
-                            || {
-                                Err(error_mod::Application::UnknownPriceComparisonProviderId(
-                                    comparison_provider_id,
-                                ))
-                            },
-                            |provider: &Arc<dyn ComparisonProvider>| {
-                                Ok((provider.clone(), max_deviation_exclusive))
-                            },
-                        )
+                    if let Some(provider) = price_comparison_providers
+                        .get(&comparison_provider_id) {
+                        Ok((comparison_provider_id.clone(), provider.clone(), max_deviation_exclusive))
+                    } else {
+                        Err(error_mod::Application::UnknownPriceComparisonProviderId(
+                            comparison_provider_id,
+                        ))
+                    }
                 },
             )
             .transpose()
             .and_then(
-                |price_comparison_provider: Option<(Arc<dyn ComparisonProvider>, u64)>| {
+                |price_comparison_provider| {
                     let provider_name: Arc<str> = config.provider.name().clone();
 
                     providers::Providers::visit_provider(
@@ -213,8 +210,8 @@ fn try_for_each_provider_f(
                             time_before_feeding,
                         },
                     )
-                    .ok_or(error_mod::Application::UnknownProviderId(provider_name))
-                    .and_then(|result: Result<(), error_mod::Worker>| result.map_err(From::from))
+                        .ok_or(error_mod::Application::UnknownProviderId(provider_name))
+                        .and_then(|result: Result<(), error_mod::Worker>| result.map_err(From::from))
                 },
             )
     }
@@ -236,7 +233,7 @@ struct PriceComparisonProviderVisitor<'r> {
 }
 
 impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
-    type Return = Result<Arc<dyn ComparisonProvider>, error_mod::Worker>;
+    type Return = Result<Arc<Mutex<dyn ComparisonProvider>>, error_mod::Worker>;
 
     fn on<P>(self) -> Self::Return
     where
@@ -249,7 +246,8 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
                 self.node_client,
             ))
             .map(|provider: P| {
-                Arc::new(provider) as Arc<dyn ComparisonProvider>
+                Arc::new(Mutex::new(provider))
+                    as Arc<Mutex<dyn ComparisonProvider>>
             })
             .map_err(|error: P::ConstructError| {
                 error_mod::Worker::InstantiatePriceComparisonProvider(
@@ -260,6 +258,9 @@ impl<'r> ComparisonProviderVisitor for PriceComparisonProviderVisitor<'r> {
     }
 }
 
+type ComparisonProviderWithIdAndMaxDeviation =
+    (Arc<str>, Arc<Mutex<dyn ComparisonProvider>>, u64);
+
 struct TaskSpawningProviderVisitor<'r> {
     worker_task_context: TaskContext,
     node_client: &'r NodeClient,
@@ -267,7 +268,7 @@ struct TaskSpawningProviderVisitor<'r> {
     tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
     provider_id: Box<str>,
     provider_config: ProviderConfig,
-    price_comparison_provider: Option<(Arc<dyn ComparisonProvider>, u64)>,
+    price_comparison_provider: Option<ComparisonProviderWithIdAndMaxDeviation>,
     time_before_feeding: Duration,
 }
 
@@ -327,14 +328,13 @@ struct ProviderWithIds<P> {
 
 async fn perform_check_and_enter_loop<P>(
     ProviderWithIds {
-        provider,
+        mut provider,
         provider_id,
     }: ProviderWithIds<P>,
     worker_task_context: TaskContext,
-    comparison_provider_and_deviation: Option<(
-        Arc<dyn ComparisonProvider>,
-        u64,
-    )>,
+    comparison_provider_and_deviation: Option<
+        ComparisonProviderWithIdAndMaxDeviation,
+    >,
     time_before_feeding: Duration,
     node_client: NodeClient,
     oracle_address: Arc<str>,
@@ -345,13 +345,17 @@ where
 {
     let result: Result<ChannelClosed, error_mod::Worker> = 'result: {
         let prices: Box<[Price<CoinWithDecimalPlaces>]> = {
-            let result = provider.get_prices(false).await.map_err(
-                |error: ProviderError| {
-                    error_mod::Worker::PriceComparisonGuard(
-                        PriceComparisonGuardError::FetchPrices(error),
-                    )
-                },
-            );
+            if let Err(error) =
+                run_provider_healthcheck(&mut provider, &provider_id).await
+            {
+                break 'result Err(error);
+            }
+
+            let result = provider.get_prices(false).await.map_err(|error| {
+                error_mod::Worker::PriceComparisonGuard(
+                    PriceComparisonGuardError::FetchPrices(error),
+                )
+            });
 
             match result {
                 Ok(prices) => prices,
@@ -369,9 +373,33 @@ where
             break 'result Err(error_mod::Worker::EmptyPriceList);
         }
 
-        if let Some((comparison_provider, max_deviation_exclusive)) =
-            { comparison_provider_and_deviation }
+        if let Some((
+            comparison_provider_id,
+            comparison_provider,
+            max_deviation_exclusive,
+        )) = { comparison_provider_and_deviation }
         {
+            let mut comparison_provider = comparison_provider.lock().await;
+
+            if let Some(healthcheck) = comparison_provider.healthcheck() {
+                while let Err(error) = healthcheck.check().await {
+                    let HealthcheckError::BlockHeightNotIncremented = error
+                    else {
+                        break 'result Err(
+                            error_mod::Worker::ComparisonProviderHealthcheck(
+                                comparison_provider_id,
+                                error,
+                            ),
+                        );
+                    };
+
+                    warn!(
+                        "Comparison provider with id: {provider_id}, didn't \
+                        respond with an incremented block height. Retrying."
+                    );
+                }
+            }
+
             let result: Result<(), PriceComparisonGuardError> =
                 comparison_provider
                     .benchmark_prices(
@@ -381,10 +409,13 @@ where
                     )
                     .await;
 
-            if let Err(error) = result {
-                break 'result Err(error_mod::Worker::PriceComparisonGuard(
-                    error,
-                ));
+            match result {
+                Ok(()) => {},
+                Err(error) => {
+                    break 'result Err(
+                        error_mod::Worker::PriceComparisonGuard(error),
+                    );
+                },
             }
         } else {
             info!(
@@ -426,7 +457,7 @@ where
 }
 
 async fn provider_main_loop<P>(
-    provider: P,
+    mut provider: P,
     provider_id: &str,
     TaskContext {
         tx_request_sender,
@@ -484,6 +515,8 @@ where
             break 'worker_loop channel_closed;
         }
 
+        run_provider_healthcheck(&mut provider, provider_id).await?;
+
         match provider.get_prices(true).await {
             Ok(prices) => {
                 let message: Vec<u8> =
@@ -536,6 +569,27 @@ where
     while poll_delivered_tx_set.join_next().await.is_some() {}
 
     Ok(ok_output)
+}
+
+async fn run_provider_healthcheck<P>(
+    provider: &mut P,
+    provider_id: &str,
+) -> Result<(), error_mod::Worker>
+where
+    P: Provider,
+{
+    while let Err(error) = provider.healthcheck().check().await {
+        let HealthcheckError::BlockHeightNotIncremented = error else {
+            return Err(error_mod::Worker::ProviderHealthcheck(error));
+        };
+
+        warn!(
+            "Provider with id: {provider_id}, didn't respond with an \
+            incremented block height. Retrying."
+        );
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Error)]

@@ -10,14 +10,11 @@ use tokio::task::JoinSet;
 use tracing::{debug, error};
 
 use chain_comms::{
-    client::Client as NodeClient,
-    interact::query,
+    client::{self, Client as NodeClient},
+    interact::{healthcheck::Healthcheck, query},
     reexport::{
         cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
-        tonic::{
-            codegen::http::uri::InvalidUri,
-            transport::{Channel as TonicChannel, Error as TonicError, Uri},
-        },
+        tonic::transport::Channel as TonicChannel,
     },
 };
 
@@ -39,6 +36,7 @@ pub(super) struct Astroport {
     oracle_addr: Arc<str>,
     wasm_query_client: WasmQueryClient<TonicChannel>,
     router_contract: Arc<str>,
+    healthcheck: Healthcheck,
     currencies: Currencies,
 }
 
@@ -104,8 +102,12 @@ impl Provider for Astroport {
         &self.instance_id
     }
 
+    fn healthcheck(&mut self) -> &mut Healthcheck {
+        &mut self.healthcheck
+    }
+
     async fn get_prices(
-        &self,
+        &mut self,
         fault_tolerant: bool,
     ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError> {
         let mut set: JoinSet<
@@ -193,11 +195,8 @@ impl FromConfig<false> for Astroport {
         const ROUTER_CONTRACT_ENV_NAME: &str = "router_addr";
         const CURRENCIES_FIELD: &str = "currencies";
 
-        let grpc_uri: Uri = Config::fetch_from_env(id, GRPC_URI_ENV_NAME)
-            .map_err(ConstructError::FetchGrpcUri)
-            .and_then(|value: String| {
-                value.parse().map_err(ConstructError::InvalidGrpcUri)
-            })?;
+        let grpc_uri = Config::fetch_from_env(id, GRPC_URI_ENV_NAME)
+            .map_err(ConstructError::FetchGrpcUri)?;
 
         let router_contract: Arc<str> =
             Config::fetch_from_env(id, ROUTER_CONTRACT_ENV_NAME)
@@ -219,17 +218,20 @@ impl FromConfig<false> for Astroport {
         if let Some(fields) = super::left_over_fields(config) {
             Err(ConstructError::UnknownFields(fields))
         } else {
-            Ok(Self {
-                instance_id: id.to_string(),
-                node_wasm_query_client: node_client.wasm_query_client(),
-                oracle_addr,
-                wasm_query_client: TonicChannel::builder(grpc_uri)
-                    .connect()
-                    .await
-                    .map(WasmQueryClient::new)?,
-                router_contract,
-                currencies,
-            })
+            let astroport_client = NodeClient::new(&grpc_uri, None).await?;
+
+            Healthcheck::new(astroport_client.tendermint_service_client())
+                .await
+                .map(|healthcheck| Self {
+                    instance_id: id.to_string(),
+                    node_wasm_query_client: node_client.wasm_query_client(),
+                    oracle_addr,
+                    wasm_query_client: astroport_client.wasm_query_client(),
+                    router_contract,
+                    healthcheck,
+                    currencies,
+                })
+                .map_err(From::from)
         }
     }
 }
@@ -246,10 +248,10 @@ pub(crate) enum ConstructError {
         "Failed to fetch gRPC's URI from environment variables! Cause: {0}"
     )]
     FetchGrpcUri(EnvError),
-    #[error("Failed to parse gRPC's URI! Cause: {0}")]
-    InvalidGrpcUri(#[from] InvalidUri),
     #[error("Failed to fetch router contract's address from environment variables! Cause: {0}")]
     FetchRouterContract(EnvError),
-    #[error("Failed to connect RPC's URI! Cause: {0}")]
-    ConnectToGrpc(#[from] TonicError),
+    #[error("Failed to construct node communication client! Cause: {0}")]
+    ConstructNodeClient(#[from] client::error::Error),
+    #[error("Failed to connect gRPC endpoint! Cause: {0}")]
+    Healthcheck(#[from] chain_comms::interact::healthcheck::error::Construct),
 }

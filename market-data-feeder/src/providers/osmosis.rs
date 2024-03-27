@@ -11,7 +11,7 @@ use tracing::debug;
 
 use chain_comms::{
     client::{self, Client as NodeClient},
-    interact::query,
+    interact::{healthcheck::Healthcheck, query},
     reexport::{
         cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
         tonic::transport::Channel as TonicChannel,
@@ -33,6 +33,7 @@ pub(crate) struct Osmosis {
     node_client: NodeClient,
     oracle_addr: Arc<str>,
     channel: TonicChannel,
+    healthcheck: Healthcheck,
     currencies: Currencies,
 }
 
@@ -99,8 +100,12 @@ impl Provider for Osmosis {
         &self.instance_id
     }
 
+    fn healthcheck(&mut self) -> &mut Healthcheck {
+        &mut self.healthcheck
+    }
+
     async fn get_prices(
-        &self,
+        &mut self,
         fault_tolerant: bool,
     ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError> {
         const DECIMAL_PLACES_IN_RESPONSE: usize = 36;
@@ -142,59 +147,59 @@ impl Provider for Osmosis {
                     },
                     "/osmosis.poolmanager.v2.Query/SpotPriceV2",
                 )
-                .await
-                .map_err(|error| {
-                    ProviderError::WasmQuery(
-                        format!("currency pair: {from_ticker}/{to_ticker}"),
-                        query::error::Wasm::RawQuery(error),
-                    )
-                })
-                .and_then(|SpotPriceResponse { mut spot_price }| {
-                    debug!(
+                    .await
+                    .map_err(|error| {
+                        ProviderError::WasmQuery(
+                            format!("currency pair: {from_ticker}/{to_ticker}"),
+                            query::error::Wasm::RawQuery(error),
+                        )
+                    })
+                    .and_then(|SpotPriceResponse { mut spot_price }| {
+                        debug!(
                         r#"Osmosis returned "{spot_price}" for the pair {from_ticker}/{to_ticker} from pool #{pool_id}."#
                     );
 
-                    if spot_price.is_ascii() {
-                        Ok(
-                            if let Some(zeroes_needed) =
-                                DECIMAL_PLACES_IN_RESPONSE.checked_sub(spot_price.len())
-                            {
-                                String::from(".")
-                                    + &String::from('0').repeat(zeroes_needed)
-                                    + &spot_price
-                            } else {
-                                spot_price
-                                    .insert(spot_price.len() - DECIMAL_PLACES_IN_RESPONSE, '.');
+                        if spot_price.is_ascii() {
+                            Ok(
+                                if let Some(zeroes_needed) =
+                                    DECIMAL_PLACES_IN_RESPONSE.checked_sub(spot_price.len())
+                                {
+                                    String::from(".")
+                                        + &String::from('0').repeat(zeroes_needed)
+                                        + &spot_price
+                                } else {
+                                    spot_price
+                                        .insert(spot_price.len() - DECIMAL_PLACES_IN_RESPONSE, '.');
 
-                                spot_price
-                            },
-                        )
-                    } else {
-                        Err(ProviderError::NonAsciiResponse(format!(
-                            "currency pair: {from_ticker}/{to_ticker}",
-                        )))
-                    }
-                })
-                .and_then(|spot_price| {
-                    spot_price[..spot_price
-                        .len()
-                        .min(MAX_U128_DECIMAL_DIGITS + 1 /* Added dot */)]
-                        .try_into()
-                        .map_err(|error| {
-                            ProviderError::ParsePrice(
-                                format!("currency pair: {from_ticker}/{to_ticker}"),
-                                error,
+                                    spot_price
+                                },
                             )
-                        })
-                        .map(|ratio: Ratio| {
-                            ratio.as_quote_to_price_with_decimal_places(
-                                from_ticker,
-                                from_decimal_places,
-                                to_ticker,
-                                to_decimal_places,
-                            )
-                        })
-                })
+                        } else {
+                            Err(ProviderError::NonAsciiResponse(format!(
+                                "currency pair: {from_ticker}/{to_ticker}",
+                            )))
+                        }
+                    })
+                    .and_then(|spot_price| {
+                        spot_price[..spot_price
+                            .len()
+                            .min(MAX_U128_DECIMAL_DIGITS + 1 /* Added dot */)]
+                            .try_into()
+                            .map_err(|error| {
+                                ProviderError::ParsePrice(
+                                    format!("currency pair: {from_ticker}/{to_ticker}"),
+                                    error,
+                                )
+                            })
+                            .map(|ratio: Ratio| {
+                                ratio.as_quote_to_price_with_decimal_places(
+                                    from_ticker,
+                                    from_decimal_places,
+                                    to_ticker,
+                                    to_decimal_places,
+                                )
+                            })
+                    })
             });
         }
 
@@ -234,13 +239,16 @@ impl FromConfig<false> for Osmosis {
             let grpc_uri = Config::fetch_from_env(id, "GRPC_URI")
                 .map_err(ConstructError::FetchGrpcUri)?;
 
-            NodeClient::new(&grpc_uri, None)
+            let osmosis_client = NodeClient::new(&grpc_uri, None).await?;
+
+            Healthcheck::new(osmosis_client.tendermint_service_client())
                 .await
-                .map(|osmosis_client| Self {
+                .map(|healthcheck| Self {
                     instance_id: id.to_string(),
                     node_client: node_client.clone(),
-                    channel: osmosis_client.raw_grpc(),
                     oracle_addr,
+                    channel: osmosis_client.raw_grpc(),
+                    healthcheck,
                     currencies,
                 })
                 .map_err(From::from)
@@ -258,8 +266,10 @@ pub(crate) enum ConstructError {
     UnknownFields(Box<str>),
     #[error("Failed to fetch Osmosis node's gRPC URI from environment variables! Cause: {0}")]
     FetchGrpcUri(#[from] EnvError),
+    #[error("Failed to construct node communication client! Cause: {0}")]
+    ConstructNodeClient(#[from] client::error::Error),
     #[error("Failed to connect gRPC endpoint! Cause: {0}")]
-    ConnectToGrpc(#[from] client::error::Error),
+    Healthcheck(#[from] chain_comms::interact::healthcheck::error::Construct),
 }
 
 struct Route {

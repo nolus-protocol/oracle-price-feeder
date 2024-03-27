@@ -10,6 +10,7 @@ use crate::config::Node;
 
 pub mod commit;
 pub mod get_tx_response;
+pub mod healthcheck;
 pub mod query;
 pub mod simulate;
 
