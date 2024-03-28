@@ -1,8 +1,9 @@
-use tracing::{debug, error, info, info_span};
+use tracing::{info, info_span};
 
 use chain_comms::{
     interact::commit::Response, reexport::cosmrs::tendermint::abci::Code,
 };
+use logging::{debug_logs, error_logs};
 
 pub fn commit_response(response: &Response) {
     info_span!("Mempool Response").in_scope(|| {
@@ -14,12 +15,15 @@ pub fn commit_response(response: &Response) {
 
 pub fn on_error(code: Code, raw_log: &str, info: &str) {
     if code.is_ok() {
-        debug!("Raw Log: {raw_log}\nInfo: {info}");
+        debug_logs(&[
+            format_args!("Raw Log: {raw_log}"),
+            format_args!("Info: {info}"),
+        ]);
     } else {
-        error!(
-            "Raw Log: {raw_log}\nInfo: {info}\nError with code {code_value} \
-            has occurred!",
-            code_value = code.value()
-        );
+        error_logs(&[
+            format_args!("Raw Log: {raw_log}"),
+            format_args!("Info: {info}"),
+            format_args!("Error with code {} has occurred!", code.value()),
+        ]);
     }
 }

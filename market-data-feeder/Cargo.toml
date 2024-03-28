@@ -8,6 +8,7 @@ rust-version = "1.75.0"
 [dependencies]
 broadcast.workspace = true
 chain-comms.workspace = true
+logging.workspace = true
 
 astroport.workspace = true
 async-trait.workspace = true

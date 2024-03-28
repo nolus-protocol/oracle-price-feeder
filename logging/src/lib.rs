@@ -1,8 +1,11 @@
-use tracing_subscriber::fmt::format;
+use std::fmt::Arguments;
+
+use tracing::{debug, error, info, level_filters::LevelFilter};
+use tracing_subscriber::fmt::{format, MakeWriter};
 
 pub fn setup<W>(writer: W)
 where
-    W: for<'r> tracing_subscriber::fmt::MakeWriter<'r> + Send + Sync + 'static,
+    W: for<'r> MakeWriter<'r> + Send + Sync + 'static,
 {
     tracing_subscriber::fmt()
         .event_format(
@@ -26,10 +29,28 @@ where
                 })
                 .unwrap_or(cfg!(debug_assertions))
             {
-                tracing::level_filters::LevelFilter::DEBUG
+                LevelFilter::DEBUG
             } else {
-                tracing::level_filters::LevelFilter::INFO
+                LevelFilter::INFO
             }
         })
         .init();
+}
+
+pub fn debug_logs(formatted_arguments: &[Arguments<'_>]) {
+    for formatted_arguments in formatted_arguments {
+        debug!("{}", formatted_arguments);
+    }
+}
+
+pub fn info_logs(formatted_arguments: &[Arguments<'_>]) {
+    for formatted_arguments in formatted_arguments {
+        info!("{}", formatted_arguments);
+    }
+}
+
+pub fn error_logs(formatted_arguments: &[Arguments<'_>]) {
+    for formatted_arguments in formatted_arguments {
+        error!("{}", formatted_arguments);
+    }
 }

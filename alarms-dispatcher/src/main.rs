@@ -59,7 +59,7 @@ async fn main() -> AppResult<()> {
     let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
         NonBlocking::new(rolling::hourly("./logs/", "dispatcher"));
 
-    chain_comms::log::setup(io::stdout.and(log_writer));
+    logging::setup(io::stdout.and(log_writer));
 
     info!(concat!(
         "Running version built on: ",

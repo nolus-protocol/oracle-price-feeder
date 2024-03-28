@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 chain-comms.workspace = true
+logging.workspace = true
 
 serde = { workspace = true, default-features = false, features = ["derive"] }
 serde-json-wasm.workspace = true

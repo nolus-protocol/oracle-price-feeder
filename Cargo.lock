@@ -43,6 +43,7 @@ version = "0.0.0"
 dependencies = [
  "broadcast",
  "chain-comms",
+ "logging",
  "platform",
  "semver",
  "serde",
@@ -273,6 +274,7 @@ name = "broadcast"
 version = "0.0.0"
 dependencies = [
  "chain-comms",
+ "logging",
  "serde",
  "serde-json-wasm 1.0.1",
  "thiserror",
@@ -1359,6 +1361,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 
 [[package]]
+name = "logging"
+version = "0.0.0"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "market-data-feeder"
 version = "0.0.0"
 dependencies = [
@@ -1369,6 +1379,7 @@ dependencies = [
  "bytes",
  "chain-comms",
  "futures",
+ "logging",
  "osmosis-std",
  "regex",
  "reqwest 0.12.2",

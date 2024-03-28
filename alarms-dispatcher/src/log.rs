@@ -1,11 +1,10 @@
-use std::fmt::Arguments;
-
 use tracing::{error, info, info_span};
 
 use chain_comms::{
     decode,
     interact::{get_tx_response::Response as TxResponse, TxHash},
 };
+use logging::info_logs;
 
 use crate::messages::DispatchResponse;
 
@@ -82,10 +81,4 @@ fn deserialize_and_log(
             );
         })
         .ok()
-}
-
-fn info_logs(formatted_arguments: &[Arguments<'_>]) {
-    for formatted_arguments in formatted_arguments {
-        info!("{}", formatted_arguments);
-    }
 }
