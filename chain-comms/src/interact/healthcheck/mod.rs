@@ -34,10 +34,6 @@ impl Healthcheck {
     }
 
     pub async fn check(&mut self) -> Result<(), error::Error> {
-        if self.last_checked.elapsed() < Duration::from_secs(5) {
-            return Ok(());
-        }
-
         Self::check_sync(&mut self.service_client).await?;
 
         Self::get_height(&mut self.service_client)
@@ -50,10 +46,40 @@ impl Healthcheck {
                     self.last_checked = Instant::now();
 
                     Ok(())
+                } else if height == self.last_height
+                    && self.last_checked.elapsed() < Duration::from_secs(5)
+                {
+                    Ok(())
                 } else {
                     Err(error::Error::BlockHeightNotIncremented)
                 }
             })
+    }
+
+    pub async fn wait_until_healthy<SyncingF, BlockHeightNotIncrementedF>(
+        &mut self,
+        mut syncing: SyncingF,
+        mut block_height_not_incremented: BlockHeightNotIncrementedF,
+    ) -> Result<(), error::Error>
+    where
+        SyncingF: FnMut() + Send,
+        BlockHeightNotIncrementedF: FnMut() + Send,
+    {
+        while let Err(error) = self.check().await {
+            match error {
+                error::Error::Syncing(error::CheckSyncing::Syncing) => {
+                    syncing();
+                },
+                error::Error::BlockHeightNotIncremented => {
+                    block_height_not_incremented();
+                },
+                _ => return Err(error),
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        Ok(())
     }
 
     async fn check_sync(

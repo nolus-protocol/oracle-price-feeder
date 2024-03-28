@@ -23,10 +23,7 @@ use broadcast::{
 };
 use chain_comms::{
     client::Client as NodeClient,
-    interact::{
-        get_tx_response::Response as TxResponse,
-        healthcheck::error::Error as HealthcheckError, TxHash,
-    },
+    interact::{get_tx_response::Response as TxResponse, TxHash},
     reexport::cosmrs::proto::{
         cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny,
     },
@@ -382,21 +379,35 @@ where
             let mut comparison_provider = comparison_provider.lock().await;
 
             if let Some(healthcheck) = comparison_provider.healthcheck() {
-                while let Err(error) = healthcheck.check().await {
-                    let HealthcheckError::BlockHeightNotIncremented = error
-                    else {
+                let result = healthcheck
+                    .wait_until_healthy(
+                        || {
+                            warn!(
+                                "Comparison provider with id: \
+                                {comparison_provider_id}, responded with \
+                                syncing status."
+                            );
+                        },
+                        || {
+                            warn!(
+                                "Comparison provider with id: \
+                                {comparison_provider_id}, didn't respond with \
+                                an incremented block height."
+                            );
+                        },
+                    )
+                    .await;
+
+                match result {
+                    Ok(()) => {},
+                    Err(error) => {
                         break 'result Err(
                             error_mod::Worker::ComparisonProviderHealthcheck(
                                 comparison_provider_id,
                                 error,
                             ),
-                        );
-                    };
-
-                    warn!(
-                        "Comparison provider with id: {provider_id}, didn't \
-                        respond with an incremented block height. Retrying."
-                    );
+                        )
+                    },
                 }
             }
 
@@ -578,18 +589,24 @@ async fn run_provider_healthcheck<P>(
 where
     P: Provider,
 {
-    while let Err(error) = provider.healthcheck().check().await {
-        let HealthcheckError::BlockHeightNotIncremented = error else {
-            return Err(error_mod::Worker::ProviderHealthcheck(error));
-        };
-
-        warn!(
-            "Provider with id: {provider_id}, didn't respond with an \
-            incremented block height. Retrying."
-        );
-    }
-
-    Ok(())
+    provider
+        .healthcheck()
+        .wait_until_healthy(
+            || {
+                warn!(
+                    "Provider with id: {provider_id}, responded with syncing \
+                    status."
+                );
+            },
+            || {
+                warn!(
+                    "Provider with id: {provider_id}, didn't respond with an \
+                    incremented block height."
+                );
+            },
+        )
+        .await
+        .map_err(error_mod::Worker::ProviderHealthcheck)
 }
 
 #[derive(Debug, Error)]
