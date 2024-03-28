@@ -554,10 +554,10 @@ where
         let healthcheck_result =
             run_provider_healthcheck(&mut provider, provider_id).await;
 
-        next_tick = Instant::now() + tick_time;
-
         match handle_healthcheck_result(provider_id, healthcheck_result) {
             Ok(HealthcheckOutcome::Healthy) => {
+                next_tick = Instant::now() + tick_time;
+
                 if let Some(channel_closed @ ChannelClosed {}) = feed_prices(
                     &mut provider,
                     provider_id,
@@ -573,7 +573,9 @@ where
                 }
             },
             Ok(HealthcheckOutcome::CheckFailure) => {
-                error!("Healthcheck failed! Skipping feed cycle!");
+                error!("Healthcheck failed! Retrying after delay!");
+
+                next_tick = Instant::now() + Duration::from_secs(1);
             },
             Err(error) => {
                 break 'worker_loop Err(
