@@ -554,6 +554,8 @@ where
         let healthcheck_result =
             run_provider_healthcheck(&mut provider, provider_id).await;
 
+        next_tick = Instant::now() + tick_time;
+
         match handle_healthcheck_result(provider_id, healthcheck_result) {
             Ok(HealthcheckOutcome::Healthy) => {
                 if let Some(channel_closed @ ChannelClosed {}) = feed_prices(
@@ -579,8 +581,6 @@ where
                 );
             },
         }
-
-        next_tick = Instant::now() + tick_time;
     };
 
     drop(provider);
