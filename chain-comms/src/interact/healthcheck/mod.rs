@@ -99,11 +99,11 @@ impl Healthcheck {
 
     async fn get_height(
         service_client: &mut TendermintServiceClient<TonicChannel>,
-    ) -> Result<Height, error::GetHeight> {
+    ) -> Result<Height, error::LatestBlockHeight> {
         query::latest_block(service_client)
             .await?
             .header
-            .ok_or(error::GetHeight::NoBlockHeaderReturned)
+            .ok_or(error::LatestBlockHeight::NoBlockHeaderReturned)
             .and_then(|header| header.height.try_into().map_err(From::from))
     }
 }

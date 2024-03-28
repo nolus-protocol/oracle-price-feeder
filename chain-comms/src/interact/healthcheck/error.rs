@@ -11,7 +11,7 @@ pub enum CheckSyncing {
 }
 
 #[derive(Debug, ThisError)]
-pub enum GetHeight {
+pub enum LatestBlockHeight {
     #[error("Error occurred while querying latest block! Cause: {0}")]
     LatestBlock(#[from] query::error::LatestBlock),
     #[error("Node didn't return block header information!")]
@@ -25,7 +25,7 @@ pub enum Construct {
     #[error("Error occurred while checking syncing status! Cause: {0}")]
     Syncing(#[from] CheckSyncing),
     #[error("Error occurred while fetching latest block height! Cause: {0}")]
-    LatestBlockHeight(#[from] GetHeight),
+    LatestBlockHeight(#[from] LatestBlockHeight),
 }
 
 #[derive(Debug, ThisError)]
@@ -33,7 +33,7 @@ pub enum Error {
     #[error("Error occurred while checking syncing status! Cause: {0}")]
     Syncing(#[from] CheckSyncing),
     #[error("Error occurred while fetching latest block height! Cause: {0}")]
-    LatestBlockHeight(#[from] GetHeight),
+    LatestBlockHeight(#[from] LatestBlockHeight),
     #[error("Node returned decremented or equal block height!")]
     BlockHeightNotIncremented,
 }

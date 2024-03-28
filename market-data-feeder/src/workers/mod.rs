@@ -1,17 +1,17 @@
 use std::{
-    collections::BTreeMap, convert::Infallible, num::NonZeroU64, sync::Arc,
-    time::Duration,
+    collections::BTreeMap, convert::Infallible, hint::spin_loop,
+    num::NonZeroU64, sync::Arc, time::Duration,
 };
 
 use thiserror::Error;
 use tokio::{
     runtime::Handle,
     select,
-    sync::Mutex,
+    sync::{mpsc::error::SendError, Mutex},
     task::{block_in_place, JoinError, JoinSet},
     time::{error::Elapsed, sleep, timeout_at, Instant},
 };
-use tracing::{error, info, warn};
+use tracing::{error, error_span, info, warn};
 
 use broadcast::{
     generators::{
@@ -25,7 +25,7 @@ use chain_comms::{
     client::Client as NodeClient,
     interact::{
         get_tx_response::Response as TxResponse,
-        healthcheck::{error::Error as HealthcheckError, Healthcheck},
+        healthcheck::{error as healthcheck_error, Healthcheck},
         TxHash,
     },
     reexport::cosmrs::proto::{
@@ -349,7 +349,9 @@ where
             if let Err(error) =
                 run_provider_healthcheck(&mut provider, &provider_id).await
             {
-                break 'result Err(error);
+                break 'result Err(error_mod::Worker::ProviderHealthcheck(
+                    error,
+                ));
             }
 
             let result = provider.get_prices(false).await.map_err(|error| {
@@ -466,7 +468,7 @@ async fn compare_prices(
 async fn run_comparison_provider_healthcheck(
     healthcheck: &mut Healthcheck,
     comparison_provider_id: &str,
-) -> Result<(), HealthcheckError> {
+) -> Result<(), healthcheck_error::Error> {
     healthcheck
         .wait_until_healthy(
             || {
@@ -523,7 +525,7 @@ where
 
     let mut next_tick: Instant = Instant::now();
 
-    let ok_output: ChannelClosed = 'worker_loop: loop {
+    let output = 'worker_loop: loop {
         let idle_work_result: Result<ChannelClosed, Elapsed> = timeout_at(
             next_tick,
             handle_idle_work(
@@ -541,48 +543,44 @@ where
         if let Ok::<ChannelClosed, Elapsed>(channel_closed @ ChannelClosed {}) =
             idle_work_result
         {
-            warn!(%provider_id, "Communication channel has been closed! Exiting worker task...");
+            warn!(
+                %provider_id,
+                "Communication channel has been closed! Exiting worker task..."
+            );
 
-            break 'worker_loop channel_closed;
+            break 'worker_loop Ok(channel_closed);
         }
 
-        run_provider_healthcheck(&mut provider, provider_id).await?;
+        let healthcheck_result =
+            run_provider_healthcheck(&mut provider, provider_id).await;
 
-        match provider.get_prices(true).await {
-            Ok(prices) => {
-                let message: Vec<u8> =
-                    serde_json_wasm::to_string(&ExecuteMsg::FeedPrices {
-                        prices,
-                    })?
-                    .into_bytes();
-
-                let message: ProtobufAny =
-                    ProtobufAny::from_msg(&MsgExecuteContract {
-                        sender: signer_address.to_string(),
-                        contract: oracle_address.to_string(),
-                        msg: message,
-                        funds: Vec::new(),
-                    })?;
-
-                next_tick = Instant::now() + tick_time;
-
-                if send_tx_request(
-                    message,
-                    NonZeroU64::MAX,
+        match handle_healthcheck_result(provider_id, healthcheck_result) {
+            Ok(HealthcheckOutcome::Healthy) => {
+                if let Some(channel_closed @ ChannelClosed {}) = feed_prices(
+                    &mut provider,
+                    provider_id,
+                    &signer_address,
                     hard_gas_limit,
+                    &oracle_address,
+                    &send_tx_request,
                     next_tick,
                 )
-                .is_err()
+                .await?
                 {
-                    warn!(%provider_id, "Communication channel has been closed! Exiting worker task...");
-
-                    break 'worker_loop ChannelClosed {};
+                    break 'worker_loop Ok(channel_closed);
                 }
             },
-            Err(error) => {
-                error!(%provider_id, "Couldn't get price feed! Cause: {error:?}");
+            Ok(HealthcheckOutcome::CheckFailure) => {
+                error!("Healthcheck failed! Skipping feed cycle!");
             },
-        };
+            Err(error) => {
+                break 'worker_loop Err(
+                    error_mod::Worker::ProviderHealthcheck(error),
+                );
+            },
+        }
+
+        next_tick = Instant::now() + tick_time;
     };
 
     drop(provider);
@@ -597,15 +595,88 @@ where
 
     info!(%provider_id, "Joining all child tasks before exiting.");
 
-    while poll_delivered_tx_set.join_next().await.is_some() {}
+    while poll_delivered_tx_set.join_next().await.is_some() {
+        spin_loop();
+    }
 
-    Ok(ok_output)
+    output
+}
+
+async fn feed_prices<P, SendTxRequestF>(
+    provider: &mut P,
+    provider_id: &str,
+    signer_address: &Arc<str>,
+    hard_gas_limit: NonZeroU64,
+    oracle_address: &Arc<str>,
+    send_tx_request: SendTxRequestF,
+    next_tick: Instant,
+) -> Result<Option<ChannelClosed>, error_mod::Worker>
+where
+    P: Provider + Send,
+    SendTxRequestF: Fn(
+            ProtobufAny,
+            NonZeroU64,
+            NonZeroU64,
+            Instant,
+        ) -> Result<(), SendError<TxRequest<NonBlocking>>>
+        + Send,
+{
+    match provider.get_prices(true).await {
+        Ok(prices) => {
+            let message: Vec<u8> =
+                serde_json_wasm::to_string(&ExecuteMsg::FeedPrices { prices })?
+                    .into_bytes();
+
+            let message: ProtobufAny =
+                ProtobufAny::from_msg(&MsgExecuteContract {
+                    sender: signer_address.to_string(),
+                    contract: oracle_address.to_string(),
+                    msg: message,
+                    funds: Vec::new(),
+                })?;
+
+            Ok(
+                if send_tx_request(
+                    message,
+                    NonZeroU64::MAX,
+                    hard_gas_limit,
+                    next_tick,
+                )
+                .is_err()
+                {
+                    warn!(
+                        %provider_id,
+                        "Communication channel has been closed! \
+                        Exiting worker task..."
+                    );
+
+                    Some(ChannelClosed {})
+                } else {
+                    None
+                },
+            )
+        },
+        Err(error) => {
+            error!(
+                %provider_id,
+                ?error,
+                "Couldn't get price feed! Cause: {error}"
+            );
+
+            Ok(None)
+        },
+    }
+}
+
+enum HealthcheckOutcome {
+    CheckFailure,
+    Healthy,
 }
 
 async fn run_provider_healthcheck<P>(
     provider: &mut P,
     provider_id: &str,
-) -> Result<(), error_mod::Worker>
+) -> Result<(), healthcheck_error::Error>
 where
     P: Provider,
 {
@@ -626,7 +697,46 @@ where
             },
         )
         .await
-        .map_err(error_mod::Worker::ProviderHealthcheck)
+}
+
+fn handle_healthcheck_result(
+    provider_id: &str,
+    result: Result<(), healthcheck_error::Error>,
+) -> Result<HealthcheckOutcome, healthcheck_error::Error> {
+    match result {
+        Ok(()) => Ok(HealthcheckOutcome::Healthy),
+        Err(error) => {
+            error_span!("Healthcheck", %provider_id);
+
+            match error {
+                healthcheck_error::Error::Syncing(
+                    healthcheck_error::CheckSyncing::QuerySyncing(error),
+                ) => {
+                    error!(
+                        ?error,
+                        "Failure occurred due to connectivity error while \
+                            fetching syncing status! Skipping iteration! \
+                            Cause: {error}"
+                    );
+
+                    Ok(HealthcheckOutcome::CheckFailure)
+                },
+                healthcheck_error::Error::LatestBlockHeight(
+                    healthcheck_error::LatestBlockHeight::LatestBlock(error),
+                ) => {
+                    error!(
+                        ?error,
+                        "Failure occurred due to connectivity error while \
+                            fetching latest block! Skipping iteration! \
+                            Cause: {error}"
+                    );
+
+                    Ok(HealthcheckOutcome::CheckFailure)
+                },
+                error => Err(error),
+            }
+        },
+    }
 }
 
 #[derive(Debug, Error)]
