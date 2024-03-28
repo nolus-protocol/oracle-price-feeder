@@ -25,7 +25,9 @@ use chain_comms::{
     client::Client as NodeClient,
     interact::{
         get_tx_response::Response as TxResponse,
-        healthcheck::{error as healthcheck_error, Healthcheck},
+        healthcheck::{
+            error as healthcheck_error, Healthcheck, WaitUntilHealthyStatusType,
+        },
         TxHash,
     },
     reexport::cosmrs::proto::{
@@ -470,22 +472,32 @@ async fn run_comparison_provider_healthcheck(
     comparison_provider_id: &str,
 ) -> Result<(), healthcheck_error::Error> {
     healthcheck
-        .wait_until_healthy(
-            || {
-                warn!(
-                    "Comparison provider with id: \
-                    {comparison_provider_id}, responded with \
-                    syncing status."
-                );
-            },
-            || {
-                warn!(
-                    "Comparison provider with id: \
-                    {comparison_provider_id}, didn't respond with \
-                    an incremented block height."
-                );
-            },
-        )
+        .wait_until_healthy({
+            let mut counter: u8 = 0;
+
+            move |status_type| {
+                if counter == 0 {
+                    match status_type {
+                        WaitUntilHealthyStatusType::Syncing => {
+                            warn!(
+                                comparison_provider_id,
+                                "Comparison provider responded with syncing \
+                                status."
+                            );
+                        },
+                        WaitUntilHealthyStatusType::BlockNotIncremented => {
+                            warn!(
+                                comparison_provider_id,
+                                "Comparison provider didn't respond with an \
+                                incremented block height."
+                            );
+                        },
+                    }
+                }
+
+                counter = (counter + 1) % 10;
+            }
+        })
         .await
 }
 
@@ -684,20 +696,30 @@ where
 {
     provider
         .healthcheck()
-        .wait_until_healthy(
-            || {
-                warn!(
-                    "Provider with id: {provider_id}, responded with syncing \
-                    status."
+        .wait_until_healthy({
+            let mut counter: u8 = 0;
+
+            move |status_type| {
+                if counter == 0 {
+                    match status_type {
+                        WaitUntilHealthyStatusType::Syncing => {
+                            warn!(
+                                provider_id,
+                                "Provider responded with syncing status."
+                            );
+                        },
+                        WaitUntilHealthyStatusType::BlockNotIncremented => {
+                            warn!(
+                    provider_id,
+                    "Provider didn't respond with an incremented block height."
                 );
-            },
-            || {
-                warn!(
-                    "Provider with id: {provider_id}, didn't respond with an \
-                    incremented block height."
-                );
-            },
-        )
+                        },
+                    }
+                }
+
+                counter = (counter + 1) % 10;
+            }
+        })
         .await
 }
 

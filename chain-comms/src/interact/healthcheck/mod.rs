@@ -56,22 +56,20 @@ impl Healthcheck {
             })
     }
 
-    pub async fn wait_until_healthy<SyncingF, BlockHeightNotIncrementedF>(
+    pub async fn wait_until_healthy<F>(
         &mut self,
-        mut syncing: SyncingF,
-        mut block_height_not_incremented: BlockHeightNotIncrementedF,
+        mut f: F,
     ) -> Result<(), error::Error>
     where
-        SyncingF: FnMut() + Send,
-        BlockHeightNotIncrementedF: FnMut() + Send,
+        F: FnMut(WaitUntilHealthyStatusType) + Send,
     {
         while let Err(error) = self.check().await {
             match error {
                 error::Error::Syncing(error::CheckSyncing::Syncing) => {
-                    syncing();
+                    f(WaitUntilHealthyStatusType::Syncing);
                 },
                 error::Error::BlockHeightNotIncremented => {
-                    block_height_not_incremented();
+                    f(WaitUntilHealthyStatusType::BlockNotIncremented);
                 },
                 _ => return Err(error),
             }
@@ -106,4 +104,9 @@ impl Healthcheck {
             .ok_or(error::LatestBlockHeight::NoBlockHeaderReturned)
             .and_then(|header| header.height.try_into().map_err(From::from))
     }
+}
+
+pub enum WaitUntilHealthyStatusType {
+    Syncing,
+    BlockNotIncremented,
 }
