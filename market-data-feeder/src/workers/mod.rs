@@ -23,7 +23,11 @@ use broadcast::{
 };
 use chain_comms::{
     client::Client as NodeClient,
-    interact::{get_tx_response::Response as TxResponse, TxHash},
+    interact::{
+        get_tx_response::Response as TxResponse,
+        healthcheck::{error::Error as HealthcheckError, Healthcheck},
+        TxHash,
+    },
     reexport::cosmrs::proto::{
         cosmwasm::wasm::v1::MsgExecuteContract, Any as ProtobufAny,
     },
@@ -376,57 +380,16 @@ where
             max_deviation_exclusive,
         )) = { comparison_provider_and_deviation }
         {
-            let mut comparison_provider = comparison_provider.lock().await;
-
-            if let Some(healthcheck) = comparison_provider.healthcheck() {
-                let result = healthcheck
-                    .wait_until_healthy(
-                        || {
-                            warn!(
-                                "Comparison provider with id: \
-                                {comparison_provider_id}, responded with \
-                                syncing status."
-                            );
-                        },
-                        || {
-                            warn!(
-                                "Comparison provider with id: \
-                                {comparison_provider_id}, didn't respond with \
-                                an incremented block height."
-                            );
-                        },
-                    )
-                    .await;
-
-                match result {
-                    Ok(()) => {},
-                    Err(error) => {
-                        break 'result Err(
-                            error_mod::Worker::ComparisonProviderHealthcheck(
-                                comparison_provider_id,
-                                error,
-                            ),
-                        )
-                    },
-                }
-            }
-
-            let result: Result<(), PriceComparisonGuardError> =
-                comparison_provider
-                    .benchmark_prices(
-                        provider.instance_id(),
-                        &prices,
-                        max_deviation_exclusive,
-                    )
-                    .await;
-
-            match result {
-                Ok(()) => {},
-                Err(error) => {
-                    break 'result Err(
-                        error_mod::Worker::PriceComparisonGuard(error),
-                    );
-                },
+            if let Err(error) = compare_prices(
+                provider.instance_id(),
+                &prices,
+                comparison_provider_id,
+                comparison_provider,
+                max_deviation_exclusive,
+            )
+            .await
+            {
+                break 'result Err(error);
             }
         } else {
             info!(
@@ -465,6 +428,63 @@ where
 
         sleep(Duration::from_secs(15)).await;
     }
+}
+
+async fn compare_prices(
+    provider_instance_id: &str,
+    prices: &[Price<CoinWithDecimalPlaces>],
+    comparison_provider_id: Arc<str>,
+    comparison_provider: Arc<Mutex<dyn ComparisonProvider>>,
+    max_deviation_exclusive: u64,
+) -> Result<(), error_mod::Worker> {
+    let mut comparison_provider = comparison_provider.lock().await;
+
+    if let Some(healthcheck) = comparison_provider.healthcheck() {
+        let result = run_comparison_provider_healthcheck(
+            healthcheck,
+            &comparison_provider_id,
+        )
+        .await;
+
+        match result {
+            Ok(()) => {},
+            Err(error) => {
+                return Err(error_mod::Worker::ComparisonProviderHealthcheck(
+                    comparison_provider_id,
+                    error,
+                ));
+            },
+        }
+    }
+
+    comparison_provider
+        .benchmark_prices(provider_instance_id, prices, max_deviation_exclusive)
+        .await
+        .map_err(error_mod::Worker::PriceComparisonGuard)
+}
+
+async fn run_comparison_provider_healthcheck(
+    healthcheck: &mut Healthcheck,
+    comparison_provider_id: &str,
+) -> Result<(), HealthcheckError> {
+    healthcheck
+        .wait_until_healthy(
+            || {
+                warn!(
+                    "Comparison provider with id: \
+                    {comparison_provider_id}, responded with \
+                    syncing status."
+                );
+            },
+            || {
+                warn!(
+                    "Comparison provider with id: \
+                    {comparison_provider_id}, didn't respond with \
+                    an incremented block height."
+                );
+            },
+        )
+        .await
 }
 
 async fn provider_main_loop<P>(
