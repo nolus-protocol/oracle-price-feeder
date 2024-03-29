@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, convert::identity};
+use std::{collections::BTreeMap, convert::identity, future::Future};
 
 use tokio::task::JoinSet;
 
@@ -19,20 +19,22 @@ mod osmosis;
 pub(crate) struct Providers;
 
 impl Providers {
-    pub fn visit_provider<V>(id: &str, visitor: V) -> Option<V::Return>
+    pub async fn visit_provider<V>(id: &str, visitor: V) -> Option<V::Return>
     where
         V: ProviderVisitor,
     {
         match id {
             <Astroport as FromConfig<false>>::ID => {
-                Some(visitor.on::<Astroport>())
+                Some(visitor.on::<Astroport>().await)
             },
-            <Osmosis as FromConfig<false>>::ID => Some(visitor.on::<Osmosis>()),
+            <Osmosis as FromConfig<false>>::ID => {
+                Some(visitor.on::<Osmosis>().await)
+            },
             _ => None,
         }
     }
 
-    pub fn visit_comparison_provider<V>(
+    pub async fn visit_comparison_provider<V>(
         id: &str,
         visitor: V,
     ) -> Option<V::Return>
@@ -41,9 +43,12 @@ impl Providers {
     {
         match id {
             CoinGeckoSanityCheck::ID => {
-                Some(visitor.on::<CoinGeckoSanityCheck>())
+                Some(visitor.on::<CoinGeckoSanityCheck>().await)
             },
-            _ => Self::visit_provider(id, ProviderConversionVisitor(visitor)),
+            _ => {
+                Self::visit_provider(id, ProviderConversionVisitor(visitor))
+                    .await
+            },
         }
     }
 }
@@ -55,26 +60,26 @@ impl<V: ComparisonProviderVisitor> ProviderVisitor
 {
     type Return = V::Return;
 
-    fn on<P>(self) -> Self::Return
+    async fn on<P>(self) -> Self::Return
     where
         P: Provider + FromConfig<false>,
     {
-        self.0.on::<P>()
+        self.0.on::<P>().await
     }
 }
 
-pub(crate) trait ProviderVisitor {
+pub(crate) trait ProviderVisitor: Send {
     type Return;
 
-    fn on<P>(self) -> Self::Return
+    fn on<P>(self) -> impl Future<Output = Self::Return> + Send
     where
         P: Provider + FromConfig<false>;
 }
 
-pub(crate) trait ComparisonProviderVisitor {
+pub(crate) trait ComparisonProviderVisitor: Send {
     type Return;
 
-    fn on<P>(self) -> Self::Return
+    fn on<P>(self) -> impl Future<Output = Self::Return> + Send
     where
         P: ComparisonProvider + FromConfig<true>;
 }
