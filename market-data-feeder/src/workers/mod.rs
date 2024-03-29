@@ -67,7 +67,7 @@ pub(crate) struct SpawnContext {
     pub(crate) poll_time: Duration,
 }
 
-pub fn spawn(
+pub async fn spawn(
     SpawnContext {
         node_client,
         providers,
@@ -95,83 +95,10 @@ pub fn spawn(
     let mut tx_result_senders: BTreeMap<usize, CommitResultSender> =
         BTreeMap::new();
 
-    providers
-        .into_iter()
-        .enumerate()
-        .try_for_each(try_for_each_provider_f(TryForEachProviderContext {
-            node_client,
-            tx_generators_set: &mut tx_generators_set,
-            tx_result_senders: &mut tx_result_senders,
-            tx_request_sender,
-            signer_address,
-            price_comparison_providers,
-            hard_gas_limit,
-            time_before_feeding,
-            tick_time,
-            poll_time,
-        }))
-        .map(|()| SpawnResult::new(tx_generators_set, tx_result_senders))
-}
-
-fn construct_comparison_provider_f(
-    node_client: &NodeClient,
-) -> impl Fn(
-    (Arc<str>, ComparisonProviderConfig),
-) -> AppResult<(Arc<str>, Arc<Mutex<dyn ComparisonProvider>>)> {
-    let node_client: NodeClient = node_client.clone();
-
-    move |(id, config): (Arc<str>, ComparisonProviderConfig)| {
-        if let Some(result) = providers::Providers::visit_comparison_provider(
-            &config.provider.name().clone(),
-            PriceComparisonProviderVisitor {
-                provider_id: id.clone(),
-                provider_config: config,
-                node_client: &node_client,
-            },
-        ) {
-            result
-                .map(|comparison_provider| (id, comparison_provider))
-                .map_err(error_mod::Application::Worker)
-        } else {
-            Err(error_mod::Application::UnknownPriceComparisonProviderId(id))
-        }
-    }
-}
-
-struct TryForEachProviderContext<'r> {
-    node_client: NodeClient,
-    tx_generators_set: &'r mut JoinSet<Infallible>,
-    tx_result_senders: &'r mut BTreeMap<usize, CommitResultSender>,
-    tx_request_sender: TxRequestSender<NonBlocking>,
-    signer_address: Arc<str>,
-    price_comparison_providers:
-        BTreeMap<Arc<str>, Arc<Mutex<dyn ComparisonProvider>>>,
-    hard_gas_limit: NonZeroU64,
-    time_before_feeding: Duration,
-    tick_time: Duration,
-    poll_time: Duration,
-}
-
-fn try_for_each_provider_f(
-    TryForEachProviderContext {
-        node_client,
-        tx_generators_set,
-        tx_result_senders,
-        tx_request_sender,
-        signer_address,
-        price_comparison_providers,
-        hard_gas_limit,
-        time_before_feeding,
-        tick_time,
-        poll_time,
-    }: TryForEachProviderContext<'_>,
-) -> impl FnMut((usize, (Box<str>, ProviderWithComparisonConfig))) -> AppResult<()>
-       + '_ {
-    move |(monotonic_id, (provider_id, config)): (
-        usize,
-        (Box<str>, ProviderWithComparisonConfig),
-    )| {
-        config
+    for (monotonic_id, (provider_id, config)) in
+        providers.into_iter().enumerate()
+    {
+        let result = config
             .comparison
             .map(
                 |ComparisonProviderIdAndMaxDeviation {
@@ -205,8 +132,8 @@ fn try_for_each_provider_f(
                                 poll_time,
                             },
                             node_client: &node_client,
-                            tx_generators_set,
-                            tx_result_senders,
+                            tx_generators_set: &mut tx_generators_set,
+                            tx_result_senders: &mut tx_result_senders,
                             provider_id,
                             provider_config: config.provider,
                             price_comparison_provider,
@@ -216,7 +143,43 @@ fn try_for_each_provider_f(
                         .ok_or(error_mod::Application::UnknownProviderId(provider_name))
                         .and_then(|result: Result<(), error_mod::Worker>| result.map_err(From::from))
                 },
-            )
+            );
+
+        match result {
+            Ok(()) => {},
+            Err(error) => {
+                tx_generators_set.shutdown().await;
+
+                return Err(error);
+            },
+        }
+    }
+
+    Ok(SpawnResult::new(tx_generators_set, tx_result_senders))
+}
+
+fn construct_comparison_provider_f(
+    node_client: &NodeClient,
+) -> impl Fn(
+    (Arc<str>, ComparisonProviderConfig),
+) -> AppResult<(Arc<str>, Arc<Mutex<dyn ComparisonProvider>>)> {
+    let node_client: NodeClient = node_client.clone();
+
+    move |(id, config): (Arc<str>, ComparisonProviderConfig)| {
+        if let Some(result) = providers::Providers::visit_comparison_provider(
+            &config.provider.name().clone(),
+            PriceComparisonProviderVisitor {
+                provider_id: id.clone(),
+                provider_config: config,
+                node_client: &node_client,
+            },
+        ) {
+            result
+                .map(|comparison_provider| (id, comparison_provider))
+                .map_err(error_mod::Application::Worker)
+        } else {
+            Err(error_mod::Application::UnknownPriceComparisonProviderId(id))
+        }
     }
 }
 

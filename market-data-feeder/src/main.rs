@@ -12,7 +12,6 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 use serde::Deserialize;
-use tokio::task::block_in_place;
 use tracing::{error, info};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
@@ -95,22 +94,21 @@ async fn app_main() -> Result<()> {
 
         let signer_address: Arc<str> = Arc::from(signer.signer_address());
 
-        move |tx_request_sender| {
+        move |tx_request_sender| async move {
             info!("Starting workers...");
 
-            block_in_place(move || {
-                workers::spawn(SpawnContext {
-                    node_client: node_client.clone(),
-                    providers: config.providers,
-                    price_comparison_providers: config.comparison_providers,
-                    tx_request_sender,
-                    signer_address,
-                    hard_gas_limit: config.hard_gas_limit,
-                    time_before_feeding: config.time_before_feeding,
-                    tick_time: config.broadcast.tick_time,
-                    poll_time: config.broadcast.poll_time,
-                })
+            workers::spawn(SpawnContext {
+                node_client: node_client.clone(),
+                providers: config.providers,
+                price_comparison_providers: config.comparison_providers,
+                tx_request_sender,
+                signer_address,
+                hard_gas_limit: config.hard_gas_limit,
+                time_before_feeding: config.time_before_feeding,
+                tick_time: config.broadcast.tick_time,
+                poll_time: config.broadcast.poll_time,
             })
+            .await
             .map(|spawn_result| {
                 info!("Workers started successfully.");
 

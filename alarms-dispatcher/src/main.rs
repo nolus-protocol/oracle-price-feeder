@@ -12,6 +12,7 @@ use semver::{
     Prerelease as SemVerPrerelease, Version,
 };
 use serde::Deserialize;
+use tokio::task::block_in_place;
 use tracing::{error, info};
 use tracing_appender::{
     non_blocking::{self, NonBlocking},
@@ -215,19 +216,21 @@ where
 
         let poll_time = config.broadcast.poll_time;
 
-        move |tx_sender| {
-            generators::spawn(
-                &node_client,
-                &{ signer_address },
-                &{ tx_sender },
-                &TasksConfig {
-                    time_alarms_config: config.time_alarms,
-                    oracle_alarms_config: config.market_price_oracle,
-                    tick_time,
-                    poll_time,
-                },
-                contracts,
-            )
+        move |tx_sender| async move {
+            block_in_place(|| {
+                generators::spawn(
+                    &node_client,
+                    &{ signer_address },
+                    &{ tx_sender },
+                    &TasksConfig {
+                        time_alarms_config: config.time_alarms,
+                        oracle_alarms_config: config.market_price_oracle,
+                        tick_time,
+                        poll_time,
+                    },
+                    contracts,
+                )
+            })
         }
     };
 

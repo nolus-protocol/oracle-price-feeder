@@ -56,7 +56,7 @@ pub mod mode;
 mod preprocess;
 
 #[allow(clippy::future_not_send)]
-pub async fn broadcast<Impl, SpawnGeneratorsF, SpawnE>(
+pub async fn broadcast<Impl, SpawnGeneratorsF, SpawnGeneratorsFuture, SpawnE>(
     signer: Signer,
     config: Config,
     node_client: NodeClient,
@@ -66,7 +66,8 @@ pub async fn broadcast<Impl, SpawnGeneratorsF, SpawnE>(
 where
     Impl: mode::Impl,
     SpawnGeneratorsF:
-        FnOnce(TxRequestSender<Impl>) -> Result<SpawnResult, SpawnE> + Send,
+        FnOnce(TxRequestSender<Impl>) -> SpawnGeneratorsFuture + Send,
+    SpawnGeneratorsFuture: Future<Output = Result<SpawnResult, SpawnE>> + Send,
 {
     let (tx_sender, tx_receiver): (
         UnboundedSender<TxRequest<Impl>>,
@@ -76,7 +77,7 @@ where
     let SpawnResult {
         mut tx_generators_set,
         tx_result_senders,
-    }: SpawnResult = spawn_generators(tx_sender)?;
+    }: SpawnResult = spawn_generators(tx_sender).await?;
 
     let mut signal = pin!(tokio::signal::ctrl_c());
 
