@@ -8,7 +8,7 @@ use tokio::{
     select,
     sync::{mpsc::error::SendError, Mutex, Notify},
     task::{JoinError, JoinSet},
-    time::{error::Elapsed, sleep, timeout_at, Instant},
+    time::{error::Elapsed, sleep, timeout, timeout_at, Instant},
 };
 use tracing::{error, error_span, info, warn};
 
@@ -321,11 +321,15 @@ where
     P: Provider,
 {
     let prices: Box<[Price<CoinWithDecimalPlaces>]> = {
-        if let Err(error) =
-            run_provider_healthcheck(provider, provider_id).await
-        {
-            return Err(error_mod::Worker::ProviderHealthcheck(error));
-        }
+        () = timeout(
+            Duration::from_secs(30),
+            run_provider_healthcheck(provider, provider_id),
+        )
+        .await
+        .map_err(|Elapsed { .. }| error_mod::Worker::ProviderHealthcheckTimeout)
+        .and_then(|result| {
+            result.map_err(error_mod::Worker::ProviderHealthcheck)
+        })?;
 
         let result = provider.get_prices(false).await.map_err(|error| {
             error_mod::Worker::PriceComparisonGuard(
@@ -384,19 +388,29 @@ async fn compare_prices(
     let mut comparison_provider = comparison_provider.lock().await;
 
     if let Some(healthcheck) = comparison_provider.healthcheck() {
-        let result = run_comparison_provider_healthcheck(
-            healthcheck,
-            &comparison_provider_id,
+        let result = timeout(
+            Duration::from_secs(30),
+            run_comparison_provider_healthcheck(
+                healthcheck,
+                &comparison_provider_id,
+            ),
         )
         .await;
 
         match result {
-            Ok(()) => {},
-            Err(error) => {
+            Ok(Ok(())) => {},
+            Ok(Err(error)) => {
                 return Err(error_mod::Worker::ComparisonProviderHealthcheck(
                     comparison_provider_id,
                     error,
                 ));
+            },
+            Err(Elapsed { .. }) => {
+                return Err(
+                    error_mod::Worker::ComparisonProviderHealthcheckTimeout(
+                        comparison_provider_id,
+                    ),
+                );
             },
         }
     }

@@ -41,8 +41,12 @@ pub(crate) enum Application {
 pub(crate) enum Worker {
     #[error("Failed to instantiate provider! Returned price list is empty!")]
     EmptyPriceList,
+    #[error("Healthcheck on provider failed due to it timing out!")]
+    ProviderHealthcheckTimeout,
     #[error("Failed run healthcheck on provider! Cause: {0}")]
     ProviderHealthcheck(chain_comms::interact::healthcheck::error::Error),
+    #[error("Healthcheck failed on comparison provider with id: {0}, due to it timing out!")]
+    ComparisonProviderHealthcheckTimeout(Arc<str>),
     #[error("Failed run healthcheck on comparison provider with id: {0}! Cause: {1}")]
     ComparisonProviderHealthcheck(
         Arc<str>,
