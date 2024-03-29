@@ -4,7 +4,6 @@ use cosmrs::{
     proto::cosmos::base::tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient,
     tendermint::block::Height,
 };
-use tokio::time::Instant;
 use tonic::transport::Channel as TonicChannel;
 
 use super::query;
@@ -14,7 +13,6 @@ pub mod error;
 pub struct Healthcheck {
     service_client: TendermintServiceClient<TonicChannel>,
     last_height: Height,
-    last_checked: Instant,
 }
 
 impl Healthcheck {
@@ -28,7 +26,6 @@ impl Healthcheck {
             .map(|last_height| Self {
                 service_client,
                 last_height,
-                last_checked: Instant::now(),
             })
             .map_err(error::Construct::LatestBlockHeight)
     }
@@ -43,12 +40,6 @@ impl Healthcheck {
                 if height > self.last_height {
                     self.last_height = height;
 
-                    self.last_checked = Instant::now();
-
-                    Ok(())
-                } else if height == self.last_height
-                    && self.last_checked.elapsed() < Duration::from_secs(5)
-                {
                     Ok(())
                 } else {
                     Err(error::Error::BlockHeightNotIncremented)
