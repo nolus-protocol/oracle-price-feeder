@@ -6,13 +6,7 @@ use std::{
 use thiserror::Error;
 use tokio::{
     select,
-    sync::{
-        broadcast::{
-            self as tokio_broadcast,
-            error::{RecvError, SendError},
-        },
-        Mutex,
-    },
+    sync::{broadcast as tokio_broadcast, mpsc as tokio_mpsc, Mutex},
     task::{JoinError, JoinSet},
     time::{error::Elapsed, sleep, timeout, timeout_at, Instant},
 };
@@ -162,7 +156,9 @@ pub async fn spawn(
     all_checks_passed_sender
         .send(())
         .map(|_| SpawnResult::new(tx_generators_set, tx_result_senders))
-        .map_err(|SendError(())| error_mod::Application::NotifyAllChecksPassed)
+        .map_err(|tokio_broadcast::error::SendError(())| {
+            error_mod::Application::NotifyAllChecksPassed
+        })
 }
 
 async fn construct_comparison_provider(
@@ -508,8 +504,8 @@ where
     P: Provider,
 {
     match all_checks_passed.recv().await {
-        Ok(()) | Err(RecvError::Lagged(_)) => {},
-        Err(RecvError::Closed) => {
+        Ok(()) | Err(tokio_broadcast::error::RecvError::Lagged(_)) => {},
+        Err(tokio_broadcast::error::RecvError::Closed) => {
             return Err(error_mod::Worker::GetNotifiedAllChecksPassed)
         },
     }
@@ -629,7 +625,8 @@ where
             NonZeroU64,
             NonZeroU64,
             Instant,
-        ) -> Result<(), SendError<TxRequest<NonBlocking>>>
+        )
+            -> Result<(), tokio_mpsc::error::SendError<TxRequest<NonBlocking>>>
         + Send,
 {
     match provider.get_prices(true).await {
