@@ -29,6 +29,8 @@ pub(crate) enum Application {
     UnknownPriceComparisonProviderId(Arc<str>),
     #[error("Failed to instantiate provider! Cause: {0}")]
     InvalidProviderUrl(#[from] url::ParseError),
+    #[error("Failed to notify workers to proceed! All receivers closed!")]
+    NotifyAllChecksPassed,
     #[error("Failed to commit price feeding transaction! Cause: {0}")]
     CommitTx(
         #[from] chain_comms::interact::commit::error::GasEstimatingTxCommit,
@@ -61,6 +63,10 @@ pub(crate) enum Worker {
     ),
     #[error("Price comparison guard failure! Cause: {0}")]
     PriceComparisonGuard(#[from] PriceComparisonGuardError),
+    #[error(
+        "Didn't receive notification to proceed and all senders are closed!"
+    )]
+    GetNotifiedAllChecksPassed,
     #[error("Failed to serialize price feed message as JSON! Cause: {0}")]
     SerializeExecuteMessage(#[from] serde_json_wasm::ser::Error),
     #[error(

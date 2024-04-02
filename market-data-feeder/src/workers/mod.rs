@@ -6,7 +6,13 @@ use std::{
 use thiserror::Error;
 use tokio::{
     select,
-    sync::{mpsc::error::SendError, Mutex, Notify},
+    sync::{
+        broadcast::{
+            self as tokio_broadcast,
+            error::{RecvError, SendError},
+        },
+        Mutex,
+    },
     task::{JoinError, JoinSet},
     time::{error::Elapsed, sleep, timeout, timeout_at, Instant},
 };
@@ -101,7 +107,7 @@ pub async fn spawn(
     let mut tx_result_senders: BTreeMap<usize, CommitResultSender> =
         BTreeMap::new();
 
-    let all_checks_passed = Arc::new(Notify::new());
+    let (all_checks_passed_sender, _) = tokio_broadcast::channel(1);
 
     for (monotonic_id, (provider_id, config)) in
         providers.into_iter().enumerate()
@@ -137,7 +143,7 @@ pub async fn spawn(
                     monotonic_id,
                     tick_time,
                     poll_time,
-                    all_checks_passed: all_checks_passed.clone(),
+                    all_checks_passed: all_checks_passed_sender.subscribe(),
                 },
                 node_client: &node_client,
                 tx_generators_set: &mut tx_generators_set,
@@ -153,9 +159,10 @@ pub async fn spawn(
         .and_then(|result| result.map_err(From::from))?;
     }
 
-    all_checks_passed.notify_waiters();
-
-    Ok(SpawnResult::new(tx_generators_set, tx_result_senders))
+    all_checks_passed_sender
+        .send(())
+        .map(|_| SpawnResult::new(tx_generators_set, tx_result_senders))
+        .map_err(|SendError(())| error_mod::Application::NotifyAllChecksPassed)
 }
 
 async fn construct_comparison_provider(
@@ -188,7 +195,7 @@ struct TaskContext {
     monotonic_id: usize,
     tick_time: Duration,
     poll_time: Duration,
-    all_checks_passed: Arc<Notify>,
+    all_checks_passed: tokio_broadcast::Receiver<()>,
 }
 
 struct PriceComparisonProviderVisitor<'r> {
@@ -491,7 +498,7 @@ async fn provider_main_loop<P>(
         monotonic_id,
         tick_time,
         poll_time,
-        all_checks_passed,
+        mut all_checks_passed,
     }: TaskContext,
     node_client: NodeClient,
     oracle_address: Arc<str>,
@@ -500,7 +507,12 @@ async fn provider_main_loop<P>(
 where
     P: Provider,
 {
-    all_checks_passed.notified().await;
+    match all_checks_passed.recv().await {
+        Ok(()) | Err(RecvError::Lagged(_)) => {},
+        Err(RecvError::Closed) => {
+            return Err(error_mod::Worker::GetNotifiedAllChecksPassed)
+        },
+    }
 
     sleep(time_before_feeding).await;
 
