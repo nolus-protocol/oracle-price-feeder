@@ -173,6 +173,8 @@ pub async fn spawn(
         }
     }
 
+    all_checks_passed.notify_waiters();
+
     Ok(SpawnResult::new(tx_generators_set, tx_result_senders))
 }
 
