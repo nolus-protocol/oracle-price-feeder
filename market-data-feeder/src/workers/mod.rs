@@ -106,7 +106,7 @@ pub async fn spawn(
     for (monotonic_id, (provider_id, config)) in
         providers.into_iter().enumerate()
     {
-        let result = config
+        let price_comparison_provider = config
             .comparison
             .map(
                 |ComparisonProviderIdAndMaxDeviation {
@@ -123,20 +123,11 @@ pub async fn spawn(
                     }
                 },
             )
-            .transpose();
-
-        let price_comparison_provider = match result {
-            Ok(price_comparison_provider) => price_comparison_provider,
-            Err(error) => {
-                tx_generators_set.shutdown().await;
-
-                return Err(error);
-            },
-        };
+            .transpose()?;
 
         let provider_name: Arc<str> = config.provider.name().clone();
 
-        let result = providers::Providers::visit_provider(
+        () = providers::Providers::visit_provider(
             &provider_name,
             TaskSpawningProviderVisitor {
                 worker_task_context: TaskContext {
@@ -159,18 +150,7 @@ pub async fn spawn(
         )
         .await
         .ok_or(error_mod::Application::UnknownProviderId(provider_name))
-        .and_then(|result: Result<(), error_mod::Worker>| {
-            result.map_err(From::from)
-        });
-
-        match result {
-            Ok(()) => {},
-            Err(error) => {
-                tx_generators_set.shutdown().await;
-
-                return Err(error);
-            },
-        }
+        .and_then(|result| result.map_err(From::from))?;
     }
 
     all_checks_passed.notify_waiters();
