@@ -567,7 +567,7 @@ where
                     &mut provider,
                     provider_id,
                     &signer_address,
-                    hard_gas_limit,
+                    (fallback_gas_limit, hard_gas_limit),
                     &oracle_address,
                     &send_tx_request,
                     next_tick,
@@ -613,7 +613,7 @@ async fn feed_prices<P, SendTxRequestF>(
     provider: &mut P,
     provider_id: &str,
     signer_address: &Arc<str>,
-    hard_gas_limit: NonZeroU64,
+    (fallback_gas_limit, hard_gas_limit): (NonZeroU64, NonZeroU64),
     oracle_address: &Arc<str>,
     send_tx_request: SendTxRequestF,
     next_tick: Instant,
@@ -646,7 +646,7 @@ where
             Ok(
                 if send_tx_request(
                     message,
-                    NonZeroU64::MAX,
+                    fallback_gas_limit,
                     hard_gas_limit,
                     next_tick,
                 )
