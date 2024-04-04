@@ -352,13 +352,13 @@ where
             max_deviation_exclusive,
         )
         .await?;
-
-        print_prices_pretty::print(provider, &{ prices });
     } else {
         info!(
             r#"Provider "{provider_id}" isn't associated with a comparison provider."#
         );
     };
+
+    print_prices_pretty::print(provider, &{ prices });
 
     Ok(())
 }

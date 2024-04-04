@@ -31,12 +31,6 @@ pub enum Provider {
     Serialization(#[from] serde_json_wasm::ser::Error),
 }
 
-impl From<chain_comms::interact::query::error::Wasm> for Provider {
-    fn from(error: chain_comms::interact::query::error::Wasm) -> Self {
-        Self::WasmQuery(String::new(), error)
-    }
-}
-
 #[derive(Debug, Error)]
 pub(crate) enum PriceComparisonGuard {
     #[error("Failed to fetch prices from provider for price comparison guard! Cause: {0}")]

@@ -40,6 +40,7 @@ mod deviation;
 mod error;
 mod log;
 mod messages;
+mod oracle;
 mod price;
 mod provider;
 mod providers;

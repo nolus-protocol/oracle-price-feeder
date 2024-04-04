@@ -6,7 +6,6 @@ use osmosis_std::types::osmosis::poolmanager::v2::{
 };
 use thiserror::Error;
 use tokio::task::JoinSet;
-use toml::Value;
 use tracing::debug;
 
 use chain_comms::{
@@ -19,78 +18,57 @@ use chain_comms::{
 };
 
 use crate::{
-    config::{
-        Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces,
-        SymbolUnsized, Ticker,
-    },
-    messages::{PoolId, QueryMsg, SupportedCurrencyPairsResponse, SwapLeg},
+    config::{EnvError, ProviderConfigExt},
+    messages::PoolId,
+    oracle::{query_currencies, query_supported_currencies},
     price::{CoinWithDecimalPlaces, Price, Ratio},
     provider::{FromConfig, Provider, ProviderError},
 };
 
+use super::TickerSymbolDecimalPlaces;
+
 pub(crate) struct Osmosis {
     instance_id: String,
-    node_client: NodeClient,
-    oracle_addr: Arc<str>,
+    node_wasm_query_client: WasmQueryClient<TonicChannel>,
+    oracle_address: Arc<str>,
     channel: TonicChannel,
     healthcheck: Healthcheck,
-    currencies: Currencies,
 }
 
 impl Osmosis {
     async fn query_supported_currencies(
-        &self,
-        node_rpc: TonicChannel,
-    ) -> Result<impl Iterator<Item = Route> + '_, query::error::Wasm> {
-        query::wasm_smart::<SupportedCurrencyPairsResponse>(
-            &mut WasmQueryClient::new(node_rpc),
-            self.oracle_addr.to_string(),
-            QueryMsg::SUPPORTED_CURRENCY_PAIRS.to_vec(),
+        &mut self,
+    ) -> Result<impl Iterator<Item = Route>, query::error::Wasm> {
+        let oracle_address = self.oracle_address.to_string();
+
+        let swap_legs = query_supported_currencies(
+            &mut self.node_wasm_query_client,
+            oracle_address.clone(),
         )
-        .await
-        .map(|swap_legs: Vec<SwapLeg>| {
-            swap_legs
-                .into_iter()
-                .filter_map(|swap: SwapLeg| -> Option<Route> {
-                    let (from_symbol, from_decimal_places): (
-                        Arc<SymbolUnsized>,
-                        u8,
-                    ) = self.currencies.get(&swap.from).map(
-                        |symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
-                            (
-                                symbol_and_decimal_places.denom().clone(),
-                                symbol_and_decimal_places.decimal_places(),
-                            )
-                        },
-                    )?;
+        .await?;
 
-                    let (to_symbol, to_decimal_places): (
-                        Arc<SymbolUnsized>,
-                        u8,
-                    ) = self.currencies.get(&swap.to.target).map(
-                        |symbol_and_decimal_places: &SymbolAndDecimalPlaces| {
-                            (
-                                symbol_and_decimal_places.denom().clone(),
-                                symbol_and_decimal_places.decimal_places(),
-                            )
-                        },
-                    )?;
-
-                    Some(Route {
-                        pool_id: swap.to.pool_id,
-                        from: TickerSymbolDecimalPlaces {
-                            ticker: swap.from,
-                            symbol: from_symbol,
-                            decimal_places: from_decimal_places,
-                        },
-                        to: TickerSymbolDecimalPlaces {
-                            ticker: swap.to.target,
-                            symbol: to_symbol,
-                            decimal_places: to_decimal_places,
-                        },
-                    })
+        query_currencies(&mut self.node_wasm_query_client, oracle_address)
+            .await
+            .map(|currencies| {
+                swap_legs.into_iter().filter_map(move |swap| {
+                    currencies
+                        .get(&swap.from)
+                        .zip(currencies.get(&swap.to.target))
+                        .map(|(from, to)| Route {
+                            pool_id: swap.to.pool_id,
+                            from: TickerSymbolDecimalPlaces {
+                                ticker: swap.from,
+                                symbol: from.dex_symbol.clone(),
+                                decimal_places: from.decimal_digits,
+                            },
+                            to: TickerSymbolDecimalPlaces {
+                                ticker: swap.to.target,
+                                symbol: to.dex_symbol.clone(),
+                                decimal_places: to.decimal_digits,
+                            },
+                        })
                 })
-        })
+            })
     }
 }
 
@@ -115,9 +93,10 @@ impl Provider for Osmosis {
             Result<Price<CoinWithDecimalPlaces>, ProviderError>,
         > = JoinSet::new();
 
-        let routes_iter = self
-            .query_supported_currencies(self.node_client.raw_grpc())
-            .await?;
+        let routes_iter =
+            self.query_supported_currencies().await.map_err(|error| {
+                ProviderError::WasmQuery(self.instance_id.clone(), error)
+            })?;
 
         for Route {
             pool_id,
@@ -215,23 +194,13 @@ impl FromConfig<false> for Osmosis {
 
     async fn from_config<Config>(
         id: &str,
-        mut config: Config,
+        config: Config,
         node_client: &NodeClient,
     ) -> Result<Self, Self::ConstructError>
     where
         Config: ProviderConfigExt<false>,
     {
-        let currencies = config
-            .misc_mut()
-            .remove("currencies")
-            .ok_or(ConstructError::MissingField("currencies"))
-            .and_then(|value: Value| {
-                value.try_into().map_err(|error: toml::de::Error| {
-                    ConstructError::DeserializeField("currencies", error)
-                })
-            })?;
-
-        let oracle_addr: Arc<str> = config.oracle_addr().clone();
+        let oracle_address: Arc<str> = config.oracle_addr().clone();
 
         if let Some(fields) = super::left_over_fields(config.into_misc()) {
             Err(ConstructError::UnknownFields(fields))
@@ -245,11 +214,10 @@ impl FromConfig<false> for Osmosis {
                 .await
                 .map(|healthcheck| Self {
                     instance_id: id.to_string(),
-                    node_client: node_client.clone(),
-                    oracle_addr,
+                    node_wasm_query_client: node_client.wasm_query_client(),
+                    oracle_address,
                     channel: osmosis_client.raw_grpc(),
                     healthcheck,
-                    currencies,
                 })
                 .map_err(From::from)
         }
@@ -258,10 +226,6 @@ impl FromConfig<false> for Osmosis {
 
 #[derive(Debug, Error)]
 pub(crate) enum ConstructError {
-    #[error("Missing \"{0}\" field in configuration file!")]
-    MissingField(&'static str),
-    #[error("Failed to deserialize field \"{0}\"! Cause: {1}")]
-    DeserializeField(&'static str, toml::de::Error),
     #[error("Unknown fields found! Unknown fields: {0}")]
     UnknownFields(Box<str>),
     #[error("Failed to fetch Osmosis node's gRPC URI from environment variables! Cause: {0}")]
@@ -276,10 +240,4 @@ struct Route {
     pool_id: PoolId,
     from: TickerSymbolDecimalPlaces,
     to: TickerSymbolDecimalPlaces,
-}
-
-struct TickerSymbolDecimalPlaces {
-    ticker: Ticker,
-    symbol: Arc<SymbolUnsized>,
-    decimal_places: u8,
 }

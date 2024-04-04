@@ -22,32 +22,6 @@ mod providers;
 mod raw;
 mod str_pool;
 
-pub(crate) type TickerUnsized = str;
-pub(crate) type Ticker = String;
-
-pub(crate) type SymbolUnsized = str;
-
-pub(crate) type Currencies = BTreeMap<Ticker, SymbolAndDecimalPlaces>;
-
-#[derive(Debug, Deserialize)]
-#[must_use]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) struct SymbolAndDecimalPlaces {
-    #[serde(deserialize_with = "deserialize_arc_str")]
-    denom: Arc<SymbolUnsized>,
-    decimal_places: u8,
-}
-
-impl SymbolAndDecimalPlaces {
-    pub const fn denom(&self) -> &Arc<SymbolUnsized> {
-        &self.denom
-    }
-
-    pub const fn decimal_places(&self) -> u8 {
-        self.decimal_places
-    }
-}
-
 #[derive(Debug)]
 #[must_use]
 pub(crate) struct Config {
@@ -243,11 +217,4 @@ pub(crate) struct ComparisonProviderIdAndMaxDeviation {
 #[must_use]
 pub(crate) struct ComparisonProvider {
     pub provider: Provider,
-}
-
-fn deserialize_arc_str<'de, D>(deserializer: D) -> Result<Arc<str>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    String::deserialize(deserializer).map(Into::into)
 }

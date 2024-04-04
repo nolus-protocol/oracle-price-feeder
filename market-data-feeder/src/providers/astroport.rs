@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use astroport::{
     asset::AssetInfo,
@@ -19,12 +19,10 @@ use chain_comms::{
 };
 
 use crate::{
-    config::{
-        Currencies, EnvError, ProviderConfigExt, SymbolAndDecimalPlaces,
+    config::{EnvError, ProviderConfigExt},
+    oracle::{
+        query_currencies, query_supported_currencies, SymbolAndDecimalPlaces,
         SymbolUnsized,
-    },
-    messages::{
-        QueryMsg as OracleQueryMsg, SupportedCurrencyPairsResponse, SwapLeg,
     },
     price::{CoinWithDecimalPlaces, Price},
     provider::{FromConfig, Provider, ProviderError},
@@ -33,11 +31,10 @@ use crate::{
 pub(super) struct Astroport {
     instance_id: String,
     node_wasm_query_client: WasmQueryClient<TonicChannel>,
-    oracle_addr: Arc<str>,
-    wasm_query_client: WasmQueryClient<TonicChannel>,
+    oracle_address: Arc<str>,
+    dex_wasm_query_client: WasmQueryClient<TonicChannel>,
     router_contract: Arc<str>,
     healthcheck: Healthcheck,
-    currencies: Currencies,
 }
 
 impl Astroport {
@@ -58,41 +55,40 @@ impl Astroport {
         .map_err(Into::into)
     }
 
-    async fn supported_currencies_intersection(
-        &self,
+    async fn query_supported_currencies(
+        &mut self,
     ) -> Result<
-        impl Iterator<Item = (String, Arc<str>, u8, String, Arc<str>, u8)> + '_,
-        ProviderError,
+        impl Iterator<
+            Item = (
+                (String, SymbolAndDecimalPlaces),
+                (String, SymbolAndDecimalPlaces),
+            ),
+        >,
+        query::error::Wasm,
     > {
-        query::wasm_smart::<SupportedCurrencyPairsResponse>(
-            &mut self.node_wasm_query_client.clone(),
-            self.oracle_addr.to_string(),
-            OracleQueryMsg::SUPPORTED_CURRENCY_PAIRS.to_vec(),
+        let oracle_address = self.oracle_address.to_string();
+
+        let swap_legs = query_supported_currencies(
+            &mut self.node_wasm_query_client,
+            oracle_address.clone(),
         )
-        .await
-        .map(|supported_currencies: SupportedCurrencyPairsResponse| {
-            supported_currencies
-                .into_iter()
-                .filter_map(|swap_leg: SwapLeg| {
-                    self.currencies.get(&swap_leg.from).and_then(
-                        |base: &SymbolAndDecimalPlaces| {
-                            self.currencies.get(&swap_leg.to.target).map(
-                                |quote: &SymbolAndDecimalPlaces| {
-                                    (
-                                        swap_leg.from,
-                                        base.denom().clone(),
-                                        base.decimal_places(),
-                                        swap_leg.to.target,
-                                        quote.denom().clone(),
-                                        quote.decimal_places(),
-                                    )
-                                },
+        .await?;
+
+        query_currencies(&mut self.node_wasm_query_client, oracle_address)
+            .await
+            .map(|currencies| {
+                swap_legs.into_iter().filter_map(move |swap_leg| {
+                    currencies
+                        .get(&swap_leg.from)
+                        .zip(currencies.get(&swap_leg.to.target))
+                        .map(|(from, to)| {
+                            (
+                                (swap_leg.from, from.clone()),
+                                (swap_leg.to.target, to.clone()),
                             )
-                        },
-                    )
+                        })
                 })
-        })
-        .map_err(From::from)
+            })
     }
 }
 
@@ -115,28 +111,24 @@ impl Provider for Astroport {
         > = JoinSet::new();
 
         let supported_currencies_iter =
-            self.supported_currencies_intersection().await?;
+            self.query_supported_currencies().await.map_err(|error| {
+                ProviderError::WasmQuery(self.instance_id.clone(), error)
+            })?;
 
-        for (
-            base_ticker,
-            base_dex_denom,
-            base_decimal_places,
-            quote_ticker,
-            quote_dex_denom,
-            quote_decimal_places,
-        ) in supported_currencies_iter
+        for ((from_ticker, from_currency), (to_ticker, to_currency)) in
+            supported_currencies_iter
         {
-            let mut wasm_query_client: WasmQueryClient<TonicChannel> =
-                self.wasm_query_client.clone();
+            let mut astroport_wasm_query_client: WasmQueryClient<TonicChannel> =
+                self.dex_wasm_query_client.clone();
 
             let router_contract: Arc<str> = self.router_contract.clone();
 
             let max_decimal_places: u8 =
-                base_decimal_places.max(quote_decimal_places);
+                from_currency.decimal_digits.max(to_currency.decimal_digits);
 
             set.spawn(async move {
                 let query_message =
-                    Self::query_message(&base_dex_denom, &quote_dex_denom, max_decimal_places)?;
+                    Self::query_message(&from_currency.dex_symbol, &to_currency.dex_symbol, max_decimal_places)?;
 
                 debug!(query_message = %String::from_utf8_lossy(&query_message), "Query message");
 
@@ -144,29 +136,29 @@ impl Provider for Astroport {
                     astroport::router::SimulateSwapOperationsResponse,
                     query::error::Wasm,
                 > = query::wasm_smart(
-                    &mut wasm_query_client,
+                    &mut astroport_wasm_query_client,
                     router_contract.to_string(),
                     query_message,
                 )
-                .await;
+                    .await;
 
                 match query_result {
                     Ok(astroport::router::SimulateSwapOperationsResponse {
-                        amount: quote_amount,
-                    }) => Ok(Price::new(
+                           amount: quote_amount,
+                       }) => Ok(Price::new(
                         CoinWithDecimalPlaces::new(
                             10_u128.pow(max_decimal_places.into()),
-                            base_ticker,
-                            base_decimal_places,
+                            from_ticker,
+                            from_currency.decimal_digits,
                         ),
                         CoinWithDecimalPlaces::new(
                             quote_amount.u128(),
-                            quote_ticker,
-                            quote_decimal_places,
+                            to_ticker,
+                            to_currency.decimal_digits,
                         ),
                     )),
                     Err(error) => Err(ProviderError::WasmQuery(
-                        format!(r#"currency pair = "{base_ticker}/{quote_ticker}""#),
+                        format!(r#"currency pair = "{from_ticker}/{to_ticker}""#),
                         error,
                     )),
                 }
@@ -193,7 +185,6 @@ impl FromConfig<false> for Astroport {
     {
         const GRPC_URI_ENV_NAME: &str = "grpc_uri";
         const ROUTER_CONTRACT_ENV_NAME: &str = "router_addr";
-        const CURRENCIES_FIELD: &str = "currencies";
 
         let grpc_uri = Config::fetch_from_env(id, GRPC_URI_ENV_NAME)
             .map_err(ConstructError::FetchGrpcUri)?;
@@ -205,31 +196,20 @@ impl FromConfig<false> for Astroport {
 
         let oracle_addr: Arc<str> = config.oracle_addr().clone();
 
-        let mut config: BTreeMap<String, toml::Value> = config.into_misc();
-
-        let currencies: Currencies = config
-            .remove(CURRENCIES_FIELD)
-            .ok_or(ConstructError::MissingField(CURRENCIES_FIELD))?
-            .try_into()
-            .map_err(|error: toml::de::Error| {
-                ConstructError::DeserializeField(CURRENCIES_FIELD, error)
-            })?;
-
-        if let Some(fields) = super::left_over_fields(config) {
+        if let Some(fields) = super::left_over_fields(config.into_misc()) {
             Err(ConstructError::UnknownFields(fields))
         } else {
-            let astroport_client = NodeClient::new(&grpc_uri, None).await?;
+            let dex_client = NodeClient::new(&grpc_uri, None).await?;
 
-            Healthcheck::new(astroport_client.tendermint_service_client())
+            Healthcheck::new(dex_client.tendermint_service_client())
                 .await
                 .map(|healthcheck| Self {
                     instance_id: id.to_string(),
                     node_wasm_query_client: node_client.wasm_query_client(),
-                    oracle_addr,
-                    wasm_query_client: astroport_client.wasm_query_client(),
+                    oracle_address: oracle_addr,
+                    dex_wasm_query_client: dex_client.wasm_query_client(),
                     router_contract,
                     healthcheck,
-                    currencies,
                 })
                 .map_err(From::from)
         }
@@ -238,10 +218,6 @@ impl FromConfig<false> for Astroport {
 
 #[derive(Debug, Error)]
 pub(crate) enum ConstructError {
-    #[error("Missing \"{0}\" field in configuration file!")]
-    MissingField(&'static str),
-    #[error("Failed to deserialize field \"{0}\"! Cause: {1}")]
-    DeserializeField(&'static str, toml::de::Error),
     #[error("Unknown fields found! Unknown fields: {0}")]
     UnknownFields(Box<str>),
     #[error(

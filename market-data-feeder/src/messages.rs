@@ -12,6 +12,8 @@ impl QueryMsg {
 
     pub const SUPPORTED_CURRENCY_PAIRS: &'static [u8] =
         br#"{"supported_currency_pairs":{}}"#;
+
+    pub const CURRENCIES: &'static [u8] = br#"{"currencies":{}}"#;
 }
 
 pub(crate) type PoolId = u64;

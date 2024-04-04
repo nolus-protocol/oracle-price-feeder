@@ -5,7 +5,7 @@ use serde::{
 };
 use thiserror::Error;
 
-use crate::config::{Ticker, TickerUnsized};
+use crate::oracle::{Ticker, TickerUnsized};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) struct Ratio {

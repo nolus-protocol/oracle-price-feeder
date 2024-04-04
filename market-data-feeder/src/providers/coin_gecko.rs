@@ -18,12 +18,14 @@ use thiserror::Error;
 use tokio::task::{block_in_place, JoinSet};
 use toml::Value;
 
-use chain_comms::client::Client as NodeClient;
-use chain_comms::interact::healthcheck::Healthcheck;
+use chain_comms::{
+    client::Client as NodeClient, interact::healthcheck::Healthcheck,
+};
 
 use crate::{
-    config::{self, ProviderConfigExt, Ticker, TickerUnsized},
+    config::{self, ProviderConfigExt},
     deviation,
+    oracle::{Ticker, TickerUnsized},
     price::{
         self, Coin, CoinWithDecimalPlaces, CoinWithoutDecimalPlaces, Price,
         Ratio,
@@ -260,10 +262,10 @@ impl SanityCheck {
             let Ok(regex): Result<Regex, regex::Error> = RegexBuilder::new(
                 r#"^\s*\{\s*"[\w\-]+"\s*:\s*\{\s*"[\w\-]*"\s*:\s*(\d+(?:\.\d+)?)\s*\}\s*\}\s*$"#,
             )
-            .case_insensitive(true)
-            .ignore_whitespace(false)
-            .multi_line(true)
-            .build() else {
+                .case_insensitive(true)
+                .ignore_whitespace(false)
+                .multi_line(true)
+                .build() else {
                 unreachable!()
             };
 

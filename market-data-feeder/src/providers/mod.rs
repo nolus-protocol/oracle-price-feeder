@@ -1,8 +1,11 @@
-use std::{collections::BTreeMap, convert::identity, future::Future};
+use std::{
+    collections::BTreeMap, convert::identity, future::Future, sync::Arc,
+};
 
 use tokio::task::JoinSet;
 
 use crate::{
+    oracle::{SymbolUnsized, Ticker},
     price::{Coin, Price},
     provider::{ComparisonProvider, FromConfig, Provider, ProviderError},
 };
@@ -97,6 +100,12 @@ fn left_over_fields(config: BTreeMap<String, toml::Value>) -> Option<Box<str>> {
             accumulator
         })
         .map(String::into_boxed_str)
+}
+
+struct TickerSymbolDecimalPlaces {
+    ticker: Ticker,
+    symbol: Arc<SymbolUnsized>,
+    decimal_places: u8,
 }
 
 async fn collect_prices_from_task_set<C>(

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use bnum::BUint;
 
 use crate::{
-    config::Ticker,
+    oracle::Ticker,
     price::{Coin, CoinWithDecimalPlaces, Price},
     provider::PriceComparisonGuardError,
 };
