@@ -1,3 +1,9 @@
+FROM docker.io/library/debian:bookworm-slim as code
+
+COPY "./" "/code/"
+
+RUN ["rm", "-r", "-f", "/code/configurations/"]
+
 FROM docker.io/library/rust:latest as compile
 
 RUN ["apt-get", "update"]
@@ -6,15 +12,15 @@ RUN ["apt-get", "upgrade", "--purge", "--yes"]
 
 RUN ["apt-get", "install", "libc6-dev"]
 
-COPY --chown="1000:1000" --chmod="0755" "./" "/code/"
+USER "1000":"1000"
+
+ENV CARGO_INCREMENTAL="0"
+
+COPY --from=code --chown="1000:1000" --chmod="0755" "/code/" "/code/"
 
 ARG package
 
 WORKDIR "/code/"${package}
-
-USER "1000":"1000"
-
-ENV CARGO_INCREMENTAL="0"
 
 RUN ["cargo", "rustc", "--release", "--target", "x86_64-unknown-linux-gnu", \
     "--", "-C", "target-feature=+crt-static"]
