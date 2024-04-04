@@ -45,8 +45,13 @@ pub enum Raw {
 
 #[derive(Debug, ThisError)]
 pub enum Wasm {
-    #[error("{0}")]
+    #[error("Raw query failed! Cause: {0}")]
     RawQuery(#[from] Raw),
-    #[error("Failed to deserialize smart contract's query response from JSON! Cause: {0}")]
-    DeserializeResponse(#[from] serde_json_wasm::de::Error),
+    #[error(
+        "Failed to deserialize smart contract's query response from JSON! \
+        Data: {data:?}; Cause: {error}",
+        data = String::from_utf8_lossy(_0),
+        error = _1,
+    )]
+    DeserializeResponse(Vec<u8>, serde_json_wasm::de::Error),
 }

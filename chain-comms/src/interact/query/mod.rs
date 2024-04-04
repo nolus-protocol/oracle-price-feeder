@@ -143,7 +143,10 @@ where
         .await
         .map_err(|error| WasmError::RawQuery(RawError::Response(error)))
         .and_then(|response| {
-            serde_json_wasm::from_slice(&response.into_inner().data)
-                .map_err(From::from)
+            let data = response.into_inner().data;
+
+            serde_json_wasm::from_slice(&data).map_err(move |error| {
+                WasmError::DeserializeResponse(data, error)
+            })
         })
 }
