@@ -1,10 +1,7 @@
-use std::path::Path;
-
 use cosmrs::{
     crypto::secp256k1::SigningKey, proto::cosmos::auth::v1beta1::BaseAccount,
     AccountId,
 };
-use serde::de::DeserializeOwned;
 use tracing::info;
 
 use crate::{
@@ -27,21 +24,16 @@ where
 }
 
 #[allow(clippy::future_not_send)]
-pub async fn prepare_rpc<C, P>(
-    config_path: P,
+pub async fn prepare_rpc<C>(
+    config: C,
     key_derivation_path: &str,
 ) -> Result<RpcSetup<C>>
 where
-    C: DeserializeOwned + AsRef<config::Node> + Send,
-    P: AsRef<Path> + Send,
+    C: AsRef<config::Node> + Send,
 {
     let signing_key: SigningKey = signing_key(key_derivation_path, "").await?;
 
     info!("Successfully derived private key.");
-
-    let config: C = config::read::<C, P>(config_path).await?;
-
-    info!("Successfully read configuration file.");
 
     let node_client: NodeClient =
         NodeClient::from_config(config.as_ref()).await?;

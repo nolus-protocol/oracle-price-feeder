@@ -189,8 +189,8 @@ async fn processing_loop<Impl>(
         node_client,
         node_config,
         signer,
-        tick_time: config.tick_time,
-        poll_time: config.poll_time,
+        tick_time: config.tick_time(),
+        poll_time: config.poll_time(),
     };
 
     let mut sequence_mismatch_streak_first_timestamp = None;
@@ -240,7 +240,7 @@ async fn processing_loop<Impl>(
                 preprocess::TxRequest<Impl>,
             > = broadcast::sleep_and_broadcast_tx(
                 &mut api_and_configuration,
-                config.between_tx_margin_time,
+                config.between_tx_margin_time(),
                 tx_request,
                 &tx_result_senders,
                 last_signing_timestamp,
@@ -260,7 +260,7 @@ async fn processing_loop<Impl>(
                             &mut api_and_configuration,
                             &mut sequence_mismatch_streak_first_timestamp,
                             broadcast_timestamp,
-                            config.tick_time,
+                            config.tick_time(),
                             error,
                         )
                         .await;

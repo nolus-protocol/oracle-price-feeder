@@ -11,6 +11,10 @@ pub(crate) enum Application {
     SettingGlobalLogDispatcher(
         #[from] tracing::dispatcher::SetGlobalDefaultError,
     ),
+    #[error("Couldn't read configuration file! {0}")]
+    ReadConfiguration(std::io::Error),
+    #[error("Couldn't parse configuration file! {0}")]
+    ParseConfiguration(toml::de::Error),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
     #[error("Failed to serialize version query message as JSON! Cause: {0}")]

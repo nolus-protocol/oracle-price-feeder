@@ -1,7 +1,9 @@
 use semver::Version;
 use thiserror::Error as ThisError;
 
-use chain_comms::reexport::cosmrs::proto::prost::EncodeError;
+use chain_comms::{
+    config::ReadFromEnvError, reexport::cosmrs::proto::prost::EncodeError,
+};
 
 #[derive(Debug, ThisError)]
 pub enum Application {
@@ -9,6 +11,8 @@ pub enum Application {
     SettingGlobalLogDispatcher(
         #[from] tracing::dispatcher::SetGlobalDefaultError,
     ),
+    #[error("Couldn't parse configuration file! {0}")]
+    ParseConfiguration(ReadFromEnvError),
     #[error("Setting up RPC environment failed! Cause: {0}")]
     RpcSetup(#[from] chain_comms::rpc_setup::error::Error),
     #[error("Failed to query admin contract! Cause: {0}")]

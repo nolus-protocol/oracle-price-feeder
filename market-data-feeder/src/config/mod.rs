@@ -39,20 +39,24 @@ impl<'de> Deserialize<'de> for Config {
     where
         D: Deserializer<'de>,
     {
+        let node = NodeConfig::read_from_env().map_err(D::Error::custom)?;
+
+        let broadcast =
+            BroadcastConfig::read_from_env().map_err(D::Error::custom)?;
+
         let mut str_pool: StrPool = StrPool::new();
 
         let raw::Config {
             hard_gas_limit,
-            broadcast,
-            node,
             oracles: raw_oracles,
             providers: raw_providers,
             comparison_providers: raw_comparison_providers,
         }: raw::Config = raw::Config::deserialize(deserializer)?;
 
         let time_before_feeding: Duration =
-            read_from_env::<u64, D>("SECONDS_BEFORE_FEEDING")
-                .map(Duration::from_secs)?;
+            read_from_env::<u64>("SECONDS_BEFORE_FEEDING")
+                .map(Duration::from_secs)
+                .map_err(D::Error::custom)?;
 
         let mut oracles: BTreeMap<Arc<str>, Arc<str>> = BTreeMap::new();
 

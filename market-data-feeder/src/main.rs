@@ -80,13 +80,19 @@ async fn main() -> Result<()> {
 
 #[allow(clippy::future_not_send)]
 async fn app_main() -> Result<()> {
+    let configuration = std::fs::read_to_string("market-data-feeder.toml")
+        .map_err(error::Application::ReadConfiguration)?;
+
+    let configuration = toml::from_str(&{ configuration })
+        .map_err(error::Application::ParseConfiguration)?;
+
     let RpcSetup {
         signer,
         config,
         node_client,
         ..
     }: RpcSetup<Config> =
-        prepare_rpc("market-data-feeder.toml", DEFAULT_COSMOS_HD_PATH).await?;
+        prepare_rpc(configuration, DEFAULT_COSMOS_HD_PATH).await?;
 
     check_compatibility(&config, &mut node_client.wasm_query_client()).await?;
 
@@ -94,6 +100,10 @@ async fn app_main() -> Result<()> {
         let node_client: NodeClient = node_client.clone();
 
         let signer_address: Arc<str> = Arc::from(signer.signer_address());
+
+        let tick_time = config.broadcast.tick_time();
+
+        let poll_time = config.broadcast.poll_time();
 
         move |tx_request_sender| async move {
             info!("Starting workers...");
@@ -106,8 +116,8 @@ async fn app_main() -> Result<()> {
                 signer_address,
                 hard_gas_limit: config.hard_gas_limit,
                 time_before_feeding: config.time_before_feeding,
-                tick_time: config.broadcast.tick_time,
-                poll_time: config.broadcast.poll_time,
+                tick_time,
+                poll_time,
             })
             .await
             .map(|spawn_result| {

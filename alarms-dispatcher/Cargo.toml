@@ -17,6 +17,7 @@ serde.workspace = true
 serde-json-wasm.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["io-std", "io-util", "time", "fs"] }
+toml.workspace = true
 tracing.workspace = true
 tracing-appender.workspace = true
 tracing-subscriber.workspace = true

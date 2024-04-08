@@ -80,15 +80,16 @@ async fn main() -> AppResult<()> {
 
 #[allow(clippy::future_not_send)]
 async fn app_main() -> AppResult<()> {
-    let rpc_setup: RpcSetup<Config> = prepare_rpc::<Config, _>(
-        "alarms-dispatcher.toml",
-        DEFAULT_COSMOS_HD_PATH,
-    )
-    .await
-    .inspect(|_| info!("Connected to RPC successfully."))
-    .inspect_err(|error| {
-        error!(?error, "Failed to connect to RPC! Cause: {error}");
-    })?;
+    let config = Config::read_from_env()
+        .map_err(error::Application::ParseConfiguration)?;
+
+    let rpc_setup: RpcSetup<Config> =
+        prepare_rpc(config, DEFAULT_COSMOS_HD_PATH)
+            .await
+            .inspect(|_| info!("Connected to RPC successfully."))
+            .inspect_err(|error| {
+                error!(?error, "Failed to connect to RPC! Cause: {error}");
+            })?;
 
     let contracts =
         fetch_contracts(&rpc_setup.node_client, &rpc_setup.config).await?;
@@ -212,9 +213,9 @@ where
 
         let signer_address = signer.signer_address().to_owned();
 
-        let tick_time = config.broadcast.tick_time;
+        let tick_time = config.broadcast.tick_time();
 
-        let poll_time = config.broadcast.poll_time;
+        let poll_time = config.broadcast.poll_time();
 
         move |tx_sender| async move {
             block_in_place(|| {
