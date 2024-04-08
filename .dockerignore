@@ -99,3 +99,6 @@ Dockerfile
 *.Dockerfile
 Containerfile
 *.Containerfile
+
+### GitHub Configuration
+.github/
