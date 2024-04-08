@@ -22,7 +22,8 @@ ARG package
 
 WORKDIR "/code/"${package}
 
-RUN ["cargo", "rustc", "--release", "--target", "x86_64-unknown-linux-gnu", \
+RUN --mount=type=cache,id="${package}",target="/usr/local/cargo/registry",\
+uid="1000" ["cargo", "rustc", "--release", "--target", "x86_64-unknown-linux-gnu", \
     "--", "-C", "target-feature=+crt-static"]
 
 FROM gcr.io/distroless/static:latest AS service
