@@ -1,20 +1,5 @@
 hard_gas_limit = 1_000_000
 
-[broadcast]
-tick_time_seconds = 60
-poll_time_seconds = 15
-between_tx_margin_seconds = 5
-
-[node]
-address_prefix = "nolus"
-fee_denom = "unls"
-gas_adjustment_numerator = 107
-gas_adjustment_denominator = 100
-gas_price_numerator = 1
-gas_price_denominator = 390
-fee_adjustment_numerator = 5
-fee_adjustment_denominator = 1
-
 [oracles]
 osmosis-osmosis-usdc_axelar = "nolus1ldu3nwcvaqwwfk5za68xpwt4zzsjd74vl8ezx99hhk9rs7lslsvsgq7mm4"
 neutron-astroport-usdc_axelar = "nolus1xzdk79z2gtq5vevs2edzyjaw8ue2vf2qmaecu6hyxcr3mwgfchtq8dyfk9"
