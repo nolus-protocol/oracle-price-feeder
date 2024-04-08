@@ -88,12 +88,13 @@ jobs:
       fail-fast: true
       matrix:
         package:
-          - "alarms-dispatcher"
           - "market-data-feeder"
         configuration:
           - "dev"
           - "test"
           - "main"
+        include:
+          - package: "alarms-dispatcher"
     # GitHub Actions escaped string evaluation
     name: "Build image [${{ matrix.package }}; ${{ matrix.configuration }}]"
     permissions:
@@ -113,8 +114,8 @@ jobs:
         run: |-
           set -e
 
-          docker build -t "service" -f "./Containerfile" --pull \
-            --build-arg "package=${package}" \
+          docker buildx build -t "service" -f "./Containerfile" --pull \
+            --target "${package}" --build-arg "package=${package}" \
             --build-arg "configuration=${configuration}" .
       - name: "Login at container registry"
         env:
@@ -123,14 +124,18 @@ jobs:
         run: |
           set -e
 
-          echo "${github_token}" \
-            | docker login "${container_registry}" --username "\$" \
-                --password-stdin
+          echo "${github_token}" | docker login "${container_registry}" \
+            --username "\$" --password-stdin
       - name: "Push image to container registry"
         run: |
           set -e
 
-          readonly image_name="nolus-${package}-${configuration}"
+          if [ -z "${configuration}" ]
+          then
+            readonly image_name="nolus-${package}"
+          else
+            readonly image_name="nolus-${package}-${configuration}"
+          fi
 
           readonly base_url="${container_registry}/${container_repository}"
 
