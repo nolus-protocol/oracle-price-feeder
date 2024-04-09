@@ -66,6 +66,7 @@ FROM service AS market-data-feeder
 
 ENV SECONDS_BEFORE_FEEDING="###"
 
+ARG package
 ARG configuration
 
 COPY --chown="0:0" --chmod="0444" \
