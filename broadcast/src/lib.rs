@@ -30,6 +30,7 @@ use chain_comms::{
             error::Error as GetTxResponseError, get_tx_response,
             Response as TxResponse,
         },
+        healthcheck::Healthcheck,
         TxHash,
     },
     signer::Signer,
@@ -50,6 +51,7 @@ use self::{
 mod broadcast;
 mod cache;
 pub mod config;
+pub mod error;
 pub mod generators;
 pub mod log;
 pub mod mode;
@@ -62,12 +64,13 @@ pub async fn broadcast<Impl, SpawnGeneratorsF, SpawnGeneratorsFuture, SpawnE>(
     node_client: NodeClient,
     node_config: NodeConfig,
     spawn_generators: SpawnGeneratorsF,
-) -> Result<(), SpawnE>
+) -> Result<(), error::Error<SpawnE>>
 where
     Impl: mode::Impl,
     SpawnGeneratorsF:
         FnOnce(TxRequestSender<Impl>) -> SpawnGeneratorsFuture + Send,
     SpawnGeneratorsFuture: Future<Output = Result<SpawnResult, SpawnE>> + Send,
+    SpawnE: std::error::Error,
 {
     let (tx_sender, tx_receiver): (
         UnboundedSender<TxRequest<Impl>>,
@@ -77,7 +80,9 @@ where
     let SpawnResult {
         mut tx_generators_set,
         tx_result_senders,
-    }: SpawnResult = spawn_generators(tx_sender).await?;
+    }: SpawnResult = spawn_generators(tx_sender)
+        .await
+        .map_err(error::Error::SpawnGenerators)?;
 
     let mut signal = pin!(tokio::signal::ctrl_c());
 
@@ -98,7 +103,7 @@ where
         true
     };
 
-    select! {
+    let result = select! {
         result = signal, if signal_installed => {
             match result {
                 Ok(()) => {
@@ -108,8 +113,10 @@ where
                     error!(?error, "Error received from Ctrl+C signal handler! Stopping task! Error: {error}");
                 }
             }
+
+            Ok(())
         },
-        () = processing_loop(
+        result = processing_loop(
             signer,
             config,
             node_client,
@@ -117,12 +124,12 @@ where
             tx_receiver,
             &mut tx_generators_set,
             tx_result_senders,
-        ) => {}
-    }
+        ) => result,
+    };
 
     tx_generators_set.shutdown().await;
 
-    Ok(())
+    result
 }
 
 pub async fn poll_delivered_tx(
@@ -166,7 +173,7 @@ pub(crate) struct ApiAndConfiguration {
 
 #[inline]
 #[allow(clippy::future_not_send)]
-async fn processing_loop<Impl>(
+async fn processing_loop<Impl, E>(
     signer: Signer,
     config: Config,
     node_client: NodeClient,
@@ -174,8 +181,10 @@ async fn processing_loop<Impl>(
     mut tx_receiver: UnboundedReceiver<TxRequest<Impl>>,
     tx_generators_set: &mut JoinSet<Infallible>,
     mut tx_result_senders: BTreeMap<usize, CommitResultSender>,
-) where
+) -> Result<(), error::Error<E>>
+where
     Impl: mode::Impl,
+    E: std::error::Error,
 {
     let mut last_signing_timestamp: Instant = Instant::now();
 
@@ -184,6 +193,9 @@ async fn processing_loop<Impl>(
     let mut requests_cache: cache::TxRequests<Impl> = cache::TxRequests::new();
 
     let mut preprocessed_tx_request: Option<preprocess::TxRequest<Impl>> = None;
+
+    let mut healthcheck =
+        Healthcheck::new(node_client.tendermint_service_client()).await?;
 
     let mut api_and_configuration = ApiAndConfiguration {
         node_client,
@@ -196,6 +208,8 @@ async fn processing_loop<Impl>(
     let mut sequence_mismatch_streak_first_timestamp = None;
 
     loop {
+        Impl::healthcheck(&mut healthcheck).await?;
+
         try_join_generator_task(tx_generators_set).await;
 
         if matches!(
@@ -205,7 +219,7 @@ async fn processing_loop<Impl>(
         ) {
             info!("All generator threads stopped. Exiting.");
 
-            return;
+            return Ok(());
         }
 
         if preprocessed_tx_request.as_ref().map_or(

@@ -411,32 +411,40 @@ async fn run_comparison_provider_healthcheck(
     comparison_provider_id: &str,
 ) -> Result<(), healthcheck_error::Error> {
     healthcheck
-        .wait_until_healthy({
-            let mut counter: u8 = 0;
+        .wait_until_healthy(
+            {
+                let mut counter: u8 = 0;
 
-            move |status_type| {
-                if counter == 0 {
-                    match status_type {
-                        WaitUntilHealthyStatusType::Syncing => {
-                            warn!(
-                                comparison_provider_id,
-                                "Comparison provider responded with syncing \
-                                status."
-                            );
-                        },
-                        WaitUntilHealthyStatusType::BlockNotIncremented => {
-                            warn!(
-                                comparison_provider_id,
-                                "Comparison provider didn't respond with an \
-                                incremented block height."
-                            );
-                        },
+                move |status_type| {
+                    if counter == 0 {
+                        match status_type {
+                            WaitUntilHealthyStatusType::Syncing => {
+                                warn!(
+                                    comparison_provider_id,
+                                    "Comparison provider responded with \
+                                    syncing status."
+                                );
+                            },
+                            WaitUntilHealthyStatusType::BlockNotIncremented => {
+                                warn!(
+                                    comparison_provider_id,
+                                    "Comparison provider didn't respond with \
+                                    an incremented block height."
+                                );
+                            },
+                        }
                     }
-                }
 
-                counter = (counter + 1) % 10;
-            }
-        })
+                    counter = (counter + 1) % 10;
+                }
+            },
+            move || {
+                info!(
+                    comparison_provider_id,
+                    "Comparison provider is healthy again."
+                );
+            },
+        )
         .await
 }
 
@@ -690,30 +698,34 @@ where
 {
     provider
         .healthcheck()
-        .wait_until_healthy({
-            let mut counter: u8 = 0;
+        .wait_until_healthy(
+            {
+                let mut counter: u8 = 0;
 
-            move |status_type| {
-                if counter == 0 {
-                    match status_type {
-                        WaitUntilHealthyStatusType::Syncing => {
-                            warn!(
-                                provider_id,
-                                "Provider responded with syncing status."
-                            );
-                        },
-                        WaitUntilHealthyStatusType::BlockNotIncremented => {
-                            warn!(
-                    provider_id,
-                    "Provider didn't respond with an incremented block height."
-                );
-                        },
+                move |status_type| {
+                    if counter == 0 {
+                        match status_type {
+                            WaitUntilHealthyStatusType::Syncing => {
+                                warn!(
+                                    provider_id,
+                                    "Provider responded with syncing status."
+                                );
+                            },
+                            WaitUntilHealthyStatusType::BlockNotIncremented => {
+                                warn!(
+                                    provider_id,
+                                    "Provider didn't respond with an \
+                                    incremented block height."
+                                );
+                            },
+                        }
                     }
-                }
 
-                counter = (counter + 1) % 10;
-            }
-        })
+                    counter = (counter + 1) % 10;
+                }
+            },
+            move || info!(provider_id, "Provider is healthy again."),
+        )
         .await
 }
 

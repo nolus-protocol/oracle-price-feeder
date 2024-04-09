@@ -20,13 +20,15 @@ use tracing_appender::{
 };
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
-use crate::generators::TasksConfig;
+use broadcast::error::Error as BroadcastError;
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
     rpc_setup::{prepare_rpc, RpcSetup},
     signing_key::DEFAULT_COSMOS_HD_PATH,
 };
+
+use crate::generators::TasksConfig;
 
 use self::{
     config::Config, error::AppResult, generators::Contract, messages::QueryMsg,
@@ -243,4 +245,13 @@ where
         spawn_generators,
     )
     .await
+    .map_err(|error| match error {
+        BroadcastError::HealthcheckConstruct(error) => {
+            error::DispatchAlarms::HealthcheckConstruct(error)
+        },
+        BroadcastError::Healthcheck(error) => {
+            error::DispatchAlarms::Healthcheck(error)
+        },
+        BroadcastError::SpawnGenerators(error) => error,
+    })
 }

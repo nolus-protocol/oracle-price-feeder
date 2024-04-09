@@ -2,8 +2,16 @@ use tokio::time::Instant;
 use tracing::{error, error_span, info, warn};
 
 use chain_comms::{
-    client::Client as NodeClient, interact::commit,
-    reexport::tonic::Code as TonicStatusCode, signer::Signer,
+    client::Client as NodeClient,
+    interact::{
+        commit,
+        healthcheck::{
+            error::Error as HealthcheckError, Healthcheck,
+            WaitUntilHealthyStatusType,
+        },
+    },
+    reexport::tonic::Code as TonicStatusCode,
+    signer::Signer,
 };
 
 use crate::cache;
@@ -16,6 +24,46 @@ pub struct Blocking;
 
 impl Impl for Blocking {
     type Expiration = ();
+
+    async fn healthcheck(
+        healthcheck: &mut Healthcheck,
+    ) -> Result<(), HealthcheckError> {
+        let mut counter: u8 = 0;
+
+        let mut last_status = WaitUntilHealthyStatusType::Syncing;
+
+        healthcheck
+            .wait_until_healthy(
+                move |status_type| {
+                    if status_type != last_status {
+                        counter = 0;
+
+                        last_status = status_type;
+                    }
+
+                    if counter == 0 {
+                        match status_type {
+                            WaitUntilHealthyStatusType::Syncing => {
+                                warn!(
+                                    "Connected node responded with syncing \
+                                    status."
+                                );
+                            },
+                            WaitUntilHealthyStatusType::BlockNotIncremented => {
+                                warn!(
+                                    "Connected node didn't respond with an \
+                                    incremented block height."
+                                );
+                            },
+                        }
+                    }
+
+                    counter = (counter + 1) % 10;
+                },
+                move || info!("Connected node is healthy again."),
+            )
+            .await
+    }
 
     #[inline]
     fn purge_cache(cache: &mut cache::TxRequests<Self>) -> PurgeResult {
@@ -54,6 +102,10 @@ pub struct NonBlocking;
 
 impl Impl for NonBlocking {
     type Expiration = Instant;
+
+    async fn healthcheck(_: &mut Healthcheck) -> Result<(), HealthcheckError> {
+        Ok(())
+    }
 
     #[inline]
     fn purge_cache(cache: &mut cache::TxRequests<Self>) -> PurgeResult {

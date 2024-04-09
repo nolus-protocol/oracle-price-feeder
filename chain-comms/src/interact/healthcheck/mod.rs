@@ -47,26 +47,32 @@ impl Healthcheck {
             })
     }
 
-    pub async fn wait_until_healthy<F>(
+    pub async fn wait_until_healthy<NotHealthyF, HealthyF>(
         &mut self,
-        mut f: F,
+        mut not_healthy: NotHealthyF,
+        healthy: HealthyF,
     ) -> Result<(), error::Error>
     where
-        F: FnMut(WaitUntilHealthyStatusType) + Send,
+        NotHealthyF: FnMut(WaitUntilHealthyStatusType) + Send,
+        HealthyF: FnOnce() + Send,
     {
         while let Err(error) = self.check().await {
             match error {
                 error::Error::Syncing(error::CheckSyncing::Syncing) => {
-                    f(WaitUntilHealthyStatusType::Syncing);
+                    not_healthy(WaitUntilHealthyStatusType::Syncing);
                 },
                 error::Error::BlockHeightNotIncremented => {
-                    f(WaitUntilHealthyStatusType::BlockNotIncremented);
+                    not_healthy(
+                        WaitUntilHealthyStatusType::BlockNotIncremented,
+                    );
                 },
                 _ => return Err(error),
             }
 
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
+
+        healthy();
 
         Ok(())
     }
@@ -97,6 +103,7 @@ impl Healthcheck {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WaitUntilHealthyStatusType {
     Syncing,
     BlockNotIncremented,

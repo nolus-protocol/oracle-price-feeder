@@ -2,7 +2,8 @@ use semver::Version;
 use thiserror::Error as ThisError;
 
 use chain_comms::{
-    config::ReadFromEnvError, reexport::cosmrs::proto::prost::EncodeError,
+    config::ReadFromEnvError, interact::healthcheck,
+    reexport::cosmrs::proto::prost::EncodeError,
 };
 
 #[derive(Debug, ThisError)]
@@ -39,6 +40,10 @@ pub type AppResult<T> = Result<T, Application>;
 
 #[derive(Debug, ThisError)]
 pub enum DispatchAlarms {
+    #[error("Failed to construct healthcheck client! Cause: {0}")]
+    HealthcheckConstruct(#[from] healthcheck::error::Construct),
+    #[error("Healthcheck failed! Cause: {0}")]
+    Healthcheck(#[from] healthcheck::error::Error),
     #[error("Failed to pre-encode commit message in the Protobuf format! Cause: {0}")]
     PreEncodeCommitMessage(#[from] EncodeError),
     #[error("Failed to serialize query message as JSON! Cause: {0}")]

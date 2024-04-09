@@ -19,7 +19,7 @@ use tracing_appender::{
 };
 use tracing_subscriber::fmt::writer::MakeWriterExt as _;
 
-use broadcast::broadcast;
+use broadcast::{broadcast, error::Error as BroadcastError};
 use chain_comms::{
     client::Client as NodeClient,
     interact::query,
@@ -136,6 +136,15 @@ async fn app_main() -> Result<()> {
         spawn_generators_f,
     )
     .await
+    .map_err(|error| match error {
+        BroadcastError::HealthcheckConstruct(error) => {
+            error::Application::HealthcheckConstruct(error)
+        },
+        BroadcastError::Healthcheck(error) => {
+            error::Application::Healthcheck(error)
+        },
+        BroadcastError::SpawnGenerators(error) => error,
+    })
 }
 
 #[allow(clippy::future_not_send)]

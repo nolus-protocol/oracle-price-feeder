@@ -1,13 +1,22 @@
 use std::future::Future;
 
 use chain_comms::{
-    client::Client as NodeClient, interact::commit, signer::Signer,
+    client::Client as NodeClient,
+    interact::{
+        commit,
+        healthcheck::{error::Error as HealthcheckError, Healthcheck},
+    },
+    signer::Signer,
 };
 
 use crate::cache;
 
 pub trait Impl: Send + Sync + Sized {
     type Expiration: Send + Sync + Sized;
+
+    fn healthcheck(
+        healthcheck: &mut Healthcheck,
+    ) -> impl Future<Output = Result<(), HealthcheckError>> + Send;
 
     fn purge_cache(cache: &mut cache::TxRequests<Self>) -> PurgeResult;
 

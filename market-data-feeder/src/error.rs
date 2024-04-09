@@ -1,5 +1,6 @@
 use std::{error::Error as StdError, sync::Arc};
 
+use chain_comms::interact::healthcheck;
 use semver::Version;
 use thiserror::Error as ThisError;
 
@@ -35,6 +36,10 @@ pub(crate) enum Application {
     InvalidProviderUrl(#[from] url::ParseError),
     #[error("Failed to notify workers to proceed! All receivers closed!")]
     NotifyAllChecksPassed,
+    #[error("Failed to construct healthcheck client! Cause: {0}")]
+    HealthcheckConstruct(#[from] healthcheck::error::Construct),
+    #[error("Healthcheck failed! Cause: {0}")]
+    Healthcheck(#[from] healthcheck::error::Error),
     #[error("Failed to commit price feeding transaction! Cause: {0}")]
     CommitTx(
         #[from] chain_comms::interact::commit::error::GasEstimatingTxCommit,
