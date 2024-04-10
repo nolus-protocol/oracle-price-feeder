@@ -32,7 +32,7 @@ pub fn adjust_gas_limit(
 ) -> NonZeroU64 {
     NonZeroU128::from(gas_limit)
         .checked_mul(node_config.gas_adjustment_numerator().into())
-        .map(|result: NonZeroU128| {
+        .map(|result| {
             result
                 .get()
                 .checked_div(
@@ -41,8 +41,8 @@ pub fn adjust_gas_limit(
                 .and_then(NonZeroU128::new)
                 .unwrap_or(NonZeroU128::MIN)
         })
-        .map_or(gas_limit, |result: NonZeroU128| {
-            NonZeroU64::try_from(result).unwrap_or(NonZeroU64::MAX)
+        .map_or(gas_limit, |result| {
+            NonZeroU64::try_from(result).unwrap_or(hard_gas_limit)
         })
         .min(hard_gas_limit)
 }
