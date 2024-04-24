@@ -1,4 +1,4 @@
-use std::env::{var, VarError};
+use std::env::{var, var_os, VarError};
 
 use cosmrs::{
     bip32::{Language, Mnemonic},
@@ -16,21 +16,31 @@ pub async fn signing_key(
     derivation_path: &str,
     password: &str,
 ) -> Result<SigningKey> {
-    let secret: String = match var("SIGNING_KEY_MNEMONIC") {
-        Ok(secret) => secret,
-        Err(VarError::NotPresent) => {
-            println!("Enter dispatcher's account secret: ");
+    let secret: String = if let Some(path) = var_os("SIGNING_KEY_MNEMONIC_PATH")
+    {
+        tokio::fs::read_to_string(path)
+            .await
+            .map_err(Error::ReadMnemonicFromFile)?
+    } else {
+        match var("SIGNING_KEY_MNEMONIC") {
+            Ok(secret) => secret,
+            Err(VarError::NotPresent) => {
+                println!("Enter dispatcher's account secret: ");
 
-            let mut secret = String::new();
+                let mut secret = String::new();
 
-            // Returns number of read bytes, which is meaningless for current case.
-            let _ = BufReader::new(tokio::io::stdin())
-                .read_line(&mut secret)
-                .await?;
+                // Returns number of read bytes, which is meaningless for current case.
+                let _ = BufReader::new(tokio::io::stdin())
+                    .read_line(&mut secret)
+                    .await
+                    .map_err(Error::ReadMnemonicFromStdin)?;
 
-            secret
-        },
-        Err(VarError::NotUnicode(_)) => return Err(Error::NonUnicodeMnemonic),
+                secret
+            },
+            Err(VarError::NotUnicode(_)) => {
+                return Err(Error::NonUnicodeMnemonic)
+            },
+        }
     };
 
     SigningKey::derive_from_path(

@@ -3,9 +3,13 @@ use thiserror::Error as ThisError;
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error(
+        "Couldn't read secret mnemonic from the provided file path! Cause: {0}"
+    )]
+    ReadMnemonicFromFile(tokio::io::Error),
+    #[error(
         "Couldn't read secret mnemonic from the standard input! Cause: {0}"
     )]
-    ReadingMnemonic(#[from] tokio::io::Error),
+    ReadMnemonicFromStdin(tokio::io::Error),
     #[error("Couldn't read secret mnemonic from environment variable because it can't be encoded as valid UTF-8!")]
     NonUnicodeMnemonic,
     #[error("Invalid mnemonic passed or is not in English! Cause: {0}")]
