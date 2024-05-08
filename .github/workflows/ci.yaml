@@ -13,6 +13,16 @@ on:
     paths-ignore:
       - "README.md"
 
+concurrency:
+  cancel-in-progress: true
+  group: |-
+    ${{ format(
+      '{0}-{1}-{2}',
+      github.ref_name,
+      github.ref_type,
+      github.event_name
+    ) }}
+
 defaults:
   run:
     shell: "sh"
