@@ -208,7 +208,14 @@ where
     let mut sequence_mismatch_streak_first_timestamp = None;
 
     loop {
-        Impl::healthcheck(&mut healthcheck).await?;
+        if let Err::<(), _>(error) = Impl::healthcheck(&mut healthcheck).await {
+            error!(
+                ?error,
+                "Healthcheck failed due to an error! Error: {error}",
+            );
+
+            continue;
+        }
 
         try_join_generator_task(tx_generators_set).await;
 
