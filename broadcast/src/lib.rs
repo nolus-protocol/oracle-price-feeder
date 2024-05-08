@@ -229,23 +229,9 @@ where
             return Ok(());
         }
 
-        if preprocessed_tx_request.as_ref().map_or(
-            true,
-            |preprocess::TxRequest {
-                 sender_id,
-                 expiration,
-                 ..
-             }| {
-                requests_cache.get_mut(sender_id).map_or_else(
-                    || {
-                        matches!(
-                            Impl::filter(expiration),
-                            FilterResult::Expired
-                        )
-                    },
-                    |slot| slot.get_mut().is_some(),
-                )
-            },
+        if filter_expired_preprocessed_tx(
+            &mut requests_cache,
+            &preprocessed_tx_request,
         ) {
             preprocessed_tx_request = preprocess::next_tx_request(
                 &mut api_and_configuration,
@@ -303,6 +289,28 @@ where
             }
         }
     }
+}
+
+fn filter_expired_preprocessed_tx<Impl>(
+    requests_cache: &mut cache::TxRequests<Impl>,
+    preprocessed_tx_request: &Option<preprocess::TxRequest<Impl>>,
+) -> bool
+where
+    Impl: mode::Impl,
+{
+    preprocessed_tx_request.as_ref().map_or(
+        true,
+        |preprocess::TxRequest {
+             sender_id,
+             expiration,
+             ..
+         }| {
+            requests_cache.get_mut(sender_id).map_or_else(
+                || matches!(Impl::filter(expiration), FilterResult::Expired),
+                |slot| slot.get_mut().is_some(),
+            )
+        },
+    )
 }
 
 async fn handle_mempool_error(
