@@ -36,13 +36,11 @@ where
     {
         let id: Box<str> = raw_id.into_boxed_str();
 
-        let oracle_id: Arc<str> = str_pool.get_or_insert(oracle_id);
         let oracle_address: Arc<str> = get_oracle::<D>(oracles, &oracle_id)?;
 
         let provider: ProviderWithComparison = ProviderWithComparison {
             provider: Provider {
                 name: str_pool.get_or_insert(name),
-                oracle_id,
                 oracle_address,
                 misc,
             },

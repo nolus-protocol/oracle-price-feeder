@@ -123,16 +123,8 @@ impl<Config: ProviderConfigExt<true>> ProviderConfig
         self.0.name()
     }
 
-    fn oracle_name(&self) -> &Arc<str> {
-        self.0.oracle_name()
-    }
-
     fn oracle_addr(&self) -> &Arc<str> {
         self.0.oracle_addr()
-    }
-
-    fn misc(&self) -> &BTreeMap<String, toml::Value> {
-        self.0.misc()
     }
 
     fn misc_mut(&mut self) -> &mut BTreeMap<String, toml::Value> {

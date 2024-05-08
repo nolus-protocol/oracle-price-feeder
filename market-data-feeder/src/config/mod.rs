@@ -119,11 +119,7 @@ impl AsRef<NodeConfig> for Config {
 pub(crate) trait ProviderConfig: Sync + Send {
     fn name(&self) -> &Arc<str>;
 
-    fn oracle_name(&self) -> &Arc<str>;
-
     fn oracle_addr(&self) -> &Arc<str>;
-
-    fn misc(&self) -> &BTreeMap<String, toml::Value>;
 
     fn misc_mut(&mut self) -> &mut BTreeMap<String, toml::Value>;
 
@@ -159,7 +155,6 @@ pub(crate) struct EnvError(String, env::VarError);
 #[must_use]
 pub(crate) struct Provider {
     name: Arc<str>,
-    oracle_id: Arc<str>,
     oracle_address: Arc<str>,
     misc: BTreeMap<String, toml::Value>,
 }
@@ -169,16 +164,8 @@ impl ProviderConfig for Provider {
         &self.name
     }
 
-    fn oracle_name(&self) -> &Arc<str> {
-        &self.oracle_id
-    }
-
     fn oracle_addr(&self) -> &Arc<str> {
         &self.oracle_address
-    }
-
-    fn misc(&self) -> &BTreeMap<String, toml::Value> {
-        &self.misc
     }
 
     fn misc_mut(&mut self) -> &mut BTreeMap<String, toml::Value> {
