@@ -1,0 +1,10 @@
+[advisories]
+ignore = [
+    # https://rustsec.org/advisories/RUSTSEC-2024-0338
+    # Crate: cosmwasm-std
+    # Title: Arithmetic overflows in cosmwasm-std
+    # Ignore reason: Affected functions not used.
+    "RUSTSEC-2024-0338",
+]
+informational_warnings = ["unmaintained"]
+severity_threshold = "none"
