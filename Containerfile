@@ -1,4 +1,4 @@
-FROM docker.io/library/debian:bookworm-slim as code
+FROM docker.io/library/debian:stable-slim as code
 
 COPY "./" "/code/"
 
