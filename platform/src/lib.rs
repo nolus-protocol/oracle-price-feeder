@@ -31,11 +31,8 @@ impl Platform {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct PlatformContracts {
-    #[serde(alias = "dispatcher")]
-    pub rewards_dispatcher: Box<str>,
     #[serde(alias = "timealarms")]
     pub time_alarms: Box<str>,
-    pub treasury: Box<str>,
 }
 
 #[derive(Deserialize)]
@@ -83,10 +80,7 @@ pub struct ProtocolDefinition {
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ProtocolContracts {
-    pub leaser: Box<str>,
-    pub lpp: Box<str>,
     pub oracle: Box<str>,
-    pub profit: Box<str>,
 }
 
 async fn query_contract<T>(
