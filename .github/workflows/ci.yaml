@@ -5,12 +5,15 @@ on:
   push:
     branches:
       - "main"
+      - "dev-*.*"
     tags:
       - "*"
   pull_request:
     branches:
       - "main"
+      - "dev-*.*"
     paths-ignore:
+      - ".gitignore"
       - "README.md"
 
 concurrency:
@@ -98,15 +101,10 @@ jobs:
       fail-fast: true
       matrix:
         package:
+          - "alarms-dispatcher"
           - "market-data-feeder"
-        configuration:
-          - "dev"
-          - "test"
-          - "main"
-        include:
-          - package: "alarms-dispatcher"
     # GitHub Actions escaped string evaluation
-    name: "Build image [${{ matrix.package }}; ${{ matrix.configuration }}]"
+    name: "Build image [${{ matrix.package }}]"
     permissions:
       packages: write
     env:
@@ -114,8 +112,6 @@ jobs:
       container_repository: "nolus-protocol"
       package: |-
         ${{ matrix.package }}
-      configuration: |-
-        ${{ matrix.configuration }}
       tag: |-
         ${{ github.ref_name }}
     steps:
@@ -124,9 +120,15 @@ jobs:
         run: |-
           set -e
 
-          docker buildx build -t "service" -f "./Containerfile" --pull \
-            --target "${package}" --build-arg "package=${package}" \
-            --build-arg "configuration=${configuration}" .
+          "docker" \
+            "buildx" \
+            "build" \
+            --tag "service" \
+            --file "./Containerfile" \
+            --pull \
+            --target "${package}" \
+            --build-arg "package=${package}" \
+            .
       - name: "Login at container registry"
         env:
           github_token: |-
@@ -140,29 +142,28 @@ jobs:
         run: |
           set -e
 
-          if [ -z "${configuration}" ]
+          image_name="${package}"
+          readonly image_name
+
+          base_url="${container_registry}/${container_repository}"
+          readonly base_url
+
+          image_url="${base_url}/${image_name}"
+          readonly image_url
+
+          regex="^[[:digit:]]\{1,\}\.[[:digit:]]\{1,\}\.[[:digit:]]\{1,\}\$"
+          readonly regex
+
+          if grep -q -s "${regex}" <<-EOF
+          ${tag}
+          EOF
           then
-            readonly image_name="nolus-${package}"
-          else
-            readonly image_name="nolus-${package}-${configuration}"
+            docker tag "service" "${image_url}:latest"
+
+            docker push "${image_url}:latest"
           fi
 
-          readonly base_url="${container_registry}/${container_repository}"
-
-          readonly image_url="${base_url}/${image_name}"
-
-          readonly digits="[[:digit:]]\{1,\}"
-
-          readonly regex="^${digits}\.${digits}\.${digits}\$"
-
-          if echo "${tag}" | grep -q -s "${regex}"
-          then
-            readonly latest_tag="latest"
-          else
-            readonly latest_tag="dev"
-          fi
-
-          for image_tag in "${tag}" "${latest_tag}"
+          for image_tag in "${tag}" "dev"
           do
             docker tag "service" "${image_url}:${image_tag}"
 

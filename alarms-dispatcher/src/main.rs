@@ -1,257 +1,48 @@
-#![warn(clippy::pedantic, clippy::nursery)]
-#![allow(
-    clippy::missing_errors_doc,
-    clippy::redundant_pub_crate,
-    clippy::significant_drop_tightening
-)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::missing_errors_doc)]
 
-use std::io;
+use anyhow::{Context as _, Result};
+use cosmrs::Gas;
 
-use semver::{
-    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
-    Prerelease as SemVerPrerelease, Version,
-};
-use serde::Deserialize;
-use tokio::task::block_in_place;
-use tracing::{error, info};
-use tracing_appender::{
-    non_blocking::{self, NonBlocking},
-    rolling,
-};
-use tracing_subscriber::fmt::writer::MakeWriterExt as _;
+use chain_ops::{env::ReadFromVar as _, run_app};
 
-use broadcast::error::Error as BroadcastError;
-use chain_comms::{
-    client::Client as NodeClient,
-    interact::query,
-    rpc_setup::{prepare_rpc, RpcSetup},
-    signing_key::DEFAULT_COSMOS_HD_PATH,
-};
+mod task;
 
-use crate::generators::TasksConfig;
+run_app!(
+    task_creation_context: {
+        Ok(ApplicationDefinedContext {
+            gas_per_time_alarm: read_gas_per_time_alarm()?,
+            time_alarms_per_message: read_time_alarms_per_message()?,
+            gas_per_price_alarm: read_gas_per_price_alarm()?,
+            price_alarms_per_message: read_price_alarms_per_message()?,
+        })
+    },
+    startup_tasks: [task::Id::TimeAlarmsGenerator].into_iter(),
+);
 
-use self::{
-    config::Config, error::AppResult, generators::Contract, messages::QueryMsg,
-};
-
-mod config;
-mod error;
-mod generators;
-mod log;
-mod messages;
-
-pub const ORACLE_COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
-    op: semver::Op::GreaterEq,
-    major: 0,
-    minor: Some(5),
-    patch: None,
-    pre: SemVerPrerelease::EMPTY,
-};
-pub const TIME_ALARMS_COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
-    op: semver::Op::GreaterEq,
-    major: 0,
-    minor: Some(4),
-    patch: Some(1),
-    pre: SemVerPrerelease::EMPTY,
-};
-
-pub const MAX_CONSEQUENT_ERRORS_COUNT: usize = 5;
-
-#[tokio::main]
-async fn main() -> AppResult<()> {
-    let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
-        NonBlocking::new(rolling::hourly("./logs/", "dispatcher"));
-
-    logging::setup(io::stdout.and(log_writer));
-
-    info!(concat!(
-        "Running version built on: ",
-        env!("BUILD_START_TIME_DATE", "No build time provided!")
-    ));
-
-    let result: AppResult<()> = app_main().await;
-
-    if let Err(error) = &result {
-        error!(error = ?error, "{}", error);
-    }
-
-    drop(log_guard);
-
-    result
+pub struct ApplicationDefinedContext {
+    pub gas_per_time_alarm: Gas,
+    pub time_alarms_per_message: u32,
+    pub gas_per_price_alarm: Gas,
+    pub price_alarms_per_message: u32,
 }
 
-#[allow(clippy::future_not_send)]
-async fn app_main() -> AppResult<()> {
-    let config = Config::read_from_env()
-        .map_err(error::Application::ParseConfiguration)?;
-
-    let rpc_setup: RpcSetup<Config> =
-        prepare_rpc(config, DEFAULT_COSMOS_HD_PATH)
-            .await
-            .inspect(|_| info!("Connected to RPC successfully."))
-            .inspect_err(|error| {
-                error!(?error, "Failed to connect to RPC! Cause: {error}");
-            })?;
-
-    let contracts =
-        fetch_contracts(&rpc_setup.node_client, &rpc_setup.config).await?;
-
-    info!("Checking compatibility with contract version...");
-
-    check_compatibility(&rpc_setup, &contracts).await?;
-
-    info!("Contract is compatible with feeder version.");
-
-    dispatch_alarms(rpc_setup, contracts.into_iter())
-        .await
-        .map_err(Into::into)
-        .inspect(|&()| info!("Shutting down..."))
-        .inspect_err(|error| error!("{error}"))
+fn read_gas_per_time_alarm() -> Result<Gas> {
+    Gas::read_from_var("TIME_ALARMS_GAS_LIMIT_PER_ALARM")
+        .context("Failed to read gas limit per time alarm!")
 }
 
-async fn fetch_contracts(
-    node_client: &NodeClient,
-    config: &Config,
-) -> AppResult<Vec<Contract>> {
-    let platform_contracts = platform::Platform::fetch(
-        node_client,
-        config.admin_contract.clone().into_string(),
-    )
-    .await?;
-
-    let protocols = platform::Protocols::fetch(
-        node_client,
-        config.admin_contract.clone().into_string(),
-    )
-    .await?;
-
-    let mut contracts = Vec::with_capacity(protocols.0.len() + 1);
-
-    contracts.push(Contract::TimeAlarms(platform_contracts.time_alarms));
-
-    for protocol in protocols.0.into_vec() {
-        contracts.push(Contract::Oracle(
-            protocol
-                .fetch(node_client, config.admin_contract.clone().into_string())
-                .await?
-                .contracts
-                .oracle,
-        ));
-    }
-
-    Ok(contracts)
+fn read_time_alarms_per_message() -> Result<u32> {
+    u32::read_from_var("TIME_ALARMS_MAX_ALARMS_GROUP")
+        .context("Failed to read maximum count of time alarms per message!")
 }
 
-#[allow(clippy::future_not_send)]
-async fn check_compatibility(
-    rpc_setup: &RpcSetup<Config>,
-    contracts: &[Contract],
-) -> AppResult<()> {
-    #[derive(Deserialize)]
-    struct JsonVersion {
-        major: u64,
-        minor: u64,
-        patch: u64,
-    }
-
-    let contracts_iter = contracts.iter().map(|contract| match contract {
-        Contract::TimeAlarms(contract) => {
-            (contract, "time_alarms", TIME_ALARMS_COMPATIBLE_VERSION)
-        },
-        Contract::Oracle(contract) => {
-            (contract, "oracle", ORACLE_COMPATIBLE_VERSION)
-        },
-    });
-
-    for (contract, name, compatible) in contracts_iter {
-        let version: JsonVersion = query::wasm_smart(
-            &mut rpc_setup.node_client.wasm_query_client(),
-            contract.clone().into_string(),
-            QueryMsg::CONTRACT_VERSION.to_vec(),
-        )
-        .await?;
-
-        let version: Version = Version {
-            major: version.major,
-            minor: version.minor,
-            patch: version.patch,
-            pre: SemVerPrerelease::EMPTY,
-            build: SemVerBuildMetadata::EMPTY,
-        };
-
-        if !compatible.matches(&version) {
-            error!(
-                compatible = %compatible,
-                actual = %version,
-                r#"Dispatcher version is incompatible with "{name}" contract's version!"#,
-            );
-
-            return Err(error::Application::IncompatibleContractVersion {
-                contract: name,
-                compatible,
-                actual: version,
-            });
-        }
-    }
-
-    Ok(())
+fn read_gas_per_price_alarm() -> Result<Gas> {
+    Gas::read_from_var("PRICE_ALARMS_GAS_LIMIT_PER_ALARM")
+        .context("Failed to read gas limit per price alarm!")
 }
 
-#[allow(clippy::future_not_send)]
-async fn dispatch_alarms<I>(
-    RpcSetup {
-        signer,
-        config,
-        node_client,
-        ..
-    }: RpcSetup<Config>,
-    contracts: I,
-) -> Result<(), error::DispatchAlarms>
-where
-    I: Iterator<Item = Contract> + Send,
-{
-    let spawn_generators = {
-        let node_client = node_client.clone();
-
-        let signer_address = signer.signer_address().to_owned();
-
-        let tick_time = config.broadcast.tick_time();
-
-        let poll_time = config.broadcast.poll_time();
-
-        move |tx_sender| async move {
-            block_in_place(|| {
-                generators::spawn(
-                    &node_client,
-                    &{ signer_address },
-                    &{ tx_sender },
-                    &TasksConfig {
-                        time_alarms_config: config.time_alarms,
-                        oracle_alarms_config: config.market_price_oracle,
-                        tick_time,
-                        poll_time,
-                    },
-                    contracts,
-                )
-            })
-        }
-    };
-
-    broadcast::broadcast(
-        signer,
-        config.broadcast,
-        node_client,
-        config.node,
-        spawn_generators,
-    )
-    .await
-    .map_err(|error| match error {
-        BroadcastError::HealthcheckConstruct(error) => {
-            error::DispatchAlarms::HealthcheckConstruct(error)
-        },
-        BroadcastError::Healthcheck(error) => {
-            error::DispatchAlarms::Healthcheck(error)
-        },
-        BroadcastError::SpawnGenerators(error) => error,
-    })
+fn read_price_alarms_per_message() -> Result<u32> {
+    u32::read_from_var("PRICE_ALARMS_MAX_ALARMS_GROUP")
+        .context("Failed to read maximum count of price alarms per message!")
 }

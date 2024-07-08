@@ -1,243 +1,186 @@
-use std::sync::Arc;
+use std::{collections::BTreeMap, future::Future};
 
-use async_trait::async_trait;
-use osmosis_std::types::osmosis::poolmanager::v2::{
-    SpotPriceRequest, SpotPriceResponse,
-};
-use thiserror::Error;
-use tokio::task::JoinSet;
-use tracing::debug;
+use anyhow::{Context as _, Result};
+use prost::Message;
+use tonic::codegen::http::uri::PathAndQuery;
 
-use chain_comms::{
-    client::{self, Client as NodeClient},
-    interact::{healthcheck::Healthcheck, query},
-    reexport::{
-        cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
-        tonic::transport::Channel as TonicChannel,
+use chain_ops::node;
+
+use crate::{
+    oracle::Oracle,
+    provider::{
+        BaseAmount, CurrencyPair, DecimalAmount, Provider, QuoteAmount,
     },
 };
 
-use crate::{
-    config::{EnvError, ProviderConfigExt},
-    messages::PoolId,
-    oracle::{query_currencies, query_supported_currencies},
-    price::{CoinWithDecimalPlaces, Price, Ratio},
-    provider::{FromConfig, Provider, ProviderError},
-};
-
-use super::TickerSymbolDecimalPlaces;
-
 pub(crate) struct Osmosis {
-    instance_id: String,
-    node_wasm_query_client: WasmQueryClient<TonicChannel>,
-    oracle_address: Arc<str>,
-    channel: TonicChannel,
-    healthcheck: Healthcheck,
+    path_and_query: PathAndQuery,
 }
 
 impl Osmosis {
-    async fn query_supported_currencies(
-        &mut self,
-    ) -> Result<impl Iterator<Item = Route>, query::error::Wasm> {
-        let oracle_address = self.oracle_address.to_string();
+    pub fn new() -> Self {
+        Self {
+            path_and_query: PathAndQuery::from_static(
+                "/osmosis.poolmanager.v2.Query/SpotPriceV2",
+            ),
+        }
+    }
 
-        let swap_legs = query_supported_currencies(
-            &mut self.node_wasm_query_client,
-            oracle_address.clone(),
-        )
-        .await?;
+    fn normalized_price(spot_price: &str) -> Result<(BaseAmount, QuoteAmount)> {
+        let mut decimal_places = 36;
 
-        query_currencies(&mut self.node_wasm_query_client, oracle_address)
-            .await
-            .map(|currencies| {
-                swap_legs.into_iter().filter_map(move |swap| {
-                    currencies
-                        .get(&swap.from)
-                        .zip(currencies.get(&swap.to.target))
-                        .map(|(from, to)| Route {
-                            pool_id: swap.to.pool_id,
-                            from: TickerSymbolDecimalPlaces {
-                                ticker: swap.from,
-                                symbol: from.dex_symbol.clone(),
-                                decimal_places: from.decimal_digits,
-                            },
-                            to: TickerSymbolDecimalPlaces {
-                                ticker: swap.to.target,
-                                symbol: to.dex_symbol.clone(),
-                                decimal_places: to.decimal_digits,
-                            },
-                        })
-                })
+        let mut trimmed_spot_price = spot_price.trim_end_matches('0');
+
+        decimal_places -=
+            u8::try_from(spot_price.len() - trimmed_spot_price.len())?;
+
+        trimmed_spot_price = trimmed_spot_price.trim_start_matches('0');
+
+        10_u128
+            .checked_pow(decimal_places.into())
+            .context(
+                "Failed to calculate price base amount due to an overflow \
+                during exponentiation!",
+            )
+            .map(|base_amount| {
+                BaseAmount::new(DecimalAmount::new(
+                    base_amount.to_string(),
+                    decimal_places,
+                ))
+            })
+            .map(|base_amount| {
+                (
+                    base_amount,
+                    QuoteAmount::new(DecimalAmount::new(
+                        trimmed_spot_price.into(),
+                        decimal_places,
+                    )),
+                )
             })
     }
 }
 
-#[async_trait]
 impl Provider for Osmosis {
-    fn instance_id(&self) -> &str {
-        &self.instance_id
-    }
+    type PriceQueryMessage = SpotPriceRequest;
 
-    fn healthcheck(&mut self) -> &mut Healthcheck {
-        &mut self.healthcheck
-    }
+    const PROVIDER_NAME: &'static str = "Osmosis";
 
-    async fn get_prices(
-        &mut self,
-        fault_tolerant: bool,
-    ) -> Result<Box<[Price<CoinWithDecimalPlaces>]>, ProviderError> {
-        const DECIMAL_PLACES_IN_RESPONSE: usize = 36;
-        const MAX_U128_DECIMAL_DIGITS: usize = 38;
+    fn price_query_messages(
+        &self,
+        oracle: &Oracle,
+    ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
+        let get_currency_dex_denom = {
+            let currencies = oracle.currencies();
 
-        let mut set: JoinSet<
-            Result<Price<CoinWithDecimalPlaces>, ProviderError>,
-        > = JoinSet::new();
+            move |currency| {
+                currencies
+                    .get(currency)
+                    .map(|currency| currency.dex_symbol.clone())
+            }
+        };
 
-        let routes_iter =
-            self.query_supported_currencies().await.map_err(|error| {
-                ProviderError::WasmQuery(self.instance_id.clone(), error)
-            })?;
-
-        for Route {
-            pool_id,
-            from:
-                TickerSymbolDecimalPlaces {
-                    ticker: from_ticker,
-                    symbol: from_symbol,
-                    decimal_places: from_decimal_places,
-                },
-            to:
-                TickerSymbolDecimalPlaces {
-                    ticker: to_ticker,
-                    symbol: to_symbol,
-                    decimal_places: to_decimal_places,
-                },
-        } in routes_iter
-        {
-            let channel = self.channel.clone();
-
-            set.spawn(async move {
-                query::raw(
-                    channel,
-                    SpotPriceRequest {
-                        pool_id,
-                        base_asset_denom: from_symbol.to_string(),
-                        quote_asset_denom: to_symbol.to_string(),
-                    },
-                    "/osmosis.poolmanager.v2.Query/SpotPriceV2",
-                )
-                    .await
-                    .map_err(|error| {
-                        ProviderError::WasmQuery(
-                            format!("currency pair: {from_ticker}/{to_ticker}"),
-                            query::error::Wasm::RawQuery(error),
+        oracle
+            .currency_pairs()
+            .iter()
+            .map(|((base, quote), &pool_id)| {
+                get_currency_dex_denom(base).and_then(|base_asset_denom| {
+                    get_currency_dex_denom(quote).map(|quote_asset_denom| {
+                        (
+                            CurrencyPair {
+                                base: base.clone().into(),
+                                quote: quote.clone().into(),
+                            },
+                            SpotPriceRequest {
+                                pool_id,
+                                base_asset_denom,
+                                quote_asset_denom,
+                            },
                         )
                     })
-                    .and_then(|SpotPriceResponse { mut spot_price }| {
-                        debug!(
-                        r#"Osmosis returned "{spot_price}" for the pair {from_ticker}/{to_ticker} from pool #{pool_id}."#
-                    );
-
-                        if spot_price.is_ascii() {
-                            Ok(
-                                if let Some(zeroes_needed) =
-                                    DECIMAL_PLACES_IN_RESPONSE.checked_sub(spot_price.len())
-                                {
-                                    String::from(".")
-                                        + &String::from('0').repeat(zeroes_needed)
-                                        + &spot_price
-                                } else {
-                                    spot_price
-                                        .insert(spot_price.len() - DECIMAL_PLACES_IN_RESPONSE, '.');
-
-                                    spot_price
-                                },
-                            )
-                        } else {
-                            Err(ProviderError::NonAsciiResponse(format!(
-                                "currency pair: {from_ticker}/{to_ticker}",
-                            )))
-                        }
-                    })
-                    .and_then(|spot_price| {
-                        spot_price[..spot_price
-                            .len()
-                            .min(MAX_U128_DECIMAL_DIGITS + 1 /* Added dot */)]
-                            .try_into()
-                            .map_err(|error| {
-                                ProviderError::ParsePrice(
-                                    format!("currency pair: {from_ticker}/{to_ticker}"),
-                                    error,
-                                )
-                            })
-                            .map(|ratio: Ratio| {
-                                ratio.as_quote_to_price_with_decimal_places(
-                                    from_ticker,
-                                    from_decimal_places,
-                                    to_ticker,
-                                    to_decimal_places,
-                                )
-                            })
-                    })
-            });
-        }
-
-        super::collect_prices_from_task_set(set, fault_tolerant).await
-    }
-}
-
-#[async_trait]
-impl FromConfig<false> for Osmosis {
-    const ID: &'static str = "osmosis";
-
-    type ConstructError = ConstructError;
-
-    async fn from_config<Config>(
-        id: &str,
-        config: Config,
-        node_client: &NodeClient,
-    ) -> Result<Self, Self::ConstructError>
-    where
-        Config: ProviderConfigExt<false>,
-    {
-        let oracle_address: Arc<str> = config.oracle_addr().clone();
-
-        if let Some(fields) = super::left_over_fields(config.into_misc()) {
-            Err(ConstructError::UnknownFields(fields))
-        } else {
-            let grpc_uri = Config::fetch_from_env(id, "GRPC_URI")
-                .map_err(ConstructError::FetchGrpcUri)?;
-
-            let osmosis_client = NodeClient::new(&grpc_uri, None).await?;
-
-            Healthcheck::new(osmosis_client.tendermint_service_client())
-                .await
-                .map(|healthcheck| Self {
-                    instance_id: id.to_string(),
-                    node_wasm_query_client: node_client.wasm_query_client(),
-                    oracle_address,
-                    channel: osmosis_client.raw_grpc(),
-                    healthcheck,
                 })
-                .map_err(From::from)
+            })
+            .collect()
+    }
+
+    fn price_query(
+        &self,
+        dex_node_client: &node::Client,
+        query_message: &Self::PriceQueryMessage,
+    ) -> impl Future<Output = Result<(BaseAmount, QuoteAmount)>> + Send + 'static
+    {
+        let mut query_raw = dex_node_client.clone().query_raw();
+
+        let query_message = query_message.clone();
+
+        let path_and_query = self.path_and_query.clone();
+
+        async move {
+            Self::normalized_price(
+                &query_raw
+                    .raw::<_, SpotPriceResponse>(query_message, path_and_query)
+                    .await
+                    .context(
+                        "Failed to query spot price from pool manager module!",
+                    )?
+                    .spot_price,
+            )
+            .context(
+                "Failed to normalize price returned from pool manager module!",
+            )
         }
     }
 }
 
-#[derive(Debug, Error)]
-pub(crate) enum ConstructError {
-    #[error("Unknown fields found! Unknown fields: {0}")]
-    UnknownFields(Box<str>),
-    #[error("Failed to fetch Osmosis node's gRPC URI from environment variables! Cause: {0}")]
-    FetchGrpcUri(#[from] EnvError),
-    #[error("Failed to construct node communication client! Cause: {0}")]
-    ConstructNodeClient(#[from] client::error::Error),
-    #[error("Failed to connect gRPC endpoint! Cause: {0}")]
-    Healthcheck(#[from] chain_comms::interact::healthcheck::error::Construct),
+#[derive(Clone, Message)]
+pub(crate) struct SpotPriceRequest {
+    #[prost(uint64, tag = "1")]
+    pool_id: u64,
+    #[prost(string, tag = "2")]
+    base_asset_denom: String,
+    #[prost(string, tag = "3")]
+    quote_asset_denom: String,
 }
 
-struct Route {
-    pool_id: PoolId,
-    from: TickerSymbolDecimalPlaces,
-    to: TickerSymbolDecimalPlaces,
+#[derive(Message)]
+struct SpotPriceResponse {
+    #[prost(string, tag = "1")]
+    spot_price: String,
+}
+
+#[test]
+fn normalized_price() {
+    let (base, quote) =
+        Osmosis::normalized_price("1941974700000000000000000000000000".into())
+            .unwrap();
+
+    assert_eq!(base.into_inner().into_amount(), "10000000000");
+
+    assert_eq!(quote.into_inner().into_amount(), "19419747");
+
+    let (base, quote) = Osmosis::normalized_price(
+        "001941974700000000000000000000000000".into(),
+    )
+    .unwrap();
+
+    assert_eq!(base.into_inner().into_amount(), "10000000000");
+
+    assert_eq!(quote.into_inner().into_amount(), "19419747");
+
+    let (base, quote) = Osmosis::normalized_price(
+        "194197470000000000000000000000000000".into(),
+    )
+    .unwrap();
+
+    assert_eq!(base.into_inner().into_amount(), "100000000");
+
+    assert_eq!(quote.into_inner().into_amount(), "19419747");
+
+    let (base, quote) = Osmosis::normalized_price(
+        "24602951060000000000000000000000000000".into(),
+    )
+    .unwrap();
+
+    assert_eq!(base.into_inner().into_amount(), "100000000");
+
+    assert_eq!(quote.into_inner().into_amount(), "2460295106");
 }

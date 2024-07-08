@@ -1,199 +1,49 @@
-#![warn(clippy::pedantic, clippy::nursery)]
-#![allow(
-    clippy::missing_errors_doc,
-    clippy::redundant_pub_crate,
-    clippy::significant_drop_tightening
-)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::missing_errors_doc)]
 
-use std::{io, sync::Arc};
+use std::{collections::BTreeMap, time::Duration};
 
-use semver::{
-    BuildMetadata as SemVerBuildMetadata, Comparator as SemVerComparator,
-    Prerelease as SemVerPrerelease, Version,
-};
-use serde::Deserialize;
-use tracing::{error, info};
-use tracing_appender::{
-    non_blocking::{self, NonBlocking},
-    rolling,
-};
-use tracing_subscriber::fmt::writer::MakeWriterExt as _;
+use anyhow::{Context as _, Result};
+use cosmrs::Gas;
 
-use broadcast::{broadcast, error::Error as BroadcastError};
-use chain_comms::{
-    client::Client as NodeClient,
-    interact::query,
-    reexport::{
-        cosmrs::proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient,
-        tonic::transport::Channel as TonicChannel,
-    },
-    rpc_setup::{prepare_rpc, RpcSetup},
-    signing_key::DEFAULT_COSMOS_HD_PATH,
-};
+use chain_ops::{env::ReadFromVar as _, node, run_app};
 
-use self::{
-    config::Config, messages::QueryMsg, result::Result, workers::SpawnContext,
-};
-
-mod config;
-mod deviation;
-mod error;
-mod log;
-mod messages;
 mod oracle;
-mod price;
 mod provider;
 mod providers;
-mod result;
-mod workers;
+mod task;
 
-const COMPATIBLE_VERSION: SemVerComparator = SemVerComparator {
-    op: semver::Op::GreaterEq,
-    major: 0,
-    minor: Some(5),
-    patch: None,
-    pre: SemVerPrerelease::EMPTY,
-};
+run_app!(
+    task_creation_context: {
+        Ok(ApplicationDefinedContext {
+            dex_node_clients: BTreeMap::new(),
+            duration_before_start: read_duration_before_start()?,
+            gas_limit: read_gas_limit()?,
+            update_currencies_interval: read_update_currencies_interval()?,
+        })
+    },
+    startup_tasks: None::<task::Id>.into_iter(),
+);
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let (log_writer, log_guard): (NonBlocking, non_blocking::WorkerGuard) =
-        NonBlocking::new(rolling::hourly("./logs/", "feeder"));
-
-    logging::setup(io::stdout.and(log_writer));
-
-    info!(concat!(
-        "Running version built on: ",
-        env!("BUILD_START_TIME_DATE", "No build time provided!")
-    ));
-
-    let result: Result<()> = app_main().await;
-
-    if let Err(error) = &result {
-        error!(error = ?error, "{}", error);
-    }
-
-    drop(log_guard);
-
-    result
+struct ApplicationDefinedContext {
+    dex_node_clients: BTreeMap<String, node::Client>,
+    duration_before_start: Duration,
+    gas_limit: Gas,
+    update_currencies_interval: Duration,
 }
 
-#[allow(clippy::future_not_send)]
-async fn app_main() -> Result<()> {
-    let configuration = std::fs::read_to_string("market-data-feeder.toml")
-        .map_err(error::Application::ReadConfiguration)?;
-
-    let configuration = toml::from_str(&{ configuration })
-        .map_err(error::Application::ParseConfiguration)?;
-
-    let RpcSetup {
-        signer,
-        config,
-        node_client,
-        ..
-    }: RpcSetup<Config> =
-        prepare_rpc(configuration, DEFAULT_COSMOS_HD_PATH).await?;
-
-    check_compatibility(&config, &mut node_client.wasm_query_client()).await?;
-
-    let spawn_generators_f = {
-        let node_client: NodeClient = node_client.clone();
-
-        let signer_address: Arc<str> = Arc::from(signer.signer_address());
-
-        let tick_time = config.broadcast.tick_time();
-
-        let poll_time = config.broadcast.poll_time();
-
-        move |tx_request_sender| async move {
-            info!("Starting workers...");
-
-            workers::spawn(SpawnContext {
-                node_client: node_client.clone(),
-                providers: config.providers,
-                price_comparison_providers: config.comparison_providers,
-                tx_request_sender,
-                signer_address,
-                hard_gas_limit: config.hard_gas_limit,
-                time_before_feeding: config.time_before_feeding,
-                tick_time,
-                poll_time,
-            })
-            .await
-            .map(|spawn_result| {
-                info!("Workers started successfully.");
-
-                spawn_result
-            })
-        }
-    };
-
-    broadcast(
-        signer,
-        config.broadcast,
-        node_client,
-        config.node,
-        spawn_generators_f,
-    )
-    .await
-    .map_err(|error| match error {
-        BroadcastError::HealthcheckConstruct(error) => {
-            error::Application::HealthcheckConstruct(error)
-        },
-        BroadcastError::Healthcheck(error) => {
-            error::Application::Healthcheck(error)
-        },
-        BroadcastError::SpawnGenerators(error) => error,
-    })
+fn read_duration_before_start() -> Result<Duration> {
+    u64::read_from_var("DURATION_BEFORE_START")
+        .map(Duration::from_secs)
+        .context("Failed to read duration before feeding starts!")
 }
 
-#[allow(clippy::future_not_send)]
-async fn check_compatibility(
-    config: &Config,
-    wasm_query_client: &mut WasmQueryClient<TonicChannel>,
-) -> Result<()> {
-    #[derive(Deserialize)]
-    struct JsonVersion {
-        major: u64,
-        minor: u64,
-        patch: u64,
-    }
+fn read_gas_limit() -> Result<Gas> {
+    Gas::read_from_var("GAS_LIMIT").context("Failed to read gas limit!")
+}
 
-    info!("Checking compatibility with contract version...");
-
-    for (oracle_name, oracle_address) in &config.oracles {
-        let version: JsonVersion = query::wasm_smart(
-            wasm_query_client,
-            oracle_address.to_string(),
-            QueryMsg::CONTRACT_VERSION.to_vec(),
-        )
-        .await?;
-
-        let version: Version = Version {
-            major: version.major,
-            minor: version.minor,
-            patch: version.patch,
-            pre: SemVerPrerelease::EMPTY,
-            build: SemVerBuildMetadata::EMPTY,
-        };
-
-        if !COMPATIBLE_VERSION.matches(&version) {
-            error!(
-                oracle = %oracle_name,
-                compatible = %COMPATIBLE_VERSION,
-                actual = %version,
-                "Feeder version is incompatible with contract version!"
-            );
-
-            return Err(error::Application::IncompatibleContractVersion {
-                oracle_addr: oracle_address.clone(),
-                compatible: COMPATIBLE_VERSION,
-                actual: version,
-            });
-        }
-    }
-
-    info!("Contract is compatible with feeder version.");
-
-    Ok(())
+fn read_update_currencies_interval() -> Result<Duration> {
+    u64::read_from_var("UPDATE_CURRENCIES_INTERVAL_SECONDS")
+        .map(Duration::from_secs)
+        .context("Failed to read update currencies interval!")
 }
