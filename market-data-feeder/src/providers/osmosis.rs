@@ -150,35 +150,32 @@ struct SpotPriceResponse {
 #[test]
 fn normalized_price() {
     let (base, quote) =
-        Osmosis::normalized_price("1941974700000000000000000000000000".into())
+        Osmosis::normalized_price("1941974700000000000000000000000000")
             .unwrap();
 
     assert_eq!(base.into_inner().into_amount(), "10000000000");
 
     assert_eq!(quote.into_inner().into_amount(), "19419747");
 
-    let (base, quote) = Osmosis::normalized_price(
-        "001941974700000000000000000000000000".into(),
-    )
-    .unwrap();
+    let (base, quote) =
+        Osmosis::normalized_price("001941974700000000000000000000000000")
+            .unwrap();
 
     assert_eq!(base.into_inner().into_amount(), "10000000000");
 
     assert_eq!(quote.into_inner().into_amount(), "19419747");
 
-    let (base, quote) = Osmosis::normalized_price(
-        "194197470000000000000000000000000000".into(),
-    )
-    .unwrap();
+    let (base, quote) =
+        Osmosis::normalized_price("194197470000000000000000000000000000")
+            .unwrap();
 
     assert_eq!(base.into_inner().into_amount(), "100000000");
 
     assert_eq!(quote.into_inner().into_amount(), "19419747");
 
-    let (base, quote) = Osmosis::normalized_price(
-        "24602951060000000000000000000000000000".into(),
-    )
-    .unwrap();
+    let (base, quote) =
+        Osmosis::normalized_price("24602951060000000000000000000000000000")
+            .unwrap();
 
     assert_eq!(base.into_inner().into_amount(), "100000000");
 
