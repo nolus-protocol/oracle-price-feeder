@@ -5,14 +5,14 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result};
 use tokio::{
     select,
     time::{sleep_until, Instant},
 };
 
 use crate::{
-    channel::{self, bounded, unbounded, Channel as _},
+    channel::{bounded, unbounded, Channel as _},
     contract::Admin as AdminContract,
     node,
     service::{task_spawner::TaskSpawner, TaskResult, TaskResultsReceiver},
@@ -138,10 +138,10 @@ where
                     )
                     .await
                 },
-                protocol_command = self.protocol_watcher_rx.recv() => {
-                    self.handle_protocol_watcher_channel_output(
-                        protocol_command,
-                    ).await
+                Some(protocol_command) = self.protocol_watcher_rx.recv() => {
+                    self.handle_protocol_command(protocol_command)
+                        .await
+                        .context("Failed to handle protocol command!")
                 },
                 task_id = Self::next_restart_task_future(
                     &mut self.restart_queue,
@@ -415,40 +415,6 @@ where
         assert!(self.task_states.is_empty());
 
         Ok(())
-    }
-
-    async fn handle_protocol_watcher_channel_output(
-        &mut self,
-        protocol_command: Option<ProtocolWatcherCommand>,
-    ) -> Result<()> {
-        if let Some(protocol_command) = protocol_command {
-            self.handle_protocol_command(protocol_command)
-                .await
-                .context("Failed to handle protocol command!")
-        } else {
-            let mut protocol_watcher_reached = false;
-
-            while let Some(task_result) = {
-                channel::Receiver::try_recv(&mut self.task_result_rx).context(
-                    "Task results channel closed while handling the exit \
-                        of the protocol watcher!",
-                )?
-            } {
-                protocol_watcher_reached = protocol_watcher_reached
-                    || matches!(
-                        task_result.identifier,
-                        task::Id::ProtocolWatcher,
-                    );
-
-                self.handle_task_result_and_restart(task_result).await?;
-            }
-
-            if protocol_watcher_reached {
-                Ok(())
-            } else {
-                Err(anyhow!("Protocol watcher channel closed!"))
-            }
-        }
     }
 
     async fn handle_protocol_command(
