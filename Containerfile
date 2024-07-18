@@ -110,6 +110,8 @@ COPY --from=compile-application --chown="0":"0" --chmod="0100" \
 FROM service AS market-data-feeder-base
 
 ENV DURATION_BEFORE_START="600"
+ENV GAS_LIMIT="###"
+ENV UPDATE_CURRENCIES_INTERVAL_SECONDS="15"
 
 FROM market-data-feeder-base AS market-data-feeder
 
