@@ -216,9 +216,7 @@ where
         if let BTreeMapEntry::Occupied(mut entry) =
             self.task_states.entry(task_id)
         {
-            if matches!(entry.key(), task::Id::ApplicationDefined { .. })
-                && entry.get_mut().retry() >= MAX_CONSEQUENT_RETRIES
-            {
+            if entry.get_mut().retry() >= MAX_CONSEQUENT_RETRIES {
                 let task_id = entry.remove_entry().0;
 
                 self.place_on_restart_queue(task_id)
@@ -329,15 +327,19 @@ where
         &mut self,
         task_id: task::Id<T::Id>,
     ) -> Result<()> {
-        const RESTART_MARGIN_DURATION: Duration = Duration::from_secs(180);
-
         log!(warn!(
             task = %task_id.name(),
             "Placing task in deferred restart queue.",
         ));
 
         Instant::now()
-            .checked_add(RESTART_MARGIN_DURATION)
+            .checked_add(
+                if matches!(task_id, task::Id::ApplicationDefined { .. }) {
+                    const { Duration::from_secs(180) }
+                } else {
+                    const { Duration::from_secs(10) }
+                },
+            )
             .map(|instant| {
                 () = self.restart_queue.push_back((instant, task_id));
             })
