@@ -20,6 +20,6 @@ oracle_id = "neutron-astroport-usdc_axelar"
 
 [providers.neutron_astroport_usdc_noble]
 name = "astroport"
-oracle_id = "osmosis-osmosis-usdc_noble"
+oracle_id = "neutron-astroport-usdc_noble"
 
 [comparison_providers]
