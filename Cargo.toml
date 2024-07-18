@@ -15,13 +15,11 @@ rust-version = "1.79.0"
 path = "."
 
 [workspace.dependencies]
-#astroport = "5.2.0"
-bip32 = "0.5.1"
+bip32 = "0.5.2"
 bnum = "0.11.0"
 data-encoding = "2.6.0"
-#osmosis-std = "0.25.0"
 serde-json-wasm = "1.0.1"
-thiserror = "1.0.61"
+thiserror = "1.0.63"
 tracing-appender = "0.2.3"
 
 [workspace.dependencies.anyhow]
@@ -50,7 +48,7 @@ features = [
 ]
 
 [workspace.dependencies.tokio]
-version = "1.38.0"
+version = "1.38.1"
 features = [
     "io-util",
     "macros",
