@@ -18,7 +18,8 @@ pub struct Static {
     admin_contract_address: Arc<str>,
     idle_duration: Duration,
     timeout_duration: Duration,
-    broadcast_margin_duration: Duration,
+    broadcast_delay_duration: Duration,
+    broadcast_retry_delay_duration: Duration,
 }
 
 impl Static {
@@ -42,7 +43,10 @@ impl Static {
 
         let timeout_duration = Self::read_timeout_duration()?;
 
-        let broadcast_margin_duration = Self::read_broadcast_margin_duration()?;
+        let broadcast_delay_duration = Self::read_broadcast_delay_duration()?;
+
+        let broadcast_retry_delay_duration =
+            Self::read_broadcast_retry_delay_duration()?;
 
         Ok(Self {
             node_client,
@@ -50,7 +54,8 @@ impl Static {
             admin_contract_address,
             idle_duration,
             timeout_duration,
-            broadcast_margin_duration,
+            broadcast_delay_duration,
+            broadcast_retry_delay_duration,
         })
     }
 
@@ -97,10 +102,16 @@ impl Static {
             .context("Failed to read timeout period duration!")
     }
 
-    fn read_broadcast_margin_duration() -> Result<Duration, Error> {
-        u64::read_from_var("BROADCAST_MARGIN_DURATION_SECONDS")
+    fn read_broadcast_delay_duration() -> Result<Duration, Error> {
+        u64::read_from_var("BROADCAST_DELAY_DURATION_SECONDS")
             .map(Duration::from_secs)
-            .context("Failed to read between broadcast margin period duration!")
+            .context("Failed to read between broadcast delay period duration!")
+    }
+
+    fn read_broadcast_retry_delay_duration() -> Result<Duration, Error> {
+        u64::read_from_var("BROADCAST_RETRY_DELAY_DURATION_MILLISECONDS")
+            .map(Duration::from_millis)
+            .context("Failed to read between broadcast retries delay period duration!")
     }
 }
 
@@ -116,7 +127,8 @@ where
     pub(super) task_result_rx: TaskResultsReceiver<task::Id<T::Id>, Result<()>>,
     pub(super) idle_duration: Duration,
     pub(super) timeout_duration: Duration,
-    pub(super) broadcast_margin_duration: Duration,
+    pub(super) broadcast_delay_duration: Duration,
+    pub(super) broadcast_retry_delay_duration: Duration,
     pub(super) task_creation_context:
         application_defined::TaskCreationContext<T>,
 }
@@ -132,7 +144,8 @@ where
             admin_contract_address,
             idle_duration,
             timeout_duration,
-            broadcast_margin_duration,
+            broadcast_delay_duration,
+            broadcast_retry_delay_duration,
         }: Static,
         task_spawner: TaskSpawner<task::Id<T::Id>, Result<()>>,
         task_result_rx: TaskResultsReceiver<task::Id<T::Id>, Result<()>>,
@@ -147,7 +160,8 @@ where
             task_result_rx,
             idle_duration,
             timeout_duration,
-            broadcast_margin_duration,
+            broadcast_delay_duration,
+            broadcast_retry_delay_duration,
             task_creation_context,
         }
     }

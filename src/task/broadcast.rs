@@ -51,7 +51,8 @@ where
     client: node::BroadcastTx,
     signer: Signer,
     transaction_rx: mpsc::UnboundedReceiver<TxPackage<Expiration>>,
-    margin_duration: Duration,
+    delay_duration: Duration,
+    retry_delay_duration: Duration,
 }
 
 impl<Expiration> Broadcast<Expiration>
@@ -62,13 +63,15 @@ where
         client: node::BroadcastTx,
         signer: Signer,
         transaction_rx: mpsc::UnboundedReceiver<TxPackage<Expiration>>,
-        margin_duration: Duration,
+        delay_duration: Duration,
+        retry_delay_duration: Duration,
     ) -> Self {
         Self {
             client,
             signer,
             transaction_rx,
-            margin_duration,
+            delay_duration,
+            retry_delay_duration,
         }
     }
 
@@ -143,11 +146,9 @@ where
     ) -> Result<()> {
         const SIGNATURE_VERIFICATION_ERROR_CODE: u32 = 32;
 
-        const DURATION_BETWEEN_RETRIES: Duration = Duration::from_secs(1);
-
         let mut consecutive_sequence_mismatch: u8 = 0;
 
-        loop {
+        'broadcast_loop: loop {
             let raw_tx = self
                 .simulate_and_sign_tx(
                     tx_body,
@@ -162,50 +163,52 @@ where
                 .broadcast_with_expiration(&source, expiration, raw_tx)
                 .await
             else {
-                continue;
+                break 'broadcast_loop Ok(());
             };
 
-            let response = match broadcast_result {
-                Ok(response) => response,
-                Err(error) => {
-                    log_broadcast_with_source!(error![source](
-                        ?error,
-                        "Broadcasting transaction failed!",
-                    ));
+            'process: {
+                let response = match broadcast_result {
+                    Ok(response) => response,
+                    Err(error) => {
+                        log_broadcast_with_source!(error![source](
+                            ?error,
+                            "Broadcasting transaction failed!",
+                        ));
 
-                    continue;
-                },
-            };
+                        break 'process;
+                    },
+                };
 
-            let tx_code: TxCode = response.code.into();
+                let tx_code: TxCode = response.code.into();
 
-            if tx_code.is_ok()
-                || tx_code.value() == SIGNATURE_VERIFICATION_ERROR_CODE
-            {
-                self.signer.increment_sequence_number();
-            }
-
-            Self::log_tx_response(source.as_ref(), tx_code, &response);
-
-            if tx_code.value() == SIGNATURE_VERIFICATION_ERROR_CODE {
-                consecutive_sequence_mismatch =
-                    (consecutive_sequence_mismatch + 1) % 10;
-
-                if consecutive_sequence_mismatch == 0 {
-                    self.fetch_sequence_number()
-                        .await
-                        .context("Failed to fetch sequence number!")?;
+                if tx_code.is_ok()
+                    || tx_code.value() == SIGNATURE_VERIFICATION_ERROR_CODE
+                {
+                    self.signer.increment_sequence_number();
                 }
 
-                sleep(DURATION_BETWEEN_RETRIES).await;
-            } else {
-                _ = feedback_sender.send(response);
+                Self::log_tx_response(source.as_ref(), tx_code, &response);
 
-                break;
+                if tx_code.is_err() {
+                    consecutive_sequence_mismatch =
+                        (consecutive_sequence_mismatch + 1) % 10;
+
+                    if consecutive_sequence_mismatch == 0 {
+                        self.fetch_sequence_number()
+                            .await
+                            .context("Failed to fetch sequence number!")?;
+                    }
+                }
+
+                if tx_code.value() != SIGNATURE_VERIFICATION_ERROR_CODE {
+                    _ = feedback_sender.send(response);
+
+                    break 'broadcast_loop Ok(());
+                }
             }
-        }
 
-        Ok(())
+            sleep(self.retry_delay_duration).await;
+        }
     }
 
     async fn broadcast_with_expiration(
@@ -247,7 +250,7 @@ where
                 .await
                 .context("Failed to broadcast transaction!")?;
 
-            sleep(self.margin_duration).await;
+            sleep(self.delay_duration).await;
         }
     }
 }

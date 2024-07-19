@@ -59,7 +59,8 @@ where
     protocol_watcher_rx: bounded::Receiver<ProtocolWatcherCommand>,
     idle_duration: Duration,
     timeout_duration: Duration,
-    broadcast_margin_duration: Duration,
+    broadcast_delay_duration: Duration,
+    broadcast_retry_delay_duration: Duration,
     task_creation_context: application_defined::TaskCreationContext<T>,
 }
 
@@ -76,7 +77,8 @@ where
             task_result_rx,
             idle_duration,
             timeout_duration,
-            broadcast_margin_duration,
+            broadcast_delay_duration,
+            broadcast_retry_delay_duration,
             task_creation_context,
         }: Configuration<T>,
         version: &'static str,
@@ -111,7 +113,8 @@ where
             protocol_watcher_rx,
             idle_duration,
             timeout_duration,
-            broadcast_margin_duration,
+            broadcast_delay_duration,
+            broadcast_retry_delay_duration,
             task_creation_context,
         };
 
@@ -289,7 +292,8 @@ where
             self.node_client.clone().broadcast_tx(),
             self.signer.clone(),
             transaction_rx,
-            self.broadcast_margin_duration,
+            self.broadcast_delay_duration,
+            self.broadcast_retry_delay_duration,
         )
     }
 
