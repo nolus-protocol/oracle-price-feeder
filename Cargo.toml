@@ -1,10 +1,6 @@
 [workspace]
-members = [
-    "./**/src/..",
-]
-default-members = [
-    "./**/src/..",
-]
+members = ["./**/src/.."]
+exclude = ["target", "target/**/src/.."]
 
 [workspace.package]
 version = "0.64.0"
