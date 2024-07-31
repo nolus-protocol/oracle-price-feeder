@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/market-data-feeder.iml" filepath="$PROJECT_DIR$/.idea/market-data-feeder.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/oracle-price-feeder.iml" filepath="$PROJECT_DIR$/.idea/oracle-price-feeder.iml" />
     </modules>
   </component>
 </project>
