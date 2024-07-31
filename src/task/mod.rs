@@ -17,12 +17,17 @@ use tokio::{
 };
 use tracing::{error, error_span};
 
-use crate::{
-    service::task_spawner::{CancellationToken, ServiceStopped, TaskSpawner},
-    task::{broadcast::Broadcast, protocol_watcher::ProtocolWatcher},
+use crate::service::task_spawner::{
+    CancellationToken, ServiceStopped, TaskSpawner,
+};
+
+use self::{
+    balance_reporter::BalanceReporter, broadcast::Broadcast,
+    protocol_watcher::ProtocolWatcher,
 };
 
 pub mod application_defined;
+pub mod balance_reporter;
 pub mod broadcast;
 pub mod protocol_watcher;
 
@@ -35,6 +40,7 @@ pub enum Id<T>
 where
     T: application_defined::Id,
 {
+    BalanceReporter,
     Broadcast,
     ProtocolWatcher,
     ApplicationDefined(T),
@@ -46,6 +52,7 @@ where
 {
     pub fn name(&self) -> Cow<'static, str> {
         match &self {
+            Self::BalanceReporter => Cow::Borrowed("Balance Reporter"),
             Self::Broadcast => Cow::Borrowed("Broadcast"),
             Self::ProtocolWatcher => Cow::Borrowed("Protocol Watcher"),
             Self::ApplicationDefined(id) => id.name(),
@@ -84,6 +91,7 @@ pub enum Task<T>
 where
     T: application_defined::Task,
 {
+    BalanceReporter(BalanceReporter),
     Broadcast(Broadcast<T::TxExpiration>),
     ProtocolWatcher(ProtocolWatcher),
     ApplicationDefined(T),
@@ -101,6 +109,11 @@ where
         let task_id = self.identifier();
 
         match self {
+            Self::BalanceReporter(task) => {
+                task_spawner
+                    .spawn(task_id.clone(), run(task_id.clone(), task))
+                    .await
+            },
             Self::Broadcast(task) => {
                 task_spawner
                     .spawn(task_id.clone(), run(task_id.clone(), task))
@@ -129,9 +142,12 @@ where
 
     fn identifier(&self) -> Id<T::Id> {
         match self {
+            Self::BalanceReporter { .. } => Id::BalanceReporter,
             Self::Broadcast { .. } => Id::Broadcast,
             Self::ProtocolWatcher { .. } => Id::ProtocolWatcher,
-            Self::ApplicationDefined(task) => Id::ApplicationDefined(task.id()),
+            Self::ApplicationDefined { 0: task } => {
+                Id::ApplicationDefined(task.id())
+            },
         }
     }
 }

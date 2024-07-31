@@ -20,6 +20,7 @@ use crate::{
     task::{
         self,
         application_defined::{self, Id as _},
+        balance_reporter::BalanceReporter,
         broadcast::Broadcast,
         protocol_watcher::{
             Command as ProtocolWatcherCommand, ProtocolWatcher,
@@ -173,6 +174,11 @@ where
     where
         U: Iterator<Item = T::Id>,
     {
+        Task::<T>::BalanceReporter(self.create_balance_reporter_task())
+            .run(&self.task_spawner, &mut self.task_states)
+            .await
+            .context("Failed to start balance reporter task!")?;
+
         Task::<T>::Broadcast(self.create_broadcast_task_with(transaction_rx))
             .run(&self.task_spawner, &mut self.task_states)
             .await
@@ -238,6 +244,9 @@ where
 
     async fn run_task(&mut self, task_id: task::Id<T::Id>) -> Result<()> {
         let result = match task_id.clone() {
+            task::Id::BalanceReporter => {
+                Ok(Task::BalanceReporter(self.create_balance_reporter_task()))
+            },
             task::Id::Broadcast => {
                 Ok(Task::Broadcast(self.create_broadcast_task()))
             },
@@ -273,6 +282,15 @@ where
                 self.place_on_restart_queue(task_id)
             },
         }
+    }
+
+    #[inline]
+    fn create_balance_reporter_task(&mut self) -> BalanceReporter {
+        BalanceReporter::new(
+            self.node_client.clone().query_bank(),
+            self.signer.address().into(),
+            self.signer.fee_token().into(),
+        )
     }
 
     #[inline]
@@ -356,6 +374,10 @@ where
     ) -> Result<()> {
         match task_result {
             TaskResult {
+                identifier: task::Id::BalanceReporter,
+                result,
+            } => log::balance_reporter_result(result),
+            TaskResult {
                 identifier: task::Id::Broadcast,
                 result,
             } => {
@@ -366,15 +388,11 @@ where
             TaskResult {
                 identifier: task::Id::ProtocolWatcher,
                 result,
-            } => {
-                log::protocol_watcher_result(result);
-            },
+            } => log::protocol_watcher_result(result),
             TaskResult {
                 identifier: task::Id::ApplicationDefined(id),
                 result,
-            } => {
-                log::application_defined_result(&id, result);
-            },
+            } => log::application_defined_result(&id, result),
         }
 
         Ok(())
@@ -390,13 +408,13 @@ where
         for _ in 0..tasks_count {
             match self.task_result_rx.recv().await {
                 Some(TaskResult {
+                    identifier: task::Id::BalanceReporter,
+                    result,
+                }) => log::balance_reporter_result(result),
+                Some(TaskResult {
                     identifier: task::Id::Broadcast,
                     result,
                 }) => {
-                    #[cold]
-                    #[inline]
-                    fn cold() {}
-
                     cold();
 
                     return result
@@ -527,3 +545,7 @@ where
         self.application_defined
     }
 }
+
+#[cold]
+#[inline]
+fn cold() {}

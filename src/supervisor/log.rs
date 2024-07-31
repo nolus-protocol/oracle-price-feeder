@@ -6,6 +6,11 @@ use tokio::task::JoinError;
 use crate::task::application_defined::Id;
 
 #[inline]
+pub fn balance_reporter_result(result: Result<Result<()>, JoinError>) {
+    () = log_task_result("Balance Reporter", result);
+}
+
+#[inline]
 pub fn broadcast_result(result: Result<Result<()>, JoinError>) {
     () = log_task_result("Broadcast", result);
 }

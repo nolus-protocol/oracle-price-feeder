@@ -10,6 +10,7 @@ use anyhow::{Context as _, Result};
 use cosmrs::proto::{
     cosmos::{
         auth::v1beta1::query_client::QueryClient as AuthQueryClient,
+        bank::v1beta1::query_client::QueryClient as BankQueryClient,
         base::{
             reflection::v2alpha1::reflection_service_client::ReflectionServiceClient,
             tendermint::v1beta1::service_client::ServiceClient as TendermintServiceClient,
@@ -27,6 +28,7 @@ use tonic::{
 
 mod broadcast_tx;
 mod query_auth;
+mod query_bank;
 mod query_raw;
 mod query_reflection;
 mod query_tendermint;
@@ -131,6 +133,7 @@ macro_rules! define_interface {
 define_interface![
     broadcast_tx => BroadcastTx,
     query_auth => QueryAuth,
+    query_bank => QueryBank,
     query_raw => QueryRaw,
     query_reflection => QueryReflection,
     query_tendermint => QueryTendermint,
@@ -164,6 +167,17 @@ impl ClientInner {
         self.reconnect_if_required().await?;
 
         Ok(AuthQueryClient::with_origin(
+            self.grpc.read().await.clone(),
+            self.uri.clone(),
+        ))
+    }
+
+    async fn bank_query_client(
+        self: &Arc<Self>,
+    ) -> Result<BankQueryClient<GrpcChannel>> {
+        self.reconnect_if_required().await?;
+
+        Ok(BankQueryClient::with_origin(
             self.grpc.read().await.clone(),
             self.uri.clone(),
         ))
