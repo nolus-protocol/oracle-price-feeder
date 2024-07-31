@@ -67,7 +67,8 @@ jobs:
           update_and_cache_toolchains: "true"
       - name: "Run clippy"
         shell: "sh"
-        run: "cargo clippy -- -F unsafe_code -D warnings"
+        run: |-
+          "cargo" "clippy" --workspace -- -D "warnings"
   code_coverage:
     runs-on: "ubuntu-latest"
     steps:
@@ -85,7 +86,8 @@ jobs:
           update_and_cache_toolchains: "true"
       - name: "Run tests in release profile"
         shell: "sh"
-        run: "cargo test --release"
+        run: |-
+          "cargo" "test" --workspace --release
   build:
     runs-on: "ubuntu-latest"
     needs:
