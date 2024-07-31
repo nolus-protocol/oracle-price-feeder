@@ -99,6 +99,12 @@ impl Signer {
         self.immutable.account_id.as_ref()
     }
 
+    #[must_use]
+    #[inline]
+    pub fn fee_token(&self) -> &str {
+        &self.immutable.fee_token
+    }
+
     pub fn tx(&self, body: &TxBody, gas_limit: Gas) -> Result<Raw> {
         SignDoc::new(
             body,
