@@ -40,6 +40,8 @@ impl ProtocolWatcher {
 
 impl Runnable for ProtocolWatcher {
     async fn run(mut self) -> Result<()> {
+        const IDLE_DURATION: Duration = Duration::from_secs(15);
+
         loop {
             let active_protocols = self
                 .admin_contract
@@ -69,7 +71,7 @@ impl Runnable for ProtocolWatcher {
                 self.command_tx.send(command).await?;
             }
 
-            sleep(Duration::from_secs(15)).await;
+            sleep(IDLE_DURATION).await;
         }
     }
 }
