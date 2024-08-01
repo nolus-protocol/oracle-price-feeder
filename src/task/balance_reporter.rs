@@ -56,12 +56,14 @@ impl Runnable for BalanceReporter {
                 .to_string();
 
             if amount.len() > 3 {
-                let start_index = amount.len() % 3;
+                let offset = amount.len() % 3;
 
-                (1..=(amount.len() - 1) / 3)
+                (0..=(amount.len() - 1) / 3)
                     .rev()
                     .map(|triplet| triplet * 3)
-                    .for_each(|index| amount.insert(start_index + index, ' '));
+                    .map(|index| index + offset)
+                    .filter(|&index| index != 0)
+                    .for_each(|index| amount.insert(index, ' '));
             }
 
             log_span!(info_span!("Balance Report") {
