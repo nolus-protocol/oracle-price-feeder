@@ -22,6 +22,11 @@ tracing-appender = "0.2.3"
 version = "1.0.86"
 features = ["std"]
 
+[workspace.dependencies.chrono]
+version = "0.4.38"
+default-features = false
+features = ["now"]
+
 [workspace.dependencies.cosmrs]
 version = "0.17.0"
 default-features = false
@@ -101,6 +106,7 @@ rust-version.workspace = true
 [dependencies]
 anyhow.workspace = true
 bip32.workspace = true
+chrono.workspace = true
 cosmrs.workspace = true
 data-encoding.workspace = true
 serde-json-wasm.workspace = true
