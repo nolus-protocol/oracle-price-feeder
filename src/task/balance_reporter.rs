@@ -27,6 +27,7 @@ pub struct BalanceReporter {
     client: node::QueryBank,
     address: Box<str>,
     denom: Box<str>,
+    idle_duration: Duration,
 }
 
 impl BalanceReporter {
@@ -35,11 +36,13 @@ impl BalanceReporter {
         client: node::QueryBank,
         signer_address: Box<str>,
         denom: Box<str>,
+        idle_duration: Duration,
     ) -> Self {
         Self {
             client,
             address: signer_address,
             denom,
+            idle_duration,
         }
     }
 
@@ -61,8 +64,6 @@ impl BalanceReporter {
 
 impl Runnable for BalanceReporter {
     async fn run(mut self) -> Result<()> {
-        const IDLE_DURATION: Duration = Duration::from_secs(30);
-
         loop {
             let amount = self
                 .client
@@ -78,7 +79,7 @@ impl Runnable for BalanceReporter {
                 log!(info!(""));
             });
 
-            sleep(IDLE_DURATION).await;
+            sleep(self.idle_duration).await;
         }
     }
 }

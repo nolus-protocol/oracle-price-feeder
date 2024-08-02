@@ -290,6 +290,7 @@ where
             self.node_client.clone().query_bank(),
             self.signer.address().into(),
             self.signer.fee_token().into(),
+            self.idle_duration,
         )
     }
 
