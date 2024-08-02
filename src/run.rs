@@ -14,18 +14,19 @@ use crate::{
 
 #[inline]
 pub async fn run<
-    Name,
+    LogsDirectory,
     TaskCreationContextCtor,
     StartupTasksFunctor,
     StartupTasksIter,
 >(
-    application_name: Name,
+    application_name: &'static str,
     application_version: &'static str,
+    logs_directory: LogsDirectory,
     task_creation_context: TaskCreationContextCtor,
     startup_tasks: StartupTasksFunctor,
 ) -> Result<()>
 where
-    Name: AsRef<Path>,
+    LogsDirectory: AsRef<Path>,
     TaskCreationContextCtor: FnOnce() -> Result<
         TaskCreationContext<<StartupTasksIter::Item as Id>::Task>,
     >,
@@ -33,7 +34,7 @@ where
     StartupTasksIter: Iterator + Send + 'static,
     StartupTasksIter::Item: Id + Unpin,
 {
-    log::init(application_name).context("Failed to initialize logging!")?;
+    log::init(logs_directory).context("Failed to initialize logging!")?;
 
     let configuration = configuration::Static::read_from_env()
         .await
@@ -52,6 +53,7 @@ where
                 task_result_rx,
                 task_creation_context,
             ),
+            application_name,
             application_version,
             startup_tasks,
         )

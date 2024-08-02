@@ -82,6 +82,7 @@ where
             broadcast_retry_delay_duration,
             task_creation_context,
         }: Configuration<T>,
+        application: &'static str,
         version: &'static str,
         tasks: U,
     ) -> Result<Self>
@@ -89,6 +90,7 @@ where
         U: Iterator<Item = T::Id>,
     {
         log!(info!(
+            %application,
             %version,
             sender_address = %signer.address(),
             "Starting up supervisor.",

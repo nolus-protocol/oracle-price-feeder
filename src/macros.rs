@@ -1,11 +1,4 @@
 #[macro_export]
-macro_rules! init_log {
-    () => {
-        () = $crate::log::init(env!("CARGO_PKG_NAME"))?;
-    };
-}
-
-#[macro_export]
 macro_rules! run_app {
     (
         task_creation_context: $task_creation_context:expr,
@@ -16,6 +9,7 @@ macro_rules! run_app {
             $crate::run::run(
                 ::core::env!("CARGO_PKG_NAME"),
                 ::core::env!("CARGO_PKG_VERSION"),
+                ::std::env::var("LOGS_DIRECTORY")?,
                 || $task_creation_context,
                 || $startup_tasks,
             )
