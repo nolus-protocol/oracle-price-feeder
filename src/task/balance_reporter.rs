@@ -82,3 +82,23 @@ impl Runnable for BalanceReporter {
         }
     }
 }
+
+#[test]
+fn test_amount_formatting() {
+    assert_eq!(BalanceReporter::format_amount("1".into()), "1");
+
+    assert_eq!(BalanceReporter::format_amount("12".into()), "12");
+
+    assert_eq!(BalanceReporter::format_amount("123".into()), "123");
+
+    assert_eq!(BalanceReporter::format_amount("1234".into()), "1 234");
+
+    assert_eq!(BalanceReporter::format_amount("12345".into()), "12 345");
+
+    assert_eq!(BalanceReporter::format_amount("123456".into()), "123 456");
+
+    assert_eq!(
+        BalanceReporter::format_amount("1234567".into()),
+        "1 234 567"
+    );
+}
