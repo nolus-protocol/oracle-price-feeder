@@ -21,6 +21,7 @@ tracing-appender = "0.2.3"
 
 [workspace.dependencies.anyhow]
 version = "1.0.86"
+default-features = false
 features = ["std"]
 
 [workspace.dependencies.chrono]
@@ -39,10 +40,12 @@ features = [
 
 [workspace.dependencies.prost]
 version = "0.12.6"
-features = ["derive"]
+default-features = false
+features = ["derive", "std"]
 
 [workspace.dependencies.serde]
 version = "1.0.204"
+default-features = false
 features = [
     "derive",
     "rc",
@@ -51,6 +54,7 @@ features = [
 
 [workspace.dependencies.tokio]
 version = "1.39.2"
+default-features = false
 features = [
     "io-util",
     "macros",
@@ -62,6 +66,7 @@ features = [
 
 [workspace.dependencies.tonic]
 version = "0.11.0"
+default-features = false
 features = [
     "channel",
     "gzip",
@@ -73,6 +78,7 @@ features = [
 
 [workspace.dependencies.tracing]
 version = "0.1.40"
+default-features = false
 features = [
     "max_level_debug",
     "release_max_level_info",
@@ -80,12 +86,12 @@ features = [
 
 [workspace.dependencies.tracing-subscriber]
 version = "0.3.18"
+default-features = false
 features = [
     "alloc",
     "ansi",
     "fmt",
     "json",
-    "local-time",
     "std",
     "parking_lot",
 ]
