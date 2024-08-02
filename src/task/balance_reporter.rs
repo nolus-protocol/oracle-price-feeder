@@ -58,7 +58,7 @@ impl Runnable for BalanceReporter {
             if amount.len() > 3 {
                 let offset = amount.len() % 3;
 
-                (0..=(amount.len() - 1) / 3)
+                (0..(amount.len() - 1) / 3)
                     .rev()
                     .map(|triplet| triplet * 3)
                     .map(|index| index + offset)
