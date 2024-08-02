@@ -42,6 +42,21 @@ impl BalanceReporter {
             denom,
         }
     }
+
+    fn format_amount(mut amount: String) -> String {
+        if amount.len() > 3 {
+            let offset = amount.len() % 3;
+
+            (0..amount.len() / 3)
+                .rev()
+                .map(|triplet| triplet * 3)
+                .map(|index| index + offset)
+                .filter(|&index| index != 0)
+                .for_each(|index| amount.insert(index, ' '));
+        }
+
+        amount
+    }
 }
 
 impl Runnable for BalanceReporter {
@@ -49,27 +64,16 @@ impl Runnable for BalanceReporter {
         const IDLE_DURATION: Duration = Duration::from_secs(30);
 
         loop {
-            let mut amount = self
+            let amount = self
                 .client
                 .balance(self.address.to_string(), self.denom.to_string())
                 .await?
                 .to_string();
 
-            if amount.len() > 3 {
-                let offset = amount.len() % 3;
-
-                (0..amount.len() / 3)
-                    .rev()
-                    .map(|triplet| triplet * 3)
-                    .map(|index| index + offset)
-                    .filter(|&index| index != 0)
-                    .for_each(|index| amount.insert(index, ' '));
-            }
-
             log_span!(info_span!("Balance Report") {
                 log!(info!(""));
 
-                log!(info!("Amount available: {} {}", amount, self.denom));
+                log!(info!("Amount available: {} {}", Self::format_amount(amount), self.denom));
 
                 log!(info!(""));
             });
