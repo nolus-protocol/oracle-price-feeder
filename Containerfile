@@ -6,6 +6,8 @@ RUN ["apt-get", "upgrade", "--purge", "--yes"]
 
 RUN ["apt-get", "install", "--yes", "libc6-dev"]
 
+USER "0":"0"
+
 WORKDIR "/code/"
 
 RUN ["chmod", "=555", "/code/"]
