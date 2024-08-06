@@ -110,23 +110,24 @@ jobs:
           set -e
 
           "docker" \
-            "buildx" \
             "build" \
-            --tag "service" \
+            --build-arg "package=${package}" \
+            --build-arg "profile=release" \
+            --build-arg "profile_output_dir=release" \
             --file "./Containerfile" \
             --pull \
-            --target "${package}" \
-            --build-arg "package=${package}" \
-            .
+            --tag "service" \
+            --target "service" \
+            "."
       - name: "Login at container registry"
-        env:
-          github_token: |-
+        uses: "docker/login-action@v3"
+        with:
+          registry: |-
+            ${{ env.container_registry }}
+          username: |-
+            ${{ github.actor }}
+          password: |-
             ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-
-          echo "${github_token}" | docker login "${container_registry}" \
-            --username "\$" --password-stdin
       - name: "Push image to container registry"
         run: |
           set -e
@@ -143,18 +144,18 @@ jobs:
           regex="^[[:digit:]]\{1,\}\.[[:digit:]]\{1,\}\.[[:digit:]]\{1,\}\$"
           readonly regex
 
-          if grep -q -s "${regex}" <<-EOF
+          if "grep" -q -s "${regex}" <<-EOF
           ${tag}
           EOF
           then
-            docker tag "service" "${image_url}:latest"
+            "docker" "tag" "service" "${image_url}:latest"
 
-            docker push "${image_url}:latest"
+            "docker" "push" "${image_url}:latest"
           fi
 
           for image_tag in "${tag}" "dev"
           do
-            docker tag "service" "${image_url}:${image_tag}"
+            "docker" "tag" "service" "${image_url}:${image_tag}"
 
-            docker push "${image_url}:${image_tag}"
+            "docker" "push" "${image_url}:${image_tag}"
           done
