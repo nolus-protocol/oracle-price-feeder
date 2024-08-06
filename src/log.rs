@@ -82,9 +82,9 @@ impl<'r> DateTimeSegmentedWriter<'r> {
         let mut file_path = self.directory_path.to_owned();
 
         [
-            format!("year-{}", date_and_hour.year),
-            format!("month-{}", date_and_hour.month),
-            format!("day-{}", date_and_hour.day),
+            format!("year-{:0>2}", date_and_hour.year),
+            format!("month-{:0>2}", date_and_hour.month),
+            format!("day-{:0>2}", date_and_hour.day),
         ]
         .into_iter()
         .try_for_each(|segment| {
@@ -98,7 +98,7 @@ impl<'r> DateTimeSegmentedWriter<'r> {
         })?;
 
         let file_path = {
-            file_path.push(format!("hour-{}.log", date_and_hour.hour));
+            file_path.push(format!("hour-{:0>2}.log", date_and_hour.hour));
 
             file_path
         };
