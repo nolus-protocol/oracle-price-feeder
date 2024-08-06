@@ -6,10 +6,11 @@ macro_rules! run_app {
     ) => {
         #[::tokio::main]
         async fn main() -> ::anyhow::Result<()> {
-            $crate::run::run(
+            $crate::run::run::<String, _, _, _>(
                 ::core::env!("CARGO_PKG_NAME"),
                 ::core::env!("CARGO_PKG_VERSION"),
-                ::std::env::var("LOGS_DIRECTORY")?,
+                $crate::env::ReadFromVar::read_from_var("LOGS_DIRECTORY")
+                    .context("Failed to fetch log storing directory!")?,
                 || $task_creation_context,
                 || $startup_tasks,
             )
