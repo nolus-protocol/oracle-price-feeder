@@ -1,4 +1,6 @@
-FROM docker.io/library/rust:latest as compile-base
+ARG package
+
+FROM docker.io/library/rust:latest AS compile-base
 
 RUN ["apt-get", "update"]
 
@@ -36,11 +38,13 @@ COPY --chown="0":"0" --chmod="0555" "./src/" "/code/src/"
 
 FROM compile-lib-base AS compile-application-base
 
-ARG package
-
 COPY --from=compile-lib-base --chown="0":"0" --chmod="0555" \
     "/code/src/lib.rs" \
     "/code/application/src/lib.rs"
+
+ARG package
+
+LABEL "package"="${package}"
 
 COPY --chown="0":"0" --chmod="0555" \
     "./${package}/Cargo.toml" \
@@ -58,9 +62,13 @@ FROM compile-application-base AS compile-application
 
 ARG package
 
-COPY --chown="0":"0" --chmod="0555" "./${package}/" "/code/application/"
+LABEL "package"="${package}"
 
-ARG profile="release"
+ARG profile
+
+LABEL "profile"="${profile}"
+
+COPY --chown="0":"0" --chmod="0555" "./${package}/" "/code/application/"
 
 RUN "cargo" \
         "rustc" \
@@ -71,7 +79,7 @@ RUN "cargo" \
         "--" \
         "-C" "target-feature=+crt-static"
 
-FROM gcr.io/distroless/static:latest AS service
+FROM gcr.io/distroless/static:latest AS service-base
 
 VOLUME ["/service/logs/"]
 
@@ -90,12 +98,13 @@ ENV GAS_FEE_CONF__GAS_PRICE_DENOMINATOR="400"
 ENV GAS_FEE_CONF__FEE_ADJUSTMENT_NUMERATOR="5"
 ENV GAS_FEE_CONF__FEE_ADJUSTMENT_DENOMINATOR="1"
 ENV IDLE_DURATION_SECONDS="60"
+ENV LOGS_DIRECTORY="/service/logs/"
 ENV NODE_GRPC_URI="###"
 ENV OUTPUT_JSON="0"
 ENV SIGNING_KEY_MNEMONIC="###"
 ENV TIMEOUT_DURATION_SECONDS="60"
 
-FROM service AS alarms-dispatcher-base
+FROM service-base AS alarms-dispatcher-base
 
 ENV PRICE_ALARMS_GAS_LIMIT_PER_ALARM="500000"
 ENV PRICE_ALARMS_MAX_ALARMS_GROUP="32"
@@ -104,22 +113,31 @@ ENV TIME_ALARMS_MAX_ALARMS_GROUP="32"
 
 FROM alarms-dispatcher-base AS alarms-dispatcher
 
-ARG profile_output_dir="release"
+ARG profile_output_dir
 
 COPY --from=compile-application --chown="0":"0" --chmod="0100" \
     "/code/target/x86_64-unknown-linux-gnu/${profile_output_dir}/alarms-dispatcher" \
     "./service"
 
-FROM service AS market-data-feeder-base
+FROM service-base AS market-data-feeder-base
 
 ENV DURATION_BEFORE_START="600"
 ENV GAS_LIMIT="###"
 ENV UPDATE_CURRENCIES_INTERVAL_SECONDS="15"
 
-FROM market-data-feeder-base AS market-data-feeder
+ARG package
+FROM ${package}-base AS service
 
-ARG profile_output_dir="release"
+ARG package
+
+LABEL "package"="${package}"
+
+ARG profile
+
+LABEL "profile"="${profile}"
+
+ARG profile_output_dir
 
 COPY --from=compile-application --chown="0":"0" --chmod="0100" \
-    "/code/target/x86_64-unknown-linux-gnu/${profile_output_dir}/market-data-feeder" \
+    "/code/target/x86_64-unknown-linux-gnu/${profile_output_dir}/${package}" \
     "./service"
