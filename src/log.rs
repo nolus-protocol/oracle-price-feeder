@@ -1,6 +1,6 @@
 use std::{
     env::{self, VarError},
-    fs::File,
+    fs::{create_dir, File},
     io::{stdout, Write},
     path::Path,
 };
@@ -79,16 +79,35 @@ impl<'r> DateTimeSegmentedWriter<'r> {
         &mut self,
         date_and_hour: DateAndHour,
     ) -> std::io::Result<&mut File> {
+        let mut file_path = self.directory_path.to_owned();
+
+        [
+            format!("year-{}", date_and_hour.year),
+            format!("month-{}", date_and_hour.month),
+            format!("day-{}", date_and_hour.day),
+        ]
+        .into_iter()
+        .try_for_each(|segment| {
+            file_path.push(segment);
+
+            if file_path.exists() {
+                Ok(())
+            } else {
+                create_dir(&*file_path)
+            }
+        })?;
+
+        let file_path = {
+            file_path.push(format!("hour-{}.log", date_and_hour.hour));
+
+            file_path
+        };
+
         File::options()
             .append(true)
+            .create(true)
             .read(false)
-            .open(self.directory_path.join(format!(
-                "./y{year}/m{month}/d{day}/h{hour}.log",
-                year = date_and_hour.year,
-                month = date_and_hour.month,
-                day = date_and_hour.day,
-                hour = date_and_hour.hour
-            )))
+            .open(file_path)
             .map(|file| &mut self.file.insert((date_and_hour, file)).1)
     }
 }
