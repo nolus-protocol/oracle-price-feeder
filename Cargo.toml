@@ -30,7 +30,7 @@ default-features = false
 features = ["now"]
 
 [workspace.dependencies.cosmrs]
-version = "0.17.0"
+version = "0.18.0"
 default-features = false
 features = [
     "bip32",
@@ -39,7 +39,7 @@ features = [
 ]
 
 [workspace.dependencies.prost]
-version = "0.12.6"
+version = "0.13.1"
 default-features = false
 features = ["derive", "std"]
 
@@ -65,14 +65,13 @@ features = [
 ]
 
 [workspace.dependencies.tonic]
-version = "0.11.0"
+version = "0.12.1"
 default-features = false
 features = [
     "channel",
     "gzip",
     "prost",
     "tls-roots",
-    "transport",
     "zstd",
 ]
 
