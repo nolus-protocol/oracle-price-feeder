@@ -22,7 +22,7 @@ use cosmrs::proto::{
 use tokio::sync::RwLock;
 use tonic::{
     client::Grpc as GrpcClient,
-    transport::{Channel as GrpcChannel, Endpoint, Uri},
+    transport::{Channel as GrpcChannel, ClientTlsConfig, Endpoint, Uri},
     Code as TonicCode,
 };
 
@@ -60,9 +60,23 @@ where
         })?;
 
         let endpoint = {
-            Endpoint::from(uri.clone())
+            let endpoint = Endpoint::from(uri.clone())
                 .origin(uri.clone())
-                .keep_alive_while_idle(true)
+                .keep_alive_while_idle(true);
+
+            if matches!(uri.scheme_str(), Some("http" | "ws")) {
+                endpoint
+            } else {
+                endpoint
+                    .tls_config(
+                        ClientTlsConfig::new()
+                            .assume_http2(true)
+                            .with_native_roots(),
+                    )
+                    .context(
+                        "Failed to configure TLS for node's gRPC endpoint!",
+                    )?
+            }
         };
 
         endpoint
