@@ -557,3 +557,51 @@ struct Coin {
     amount: String,
     ticker: Arc<str>,
 }
+
+#[test]
+fn test_pretty_price_formatting() {
+    use crate::{node, oracle::Oracle};
+
+    enum Never {}
+
+    struct Dummy;
+
+    impl provider::Provider for Dummy {
+        type PriceQueryMessage = Never;
+        const PROVIDER_NAME: &'static str = "Dummy";
+
+        fn price_query_messages(
+            &self,
+            _: &Oracle,
+        ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
+            Ok(BTreeMap::new())
+        }
+
+        fn price_query(
+            &self,
+            _: &node::Client,
+            _: &Self::PriceQueryMessage,
+        ) -> impl Future<Output = Result<(BaseAmount, QuoteAmount)>> + Send + 'static
+        {
+            async move {
+                unreachable!();
+            }
+        }
+    }
+
+    let base =
+        BaseAmount::new(DecimalAmount::new("100000000000000000".into(), 17));
+
+    let quote =
+        QuoteAmount::new(DecimalAmount::new("1811002280600015".into(), 17));
+
+    assert_eq!(
+        Provider::<Dummy>::pretty_formatted_price(
+            "NLS",
+            &base,
+            "USDC_NOBLE",
+            &quote,
+        ),
+        "1.0 NLS ~ 0.01811002280600015 USDC_NOBLE"
+    );
+}
