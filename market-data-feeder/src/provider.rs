@@ -75,9 +75,7 @@ macro_rules! define_amount_newtype {
 
                 #[inline]
                 pub fn into_inner(self) -> DecimalAmount {
-                    let Self(value) = self;
-
-                    value
+                    self.0
                 }
             }
         )+
