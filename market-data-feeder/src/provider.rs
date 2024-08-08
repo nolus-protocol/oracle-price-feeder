@@ -38,14 +38,17 @@ impl DecimalAmount {
         }
     }
 
+    #[inline]
     pub fn amount(&self) -> &str {
         &self.amount
     }
 
+    #[inline]
     pub fn into_amount(self) -> String {
         self.amount
     }
 
+    #[inline]
     pub const fn decimal_places(&self) -> u8 {
         self.decimal_places
     }
@@ -64,6 +67,7 @@ macro_rules! define_amount_newtype {
                     Self(value)
                 }
 
+                #[inline]
                 pub fn as_inner(&self) -> &DecimalAmount {
                     &self.0
                 }
