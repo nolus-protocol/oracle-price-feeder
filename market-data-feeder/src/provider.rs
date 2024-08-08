@@ -38,6 +38,10 @@ impl DecimalAmount {
         }
     }
 
+    pub fn amount(&self) -> &str {
+        &self.amount
+    }
+
     pub fn into_amount(self) -> String {
         self.amount
     }
@@ -58,6 +62,10 @@ macro_rules! define_amount_newtype {
                 #[inline]
                 pub const fn new(value: DecimalAmount) -> Self {
                     Self(value)
+                }
+
+                pub fn as_inner(&self) -> &DecimalAmount {
+                    &self.0
                 }
 
                 #[inline]
