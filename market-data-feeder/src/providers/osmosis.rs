@@ -26,34 +26,46 @@ impl Osmosis {
         }
     }
 
-    fn normalized_price(spot_price: &str) -> Result<(BaseAmount, QuoteAmount)> {
-        let mut decimal_places = 36;
-
+    fn normalized_price(
+        spot_price: &str,
+        base_decimal_digits: u8,
+        quote_decimal_digits: u8,
+    ) -> Result<(BaseAmount, QuoteAmount)> {
         let mut trimmed_spot_price = spot_price.trim_end_matches('0');
 
-        decimal_places -=
-            u8::try_from(spot_price.len() - trimmed_spot_price.len())?;
+        let (base_decimal_digits, quote_decimal_digits) = {
+            let mut decimal_places = 36;
+
+            decimal_places -=
+                u8::try_from(spot_price.len() - trimmed_spot_price.len())?;
+
+            (
+                decimal_places.saturating_sub(
+                    quote_decimal_digits.saturating_sub(base_decimal_digits),
+                ),
+                decimal_places.saturating_sub(
+                    base_decimal_digits.saturating_sub(quote_decimal_digits),
+                ),
+            )
+        };
 
         trimmed_spot_price = trimmed_spot_price.trim_start_matches('0');
 
         10_u128
-            .checked_pow(decimal_places.into())
+            .checked_pow(base_decimal_digits.into())
             .context(
                 "Failed to calculate price base amount due to an overflow \
                 during exponentiation!",
             )
             .map(|base_amount| {
-                BaseAmount::new(DecimalAmount::new(
-                    base_amount.to_string(),
-                    decimal_places,
-                ))
-            })
-            .map(|base_amount| {
                 (
-                    base_amount,
+                    BaseAmount::new(DecimalAmount::new(
+                        base_amount.to_string(),
+                        base_decimal_digits,
+                    )),
                     QuoteAmount::new(DecimalAmount::new(
                         trimmed_spot_price.into(),
-                        decimal_places,
+                        quote_decimal_digits,
                     )),
                 )
             })
@@ -61,7 +73,7 @@ impl Osmosis {
 }
 
 impl Provider for Osmosis {
-    type PriceQueryMessage = SpotPriceRequest;
+    type PriceQueryMessage = QueryMessage;
 
     const PROVIDER_NAME: &'static str = "Osmosis";
 
@@ -69,31 +81,27 @@ impl Provider for Osmosis {
         &self,
         oracle: &Oracle,
     ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
-        let get_currency_dex_denom = {
-            let currencies = oracle.currencies();
-
-            move |currency| {
-                currencies
-                    .get(currency)
-                    .map(|currency| currency.dex_symbol.clone())
-            }
-        };
+        let currencies = oracle.currencies();
 
         oracle
             .currency_pairs()
             .iter()
-            .map(|((base, quote), &pool_id)| {
-                get_currency_dex_denom(base).and_then(|base_asset_denom| {
-                    get_currency_dex_denom(quote).map(|quote_asset_denom| {
+            .map(|((base_ticker, quote_ticker), &pool_id)| {
+                currencies.get(base_ticker).and_then(|base| {
+                    currencies.get(quote_ticker).map(|quote| {
                         (
                             CurrencyPair {
-                                base: base.clone().into(),
-                                quote: quote.clone().into(),
+                                base: base_ticker.clone().into(),
+                                quote: quote_ticker.clone().into(),
                             },
-                            SpotPriceRequest {
-                                pool_id,
-                                base_asset_denom,
-                                quote_asset_denom,
+                            QueryMessage {
+                                request: SpotPriceRequest {
+                                    pool_id,
+                                    base_asset_denom: base.dex_symbol.clone(),
+                                    quote_asset_denom: quote.dex_symbol.clone(),
+                                },
+                                base_decimal_digits: base.decimal_digits,
+                                quote_decimal_digits: quote.decimal_digits,
                             },
                         )
                     })
@@ -110,29 +118,55 @@ impl Provider for Osmosis {
     {
         let mut query_raw = dex_node_client.clone().query_raw();
 
-        let query_message = query_message.clone();
+        let &Self::PriceQueryMessage {
+            ref request,
+            base_decimal_digits,
+            quote_decimal_digits,
+        } = query_message;
+
+        let request = request.clone();
 
         let path_and_query = self.path_and_query.clone();
 
         async move {
+            #[cfg(debug_assertions)]
+            let (base, quote) = (
+                request.base_asset_denom.clone(),
+                request.quote_asset_denom.clone(),
+            );
+
+            let spot_price = query_raw
+                .raw::<_, SpotPriceResponse>(request, path_and_query)
+                .await
+                .context(
+                    "Failed to query spot price from pool manager module!",
+                )?
+                .spot_price;
+
+            #[cfg(debug_assertions)]
+            tracing::debug!(base, quote, "Unprocessed price: {spot_price}");
+
             Self::normalized_price(
-                &query_raw
-                    .raw::<_, SpotPriceResponse>(query_message, path_and_query)
-                    .await
-                    .context(
-                        "Failed to query spot price from pool manager module!",
-                    )?
-                    .spot_price,
+                &spot_price,
+                base_decimal_digits,
+                quote_decimal_digits,
             )
             .context(
-                "Failed to normalize price returned from pool manager module!",
+                "Failed to normalize price returned from pool manager \
+                    module!",
             )
         }
     }
 }
 
+pub(crate) struct QueryMessage {
+    request: SpotPriceRequest,
+    base_decimal_digits: u8,
+    quote_decimal_digits: u8,
+}
+
 #[derive(Clone, Message)]
-pub(crate) struct SpotPriceRequest {
+struct SpotPriceRequest {
     #[prost(uint64, tag = "1")]
     pool_id: u64,
     #[prost(string, tag = "2")]
@@ -150,12 +184,55 @@ struct SpotPriceResponse {
 #[test]
 fn normalized_price() {
     let (base, quote) =
-        Osmosis::normalized_price("1941974700000000000000000000000000")
+        Osmosis::normalized_price("1941974700000000000000000000000000", 6, 6)
             .unwrap();
 
-    assert_eq!(base.into_inner().into_amount(), "10000000000");
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "10000000000");
+    assert_eq!(base.decimal_places(), 10);
 
-    assert_eq!(quote.into_inner().into_amount(), "19419747");
+    let query = quote.into_inner();
+    assert_eq!(query.amount(), "19419747");
+    assert_eq!(query.decimal_places(), 10);
+
+    let (base, quote) =
+        Osmosis::normalized_price("001941974700000000000000000000000000", 6, 6)
+            .unwrap();
+
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "10000000000");
+    assert_eq!(base.decimal_places(), 10);
+
+    let quote = quote.into_inner();
+    assert_eq!(quote.amount(), "19419747");
+    assert_eq!(quote.decimal_places(), 10);
+
+    let (base, quote) =
+        Osmosis::normalized_price("194197470000000000000000000000000000", 6, 6)
+            .unwrap();
+
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "100000000");
+    assert_eq!(base.decimal_places(), 8);
+
+    let quote = quote.into_inner();
+    assert_eq!(quote.amount(), "19419747");
+    assert_eq!(quote.decimal_places(), 8);
+
+    let (base, quote) = Osmosis::normalized_price(
+        "24602951060000000000000000000000000000",
+        6,
+        6,
+    )
+    .unwrap();
+
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "100000000");
+    assert_eq!(base.decimal_places(), 8);
+
+    let quote = quote.into_inner();
+    assert_eq!(quote.amount(), "2460295106");
+    assert_eq!(quote.decimal_places(), 8);
 
     let (base, quote) =
         Osmosis::normalized_price("001941974700000000000000000000000000")
