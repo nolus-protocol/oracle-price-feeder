@@ -31,6 +31,7 @@ pub(crate) struct DecimalAmount {
 }
 
 impl DecimalAmount {
+    #[inline]
     pub const fn new(amount: String, decimal_places: u8) -> Self {
         Self {
             amount,
