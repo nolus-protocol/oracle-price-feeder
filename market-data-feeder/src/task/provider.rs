@@ -23,7 +23,7 @@ use chain_ops::{
 };
 
 use crate::{
-    provider::{self, BaseAmount, CurrencyPair, QuoteAmount},
+    provider::{self, BaseAmount, CurrencyPair, DecimalAmount, QuoteAmount},
     task::Base,
 };
 
@@ -196,75 +196,126 @@ where
             }
         }
 
-        log!(info_span!("pre-feeding-check")).in_scope(|| {
-            if !prices.is_empty() {
-                log_with_context!(info![self.base.protocol, P](
-                    "Collected prices:",
-                ));
-
-                for (
-                    CurrencyPair { base, quote },
-                    (base_amount, quote_amount),
-                ) in prices
-                {
-                    let base_amount = base_amount.into_inner();
-
-                    let base_decimal_places =
-                        base_amount.decimal_places().into();
-
-                    let base_amount = base_amount.into_amount();
-
-                    let (base_whole, base_fraction) = base_amount.split_at(
-                        base_amount.len().saturating_sub(base_decimal_places),
-                    );
-
-                    let quote_amount = quote_amount.into_inner();
-
-                    let quote_decimal_places =
-                        quote_amount.decimal_places().into();
-
-                    let quote_amount = quote_amount.into_amount();
-
-                    let (quote_whole, quote_fraction) = quote_amount.split_at(
-                        quote_amount.len().saturating_sub(quote_decimal_places),
-                    );
-
-                    log!(info!(
-                        "{base_whole:0>1}.\
-                        {base_fraction:0<1} \
-                        {base} ~ \
-                        {quote_whole:0>1}.\
-                        {quote_fraction:0<1} \
-                        {quote}",
-                        base_fraction = base_fraction.trim_end_matches('0'),
-                        quote_fraction = quote_fraction.trim_end_matches('0'),
-                    ));
-                }
-
-                log!(info!(""));
-            }
-
-            if !fetch_errors.is_empty() {
-                log_with_context!(error![self.base.protocol, P](
-                    "Errors which occurred while collecting prices:"
-                ));
-
-                for (CurrencyPair { base, quote }, error) in fetch_errors {
-                    log!(error!(
-                        %base,
-                        %quote,
-                        ?error,
-                        "Failed to fetch price!",
-                    ));
-                }
-
-                log!(error!(""));
-            }
-        });
+        self.log_prices_and_errors(prices, fetch_errors);
 
         sleep(self.base.duration_before_start).await;
 
         Ok(())
+    }
+
+    fn log_prices_and_errors(
+        &self,
+        prices: Vec<(CurrencyPair, (BaseAmount, QuoteAmount))>,
+        fetch_errors: Vec<(CurrencyPair, anyhow::Error)>,
+    ) {
+        log!(info_span!("pre-feeding-check")).in_scope(|| {
+            if !prices.is_empty() {
+                self.log_prices(prices);
+            }
+
+            if !fetch_errors.is_empty() {
+                self.log_errors(fetch_errors);
+            }
+        });
+    }
+
+    fn log_prices(
+        &self,
+        prices: Vec<(CurrencyPair, (BaseAmount, QuoteAmount))>,
+    ) {
+        log_with_context!(info![self.base.protocol, P]("Collected prices:"));
+
+        for (CurrencyPair { base, quote }, (base_amount, quote_amount)) in
+            prices
+        {
+            log!(debug!("{base_amount:?} / {quote_amount:?}"));
+
+            log!(info!(
+                "{}",
+                Self::pretty_formatted_price(
+                    &base,
+                    &base_amount,
+                    &quote,
+                    &quote_amount
+                )
+            ));
+
+            log!(info!(
+                "\t{{{base_amount} ~ {quote_amount}}}",
+                base_amount = base_amount.as_inner().amount(),
+                quote_amount = quote_amount.as_inner().amount(),
+            ));
+        }
+
+        log!(info!(""));
+    }
+
+    fn log_errors(&self, fetch_errors: Vec<(CurrencyPair, anyhow::Error)>) {
+        log_with_context!(error![self.base.protocol, P](
+            "Errors which occurred while collecting prices:"
+        ));
+
+        for (CurrencyPair { base, quote }, error) in fetch_errors {
+            log!(error!(
+                %base,
+                %quote,
+                ?error,
+                "Failed to fetch price!",
+            ));
+        }
+
+        log!(error!(""));
+    }
+
+    fn pretty_formatted_price(
+        base_ticker: &str,
+        base_amount: &BaseAmount,
+        quote_ticker: &str,
+        quote_amount: &QuoteAmount,
+    ) -> String {
+        struct ProcessedAmount<'r> {
+            whole: &'r str,
+            zeroes_after_point: usize,
+            fraction: &'r str,
+        }
+
+        fn process(amount: &DecimalAmount) -> ProcessedAmount {
+            let decimal_places = amount.decimal_places().into();
+
+            let amount = amount.amount();
+
+            let amount_length = amount.len();
+
+            let (whole, fraction) =
+                amount.split_at(amount_length.saturating_sub(decimal_places));
+
+            let zeroes_after_point =
+                decimal_places.saturating_sub(amount_length);
+
+            ProcessedAmount {
+                whole,
+                zeroes_after_point,
+                fraction: fraction.trim_end_matches('0'),
+            }
+        }
+
+        let base_amount = process(base_amount.as_inner());
+
+        let quote_amount = process(quote_amount.as_inner());
+
+        format!(
+            "{base_whole:0>1}.{empty:0<base_zeroes$}{base_fraction:0<1} \
+            {base_ticker} ~ \
+            {quote_whole:0>1}.{empty:0<quote_zeroes$}{quote_fraction:0<1} \
+            {quote_ticker}",
+            empty = "",
+            base_whole = base_amount.whole,
+            base_zeroes = base_amount.zeroes_after_point,
+            base_fraction = base_amount.fraction,
+            quote_whole = quote_amount.whole,
+            quote_zeroes = quote_amount.zeroes_after_point,
+            quote_fraction = quote_amount.fraction,
+        )
     }
 
     fn handle_price_query_result(
