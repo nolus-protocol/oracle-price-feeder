@@ -24,7 +24,7 @@ pub(crate) trait Provider: Send + Sized {
 }
 
 #[must_use]
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DecimalAmount {
     amount: String,
     decimal_places: u8,
@@ -51,7 +51,7 @@ macro_rules! define_amount_newtype {
     ($($type:ident),+ $(,)?) => {
         $(
             #[must_use]
-            #[derive(Clone)]
+            #[derive(Debug, Clone, PartialEq, Eq)]
             pub(crate) struct $type($crate::provider::DecimalAmount);
 
             impl $type {
