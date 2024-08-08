@@ -235,26 +235,50 @@ fn normalized_price() {
     assert_eq!(quote.decimal_places(), 8);
 
     let (base, quote) =
-        Osmosis::normalized_price("001941974700000000000000000000000000")
+        Osmosis::normalized_price("74167359355013376000000000000000000", 6, 6)
             .unwrap();
 
-    assert_eq!(base.into_inner().into_amount(), "10000000000");
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "1000000000000000000");
+    assert_eq!(base.decimal_places(), 18);
 
-    assert_eq!(quote.into_inner().into_amount(), "19419747");
+    let quote = quote.into_inner();
+    assert_eq!(quote.amount(), "74167359355013376");
+    assert_eq!(quote.decimal_places(), 18);
 
     let (base, quote) =
-        Osmosis::normalized_price("194197470000000000000000000000000000")
+        Osmosis::normalized_price("6724762410000000000000000000", 18, 6)
             .unwrap();
 
-    assert_eq!(base.into_inner().into_amount(), "100000000");
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "100000000000000000");
+    assert_eq!(base.decimal_places(), 17);
 
-    assert_eq!(quote.into_inner().into_amount(), "19419747");
+    let query = quote.into_inner();
+    assert_eq!(query.amount(), "672476241");
+    assert_eq!(query.decimal_places(), 5);
 
     let (base, quote) =
-        Osmosis::normalized_price("24602951060000000000000000000000000000")
+        Osmosis::normalized_price("6724762415000000000000000000", 18, 6)
             .unwrap();
 
-    assert_eq!(base.into_inner().into_amount(), "100000000");
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "1000000000000000000");
+    assert_eq!(base.decimal_places(), 18);
 
-    assert_eq!(quote.into_inner().into_amount(), "2460295106");
+    let query = quote.into_inner();
+    assert_eq!(query.amount(), "6724762415");
+    assert_eq!(query.decimal_places(), 6);
+
+    let (base, quote) =
+        Osmosis::normalized_price("6724762415300000000000000000", 18, 6)
+            .unwrap();
+
+    let base = base.into_inner();
+    assert_eq!(base.amount(), "10000000000000000000");
+    assert_eq!(base.decimal_places(), 19);
+
+    let query = quote.into_inner();
+    assert_eq!(query.amount(), "67247624153");
+    assert_eq!(query.decimal_places(), 7);
 }
