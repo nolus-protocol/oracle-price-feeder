@@ -604,4 +604,16 @@ fn test_pretty_price_formatting() {
         ),
         "1.0 NLS ~ 0.01811002280600015 USDC_NOBLE"
     );
+
+    let base =
+        BaseAmount::new(DecimalAmount::new("10000000000000000000".into(), 19));
+
+    let quote = QuoteAmount::new(DecimalAmount::new("67247624153".into(), 7));
+
+    assert_eq!(
+        Provider::<Dummy>::pretty_formatted_price(
+            "WETH", &base, "OSMO", &quote,
+        ),
+        "1.0 WETH ~ 6724.7624153 OSMO"
+    );
 }
