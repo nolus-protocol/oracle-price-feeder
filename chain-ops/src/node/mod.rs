@@ -71,7 +71,7 @@ where
                     .tls_config(
                         ClientTlsConfig::new()
                             .assume_http2(true)
-                            .with_native_roots(),
+                            .with_webpki_roots(),
                     )
                     .context(
                         "Failed to configure TLS for node's gRPC endpoint!",

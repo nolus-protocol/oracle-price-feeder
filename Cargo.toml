@@ -75,7 +75,7 @@ features = [
     "channel",
     "gzip",
     "prost",
-    "tls-roots",
+    "tls-webpki-roots",
     "zstd",
 ]
 
