@@ -48,7 +48,7 @@ default-features = false
 features = ["derive", "std"]
 
 [workspace.dependencies.serde]
-version = "1.0.205"
+version = "1.0.207"
 default-features = false
 features = [
     "derive",
