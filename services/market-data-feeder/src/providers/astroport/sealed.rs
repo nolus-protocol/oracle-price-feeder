@@ -1,20 +1,18 @@
 use std::{collections::BTreeMap, future::Future};
 
 use anyhow::{Context as _, Result};
-use serde::{Deserialize, Serialize};
 
 use chain_ops::node;
 
 use crate::{
     oracle::Oracle,
-    provider::{
-        BaseAmount, CurrencyPair, DecimalAmount, Provider, QuoteAmount,
-    },
+    provider::{Amount, Base, CurrencyPair, Decimal, Provider, Quote},
 };
 
-pub(crate) struct Astroport {
-    router_address: String,
-}
+use super::{
+    AssetInfo, Astroport, QueryMsg, SimulateSwapOperationsResponse,
+    SwapOperation,
+};
 
 impl Astroport {
     pub const fn new(router_address: String) -> Self {
@@ -37,7 +35,7 @@ impl Astroport {
             }],
         })
         .map(|message| PriceQueryMessage {
-            base_amount: BaseAmount::new(DecimalAmount::new(
+            base_amount: Amount::new(Decimal::new(
                 base_amount.to_string(),
                 base_decimal_places,
             )),
@@ -75,7 +73,7 @@ impl Provider for Astroport {
                 .with_context(|| {
                     format!(
                         "Failed to construct price query message! \
-                        Currency pair={base}/{quote}"
+                    Currency pair={base}/{quote}"
                     )
                 })
                 .map(|query_message| {
@@ -99,7 +97,7 @@ impl Provider for Astroport {
             quote_decimal_places,
             ref message,
         }: &Self::PriceQueryMessage,
-    ) -> impl Future<Output = Result<(BaseAmount, QuoteAmount)>> + Send + 'static
+    ) -> impl Future<Output = Result<(Amount<Base>, Amount<Quote>)>> + Send + 'static
     {
         let mut query_wasm = dex_node_client.clone().query_wasm();
 
@@ -116,10 +114,7 @@ impl Provider for Astroport {
                 .map(|SimulateSwapOperationsResponse { amount }| {
                     (
                         base_amount,
-                        QuoteAmount::new(DecimalAmount::new(
-                            amount,
-                            quote_decimal_places,
-                        )),
+                        Amount::new(Decimal::new(amount, quote_decimal_places)),
                     )
                 })
                 .context("Failed to query price from router contract!")
@@ -127,37 +122,8 @@ impl Provider for Astroport {
     }
 }
 
-pub(crate) struct PriceQueryMessage {
-    base_amount: BaseAmount,
+pub struct PriceQueryMessage {
+    base_amount: Amount<Base>,
     quote_decimal_places: u8,
     message: Vec<u8>,
-}
-
-#[derive(Serialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-enum AssetInfo {
-    NativeToken { denom: String },
-}
-
-#[derive(Serialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-enum SwapOperation {
-    AstroSwap {
-        offer_asset_info: AssetInfo,
-        ask_asset_info: AssetInfo,
-    },
-}
-
-#[derive(Serialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-enum QueryMsg {
-    SimulateSwapOperations {
-        offer_amount: String,
-        operations: [SwapOperation; 1],
-    },
-}
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-struct SimulateSwapOperationsResponse {
-    amount: String,
 }

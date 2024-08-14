@@ -9,9 +9,6 @@ use cosmrs::Gas;
 
 use chain_ops::{env::ReadFromVar as _, node, run_app};
 
-mod oracle;
-mod provider;
-mod providers;
 mod task;
 
 run_app!(

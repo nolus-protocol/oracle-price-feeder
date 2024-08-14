@@ -10,7 +10,7 @@ use chain_ops::{
     tx::ExecuteTemplate,
 };
 
-use crate::{oracle::Oracle, providers};
+use market_data_feeder::{oracle::Oracle, providers};
 
 pub(crate) use self::id::Id;
 use self::provider::Provider;

@@ -13,11 +13,12 @@ use chain_ops::{
     tx::ExecuteTemplate,
 };
 
-use crate::{
+use market_data_feeder::{
     oracle::Oracle,
     providers::{astroport::Astroport, osmosis::Osmosis, Provider},
-    ApplicationDefinedContext,
 };
+
+use crate::ApplicationDefinedContext;
 
 use super::{Base, Task};
 

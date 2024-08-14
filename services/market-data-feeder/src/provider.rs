@@ -1,12 +1,14 @@
-use std::{collections::BTreeMap, future::Future, sync::Arc};
+use std::{
+    collections::BTreeMap, fmt::Debug, future::Future, marker::PhantomData,
+    sync::Arc,
+};
 
 use anyhow::Result;
-
 use chain_ops::node;
 
 use crate::oracle::Oracle;
 
-pub(crate) trait Provider: Send + Sized {
+pub trait Provider: Send + Sized {
     type PriceQueryMessage: Send + 'static;
 
     const PROVIDER_NAME: &'static str;
@@ -20,17 +22,17 @@ pub(crate) trait Provider: Send + Sized {
         &self,
         dex_node_client: &node::Client,
         query_message: &Self::PriceQueryMessage,
-    ) -> impl Future<Output = Result<(BaseAmount, QuoteAmount)>> + Send + 'static;
+    ) -> impl Future<Output = Result<(Amount<Base>, Amount<Quote>)>> + Send + 'static;
 }
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DecimalAmount {
+pub struct Decimal {
     amount: String,
     decimal_places: u8,
 }
 
-impl DecimalAmount {
+impl Decimal {
     #[inline]
     pub const fn new(amount: String, decimal_places: u8) -> Self {
         Self {
@@ -55,37 +57,50 @@ impl DecimalAmount {
     }
 }
 
-macro_rules! define_amount_newtype {
-    ($($type:ident),+ $(,)?) => {
-        $(
-            #[must_use]
-            #[derive(Debug, Clone, PartialEq, Eq)]
-            pub(crate) struct $type($crate::provider::DecimalAmount);
+pub trait Marker: Debug + Copy + Eq {}
 
-            impl $type {
-                #[inline]
-                pub const fn new(value: DecimalAmount) -> Self {
-                    Self(value)
-                }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Base {}
 
-                #[inline]
-                pub fn as_inner(&self) -> &DecimalAmount {
-                    &self.0
-                }
+impl Marker for Base {}
 
-                #[inline]
-                pub fn into_inner(self) -> DecimalAmount {
-                    self.0
-                }
-            }
-        )+
-    };
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quote {}
+
+impl Marker for Quote {}
+
+#[must_use]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Amount<T: Marker> {
+    amount: Decimal,
+    _marker: PhantomData<T>,
 }
 
-define_amount_newtype![BaseAmount, QuoteAmount];
+impl<T> Amount<T>
+where
+    T: Marker,
+{
+    #[inline]
+    pub const fn new(amount: Decimal) -> Self {
+        Self {
+            amount,
+            _marker: const { PhantomData },
+        }
+    }
+
+    #[inline]
+    pub const fn as_inner(&self) -> &Decimal {
+        &self.amount
+    }
+
+    #[inline]
+    pub fn into_inner(self) -> Decimal {
+        self.amount
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct CurrencyPair {
+pub struct CurrencyPair {
     pub base: Arc<str>,
     pub quote: Arc<str>,
 }

@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use chrono::{Datelike, Timelike, Utc};
+use tracing::Level;
 use tracing_subscriber::fmt::{fmt, writer::MakeWriterExt, MakeWriter};
 
 pub fn init<T>(logs_directory: T) -> Result<()>
@@ -30,6 +31,7 @@ where
             .with_file(false)
             .with_level(true)
             .with_line_number(false)
+            .with_max_level(Level::DEBUG)
             .with_target(true)
             .with_writer(stdout.and(DateTimeSegmentedWriterFactory::new(
                 logs_directory.into(),

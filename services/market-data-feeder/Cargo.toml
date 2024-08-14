@@ -8,9 +8,7 @@ rust-version.workspace = true
 chain-ops.workspace = true
 
 anyhow.workspace = true
-#astroport.workspace = true
 cosmrs.workspace = true
-#osmosis-std.workspace = true
 tokio.workspace = true
 tonic.workspace = true
 tracing.workspace = true

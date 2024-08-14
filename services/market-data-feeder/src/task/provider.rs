@@ -22,10 +22,11 @@ use chain_ops::{
     tx,
 };
 
-use crate::{
-    provider::{self, BaseAmount, CurrencyPair, DecimalAmount, QuoteAmount},
-    task::Base,
+use market_data_feeder::provider::{
+    self, Amount, Base, CurrencyPair, Decimal, Quote,
 };
+
+use crate::task;
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -50,7 +51,7 @@ pub(crate) struct Provider<P>
 where
     P: provider::Provider,
 {
-    base: Base,
+    base: task::Base,
     provider: P,
 }
 
@@ -58,7 +59,7 @@ impl<P> Provider<P>
 where
     P: provider::Provider,
 {
-    pub const fn new(base: Base, provider: P) -> Self {
+    pub const fn new(base: task::Base, provider: P) -> Self {
         Self { base, provider }
     }
 
@@ -173,7 +174,7 @@ where
         &mut self,
         queries_task_set: &mut TaskSet<
             CurrencyPair,
-            Result<(BaseAmount, QuoteAmount)>,
+            Result<(Amount<Base>, Amount<Quote>)>,
         >,
     ) -> Result<()> {
         let mut prices = vec![];
@@ -205,7 +206,7 @@ where
 
     fn log_prices_and_errors(
         &self,
-        prices: Vec<(CurrencyPair, (BaseAmount, QuoteAmount))>,
+        prices: Vec<(CurrencyPair, (Amount<Base>, Amount<Quote>))>,
         fetch_errors: Vec<(CurrencyPair, anyhow::Error)>,
     ) {
         log!(info_span!("pre-feeding-check")).in_scope(|| {
@@ -221,7 +222,7 @@ where
 
     fn log_prices(
         &self,
-        prices: Vec<(CurrencyPair, (BaseAmount, QuoteAmount))>,
+        prices: Vec<(CurrencyPair, (Amount<Base>, Amount<Quote>))>,
     ) {
         log_with_context!(info![self.base.protocol, P]("Collected prices:"));
 
@@ -269,9 +270,9 @@ where
 
     fn pretty_formatted_price(
         base_ticker: &str,
-        base_amount: &BaseAmount,
+        base_amount: &Amount<Base>,
         quote_ticker: &str,
-        quote_amount: &QuoteAmount,
+        quote_amount: &Amount<Quote>,
     ) -> String {
         struct ProcessedAmount<'r> {
             whole: &'r str,
@@ -279,18 +280,18 @@ where
             fraction: &'r str,
         }
 
-        fn process(amount: &DecimalAmount) -> ProcessedAmount {
-            let decimal_places = amount.decimal_places().into();
+        fn process(amount: &Decimal) -> ProcessedAmount {
+            let decimal_digits = amount.decimal_places().into();
 
             let amount = amount.amount();
 
             let amount_length = amount.len();
 
             let (whole, fraction) =
-                amount.split_at(amount_length.saturating_sub(decimal_places));
+                amount.split_at(amount_length.saturating_sub(decimal_digits));
 
             let zeroes_after_point =
-                decimal_places.saturating_sub(amount_length);
+                decimal_digits.saturating_sub(amount_length);
 
             ProcessedAmount {
                 whole,
@@ -322,7 +323,7 @@ where
         &mut self,
         price_collection_buffer: &mut Vec<Price>,
         CurrencyPair { base, quote }: CurrencyPair,
-        result: Result<(BaseAmount, QuoteAmount)>,
+        result: Result<(Amount<Base>, Amount<Quote>)>,
     ) {
         match result {
             Ok((base_amount, quote_amount)) => {
@@ -479,7 +480,10 @@ where
     async fn spawn_query_tasks(
         &mut self,
         query_messages: &mut BTreeMap<CurrencyPair, P::PriceQueryMessage>,
-        task_set: &mut TaskSet<CurrencyPair, Result<(BaseAmount, QuoteAmount)>>,
+        task_set: &mut TaskSet<
+            CurrencyPair,
+            Result<(Amount<Base>, Amount<Quote>)>,
+        >,
         replacement_buffer: &mut Vec<Price>,
     ) -> Result<()> {
         if self
@@ -510,7 +514,7 @@ where
         &'r self,
         task_set: &'r mut TaskSet<
             CurrencyPair,
-            Result<(BaseAmount, QuoteAmount)>,
+            Result<(Amount<Base>, Amount<Quote>)>,
         >,
     ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r {
         let duration = self.base.idle_duration;
@@ -560,7 +564,9 @@ struct Coin {
 
 #[test]
 fn test_pretty_price_formatting() {
-    use crate::{node, oracle::Oracle};
+    use chain_ops::node;
+
+    use market_data_feeder::oracle::Oracle;
 
     enum Never {}
 
@@ -581,19 +587,18 @@ fn test_pretty_price_formatting() {
             &self,
             _: &node::Client,
             _: &Self::PriceQueryMessage,
-        ) -> impl Future<Output = Result<(BaseAmount, QuoteAmount)>> + Send + 'static
-        {
+        ) -> impl Future<Output = Result<(Amount<Base>, Amount<Quote>)>>
+               + Send
+               + 'static {
             async move {
                 unreachable!();
             }
         }
     }
 
-    let base =
-        BaseAmount::new(DecimalAmount::new("100000000000000000".into(), 17));
+    let base = Amount::new(Decimal::new("100000000000000000".into(), 17));
 
-    let quote =
-        QuoteAmount::new(DecimalAmount::new("1811002280600015".into(), 17));
+    let quote = Amount::new(Decimal::new("1811002280600015".into(), 17));
 
     assert_eq!(
         Provider::<Dummy>::pretty_formatted_price(
@@ -605,10 +610,9 @@ fn test_pretty_price_formatting() {
         "1.0 NLS ~ 0.01811002280600015 USDC_NOBLE"
     );
 
-    let base =
-        BaseAmount::new(DecimalAmount::new("10000000000000000000".into(), 19));
+    let base = Amount::new(Decimal::new("10000000000000000000".into(), 19));
 
-    let quote = QuoteAmount::new(DecimalAmount::new("67247624153".into(), 7));
+    let quote = Amount::new(Decimal::new("67247624153".into(), 7));
 
     assert_eq!(
         Provider::<Dummy>::pretty_formatted_price(
