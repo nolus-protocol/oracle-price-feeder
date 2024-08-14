@@ -1,8 +1,7 @@
 **/
 
 !.cargo/
-!alarms-dispatcher/
-!market-data-feeder/
-!src/
+!chain-ops/
+!services/**
 !Cargo.toml
 !Cargo.lock
