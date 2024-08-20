@@ -19,6 +19,7 @@ path = "./services/market-data-feeder"
 bip32 = "0.5.2"
 bnum = "0.11.0"
 data-encoding = "2.6.0"
+fraction = "0.15.3"
 serde-json-wasm = "1.0.1"
 thiserror = "1.0.63"
 tracing-appender = "0.2.3"
@@ -49,6 +50,17 @@ features = [
 [workspace.dependencies.osmosis-std]
 version = "0.25.0"
 default-features = false
+
+[workspace.dependencies.proptest]
+version = "1.5.0"
+default-features = false
+features = [
+    "attr-macro",
+    "bit-set",
+    "fork",
+    "std",
+    "tempfile",
+]
 
 [workspace.dependencies.prost]
 version = "0.13.1"

@@ -15,3 +15,7 @@ tracing.workspace = true
 serde.workspace = true
 serde-json-wasm.workspace = true
 prost.workspace = true
+
+[dev-dependencies]
+fraction.workspace = true
+proptest.workspace = true

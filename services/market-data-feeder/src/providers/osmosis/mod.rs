@@ -7,6 +7,8 @@ use tonic::codegen::http::uri::PathAndQuery;
 pub(crate) use self::sealed::{greater_than_max_quote_value, MAX_QUOTE_VALUE};
 
 mod sealed;
+#[cfg(test)]
+mod test;
 
 #[must_use]
 pub struct Osmosis {
