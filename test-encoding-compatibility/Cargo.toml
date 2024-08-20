@@ -1,0 +1,36 @@
+[package]
+name = "test-encoding-compatibility"
+version = "0.64.1"
+edition = "2021"
+rust-version = "1.80.0"
+
+autobins = false
+
+[dev-dependencies.market-data-feeder]
+path = "../services/market-data-feeder"
+
+################################################################################
+
+[dev-dependencies.astroport]
+version = "5.2.0"
+default-features = false
+
+[dev-dependencies.osmosis-std]
+version = "0.25.0"
+default-features = false
+
+[dev-dependencies.prost]
+version = "0.13.1"
+default-features = false
+features = ["std"]
+
+[dev-dependencies.prost_0_12]
+package = "prost"
+version = "0.12.6"
+default-features = false
+features = ["std"]
+
+[dev-dependencies.serde-json-wasm]
+version = "1.0.1"
+default-features = false
+features = ["std"]

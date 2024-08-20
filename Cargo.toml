@@ -1,8 +1,10 @@
 [workspace]
 resolver = "2"
 members = ["./**/src/.."]
-exclude = ["./target/**"]
-default-members = ["./**/src/.."]
+exclude = [
+    "./target/**",
+    "./test-encoding-compatibility",
+]
 
 [workspace.package]
 version = "0.64.1"
@@ -29,27 +31,19 @@ version = "1.0.86"
 default-features = false
 features = ["std"]
 
-[workspace.dependencies.astroport]
-version = "5.2.0"
-default-features = false
-
 [workspace.dependencies.chrono]
 version = "0.4.38"
 default-features = false
 features = ["now"]
 
 [workspace.dependencies.cosmrs]
-version = "0.18.0"
+version = "0.19.0"
 default-features = false
 features = [
     "bip32",
     "cosmwasm",
     "grpc",
 ]
-
-[workspace.dependencies.osmosis-std]
-version = "0.25.0"
-default-features = false
 
 [workspace.dependencies.proptest]
 version = "1.5.0"
@@ -66,12 +60,6 @@ features = [
 version = "0.13.1"
 default-features = false
 features = ["derive", "std"]
-
-[workspace.dependencies.prost_0_12]
-package = "prost"
-version = "0.12.6"
-default-features = false
-features = ["std"]
 
 [workspace.dependencies.serde]
 version = "1.0.207"
