@@ -43,16 +43,19 @@ impl Decimal {
     }
 
     #[inline]
+    #[must_use]
     pub fn amount(&self) -> &str {
         &self.amount
     }
 
     #[inline]
+    #[must_use]
     pub fn into_amount(self) -> String {
         self.amount
     }
 
     #[inline]
+    #[must_use]
     pub const fn decimal_places(&self) -> u8 {
         self.decimal_places
     }

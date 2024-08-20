@@ -63,11 +63,13 @@ impl Oracle {
     }
 
     #[inline]
+    #[must_use]
     pub const fn currencies(&self) -> &Currencies {
         &self.currencies
     }
 
     #[inline]
+    #[must_use]
     pub const fn currency_pairs(&self) -> &CurrencyPairs {
         &self.currency_pairs
     }

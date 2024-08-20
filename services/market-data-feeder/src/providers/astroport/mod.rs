@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 mod sealed;
 
+#[must_use]
 pub struct Astroport {
     router_address: String,
 }

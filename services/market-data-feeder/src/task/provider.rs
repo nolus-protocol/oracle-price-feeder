@@ -172,10 +172,7 @@ where
 
     async fn initial_fetch_and_print(
         &mut self,
-        queries_task_set: &mut TaskSet<
-            CurrencyPair,
-            Result<(Amount<Base>, Amount<Quote>)>,
-        >,
+        queries_task_set: &mut QueryTasksSet,
     ) -> Result<()> {
         let mut prices = vec![];
 
@@ -206,7 +203,7 @@ where
 
     fn log_prices_and_errors(
         &self,
-        prices: Vec<(CurrencyPair, (Amount<Base>, Amount<Quote>))>,
+        prices: Vec<QueryTaskResponse>,
         fetch_errors: Vec<(CurrencyPair, anyhow::Error)>,
     ) {
         log!(info_span!("pre-feeding-check")).in_scope(|| {
@@ -220,10 +217,7 @@ where
         });
     }
 
-    fn log_prices(
-        &self,
-        prices: Vec<(CurrencyPair, (Amount<Base>, Amount<Quote>))>,
-    ) {
+    fn log_prices(&self, prices: Vec<QueryTaskResponse>) {
         log_with_context!(info![self.base.protocol, P]("Collected prices:"));
 
         for (CurrencyPair { base, quote }, (base_amount, quote_amount)) in
@@ -480,10 +474,7 @@ where
     async fn spawn_query_tasks(
         &mut self,
         query_messages: &mut BTreeMap<CurrencyPair, P::PriceQueryMessage>,
-        task_set: &mut TaskSet<
-            CurrencyPair,
-            Result<(Amount<Base>, Amount<Quote>)>,
-        >,
+        task_set: &mut QueryTasksSet,
         replacement_buffer: &mut Vec<Price>,
     ) -> Result<()> {
         if self
@@ -512,10 +503,7 @@ where
 
     pub(crate) fn spawn_query_task<'r>(
         &'r self,
-        task_set: &'r mut TaskSet<
-            CurrencyPair,
-            Result<(Amount<Base>, Amount<Quote>)>,
-        >,
+        task_set: &'r mut QueryTasksSet,
     ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r {
         let duration = self.base.idle_duration;
 
@@ -541,6 +529,11 @@ where
         }
     }
 }
+
+type QueryTasksSet =
+    TaskSet<CurrencyPair, Result<(Amount<Base>, Amount<Quote>)>>;
+
+type QueryTaskResponse = (CurrencyPair, (Amount<Base>, Amount<Quote>));
 
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
