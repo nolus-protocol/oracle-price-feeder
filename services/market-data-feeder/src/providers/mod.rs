@@ -14,4 +14,4 @@ macro_rules! define_provider {
     };
 }
 
-define_provider![astroport::Astroport, osmosis::Osmosis,];
+define_provider![astroport::Astroport, osmosis::Osmosis];
