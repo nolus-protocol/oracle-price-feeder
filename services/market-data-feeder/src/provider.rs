@@ -4,6 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
+
 use chain_ops::node;
 
 use crate::oracle::Oracle;
