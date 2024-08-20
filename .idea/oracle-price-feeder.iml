@@ -9,6 +9,7 @@
       <sourceFolder url="file://$MODULE_DIR$/tests/encoding-compatibility/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests/encoding-compatibility/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
+      <excludeFolder url="file://$MODULE_DIR$/test-encoding-compatibility/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
