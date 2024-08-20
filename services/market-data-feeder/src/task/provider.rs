@@ -576,6 +576,7 @@ fn test_pretty_price_formatting() {
             Ok(BTreeMap::new())
         }
 
+        #[allow(clippy::manual_async_fn)]
         fn price_query(
             &self,
             _: &node::Client,
