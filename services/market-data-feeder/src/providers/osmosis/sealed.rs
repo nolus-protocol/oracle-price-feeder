@@ -1,7 +1,7 @@
-use std::{collections::BTreeMap, future::Future, sync::LazyLock};
+use std::{cmp, collections::BTreeMap, future::Future};
 
-use anyhow::{Context as _, Result};
-use tonic::codegen::http::uri::PathAndQuery;
+use anyhow::{bail, Context as _, Result};
+use tracing::debug;
 
 use chain_ops::node;
 
@@ -13,87 +13,90 @@ use crate::{
 use super::{Osmosis, SpotPriceRequest, SpotPriceResponse};
 
 impl Osmosis {
-    pub fn new() -> Self {
-        static SINGLETON: LazyLock<PathAndQuery> = LazyLock::new(|| {
-            PathAndQuery::from_static(
-                "/osmosis.poolmanager.v2.Query/SpotPriceV2",
-            )
-        });
-
-        Self {
-            path_and_query: &SINGLETON,
-        }
-    }
-
     pub(super) fn normalized_price(
-        spot_price: &str,
-        mut base_decimal_digits: u8,
-        mut quote_decimal_digits: u8,
+        mut spot_price: &str,
+        base_decimal_digits: u8,
+        quote_decimal_digits: u8,
     ) -> Result<(Amount<Base>, Amount<Quote>)> {
-        let mut trimmed_spot_price = spot_price.trim_end_matches('0');
+        spot_price = spot_price.trim_start_matches('0');
 
-        (base_decimal_digits, quote_decimal_digits) = {
-            let mut decimal_places: u8 = 36;
-
-            decimal_places -=
-                u8::try_from(spot_price.len() - trimmed_spot_price.len())?;
-
-            (
-                decimal_places,
-                decimal_places
-                    .wrapping_add(quote_decimal_digits)
-                    .wrapping_sub(base_decimal_digits),
-            )
-        };
-
-        trimmed_spot_price = trimmed_spot_price.trim_start_matches('0');
-
-        if base_decimal_digits > 38 {
-            let excess = base_decimal_digits - 38;
-
-            trimmed_spot_price = trimmed_spot_price
-                .get(..trimmed_spot_price.len().saturating_sub(excess.into()))
-                .filter(|trimmed_spot_price| !trimmed_spot_price.is_empty())
-                .context(
-                    "Base currency's amount exceeds quote currency's amount!",
-                )?;
-
-            base_decimal_digits = 38;
-
-            quote_decimal_digits = quote_decimal_digits
-                .checked_sub(excess)
-                .context("Pair exceeds allowed exponent difference of 38.")?;
+        if spot_price.is_empty() {
+            bail!("Spot price contains only zeroes!");
         }
 
-        if trimmed_spot_price.len() > 38 {
-            let excess = u8::try_from(trimmed_spot_price.len() - 38).context(
-                "Quote currency's amount length exceeds 293 bytes in length!",
+        if !spot_price.as_bytes().iter().all(u8::is_ascii_digit) {
+            bail!("Spot price is not valid ASCII encoded number!");
+        }
+
+        let mut base_exponent: u8 = 36;
+
+        let mut quote_exponent: u8 = (36_u16 + u16::from(quote_decimal_digits))
+            .checked_sub(u16::from(base_decimal_digits))
+            .context(
+                "Base currency's decimal digits count exceeds the sum of the 
+                    quote currency's decimal digits count plus thirty six (36)!"
+            )?
+            .try_into()
+            .context(
+                "Quote currency's decimal digits count exceeds the allowed \
+                    possible difference between it and the base currency's \
+                    decimal digits count!"
             )?;
 
-            trimmed_spot_price = &trimmed_spot_price[..38];
+        spot_price = spot_price.trim_end_matches(|ch| {
+            if ch == '0' && base_exponent != 0 && quote_exponent != 0 {
+                base_exponent -= 1;
 
-            base_decimal_digits =
-                base_decimal_digits.checked_sub(excess).context("")?;
+                quote_exponent -= 1;
 
-            quote_decimal_digits =
-                quote_decimal_digits.checked_sub(excess).context("")?;
+                true
+            } else {
+                false
+            }
+        });
+
+        if greater_than_max_quote_value(spot_price) {
+            let excess = (spot_price.len() - MAX_QUOTE_VALUE.len())
+                + usize::from(
+                    spot_price[..MAX_QUOTE_VALUE.len()] > *MAX_QUOTE_VALUE,
+                );
+
+            spot_price = &spot_price[..spot_price.len() - excess];
+
+            (base_exponent, quote_exponent) = excess
+                .try_into()
+                .ok()
+                .and_then(|excess| {
+                    base_exponent.checked_sub(excess).and_then(
+                        |base_exponent| {
+                            quote_exponent.checked_sub(excess).map(
+                                |quote_exponent| {
+                                    (base_exponent, quote_exponent)
+                                },
+                            )
+                        },
+                    )
+                })
+                .context("Spot price exceeds the maximum allowed value!")?;
         }
 
+        debug_assert_eq!(spot_price.parse::<u128>().err(), None);
+
         10_u128
-            .checked_pow(base_decimal_digits.into())
+            .checked_pow(base_exponent.into())
             .context(
                 "Failed to calculate price base amount due to an overflow \
-                during exponentiation!",
+                    during exponentiation!",
             )
             .map(|base_amount| {
                 (
                     Amount::new(Decimal::new(
                         base_amount.to_string(),
-                        base_decimal_digits,
+                        base_exponent,
                     )),
                     Amount::new(Decimal::new(
-                        trimmed_spot_price.into(),
-                        quote_decimal_digits,
+                        spot_price.to_string(),
+                        quote_exponent,
                     )),
                 )
             })
@@ -171,7 +174,7 @@ impl Provider for Osmosis {
                 )?
                 .spot_price;
 
-            tracing::debug!(base, quote, "Unprocessed price: {spot_price}");
+            debug!(base, quote, "Unprocessed price: {spot_price}");
 
             Self::normalized_price(
                 &spot_price,
@@ -180,7 +183,7 @@ impl Provider for Osmosis {
             )
             .context(
                 "Failed to normalize price returned from pool manager \
-                    module!",
+                        module!",
             )
         }
     }
@@ -190,4 +193,122 @@ pub struct QueryMessage {
     request: SpotPriceRequest,
     base_decimal_digits: u8,
     quote_decimal_digits: u8,
+}
+
+pub(crate) const MAX_QUOTE_VALUE: &str = {
+    /// Represents the maximum 128-bit unsigned integer value.
+    const MAX_U128_VALUE: &str = {
+        use std::convert::identity;
+
+        const WELL_KNOWN_VALUE: &str =
+            "340282366920938463463374607431768211455";
+
+        let length_assertion_predicate = (u128::MAX.ilog10()
+            + if u128::MAX % 10 == 0 { 0 } else { 1 })
+            as usize
+            == WELL_KNOWN_VALUE.len();
+
+        assert!(
+            length_assertion_predicate,
+            "Computed value differs from well-known value!"
+        );
+
+        let mut value = u128::MAX;
+
+        let mut index = WELL_KNOWN_VALUE.len();
+
+        while let Some(new_index) = index.checked_sub(1) {
+            index = new_index;
+
+            let expected_value = identity::<u8>(b'0') as u128 + (value % 10);
+
+            let actual_value =
+                identity::<u8>(WELL_KNOWN_VALUE.as_bytes()[index]) as u128;
+
+            if expected_value == actual_value {
+                value /= 10;
+            } else {
+                panic!("Computed value differs from well-known value!");
+            }
+        }
+
+        WELL_KNOWN_VALUE
+    };
+
+    MAX_U128_VALUE
+};
+
+#[inline]
+pub(crate) fn greater_than_max_quote_value(n: &str) -> bool {
+    compare_with_max_quote_value(n).is_gt()
+}
+
+#[inline]
+fn compare_with_max_quote_value(n: &str) -> cmp::Ordering {
+    n.len().cmp(const { &MAX_QUOTE_VALUE.len() }).then_with(
+        #[inline(always)]
+        || n.cmp(MAX_QUOTE_VALUE),
+    )
+}
+
+#[test]
+fn max_quote_value_assertions() {
+    let u128_max = u128::MAX.to_string();
+
+    assert_eq!(MAX_QUOTE_VALUE, u128_max);
+
+    assert_eq!(
+        compare_with_max_quote_value("40282366920938463463374607431768211455"),
+        cmp::Ordering::Less
+    );
+
+    assert_eq!(
+        compare_with_max_quote_value("240282366920938463463374607431768211455"),
+        cmp::Ordering::Less
+    );
+    assert_eq!(
+        compare_with_max_quote_value("330282366920938463463374607431768211455"),
+        cmp::Ordering::Less
+    );
+    assert_eq!(
+        compare_with_max_quote_value("340282366920938463463374607431768211445"),
+        cmp::Ordering::Less
+    );
+    assert_eq!(
+        compare_with_max_quote_value("340282366920938463463374607431768211454"),
+        cmp::Ordering::Less
+    );
+
+    assert_eq!(
+        compare_with_max_quote_value(&u128_max),
+        cmp::Ordering::Equal
+    );
+    assert_eq!(
+        compare_with_max_quote_value("340282366920938463463374607431768211455"),
+        cmp::Ordering::Equal
+    );
+
+    assert_eq!(
+        compare_with_max_quote_value("340282366920938463463374607431768211456"),
+        cmp::Ordering::Greater
+    );
+    assert_eq!(
+        compare_with_max_quote_value("340282366920938463463374607431768211465"),
+        cmp::Ordering::Greater
+    );
+    assert_eq!(
+        compare_with_max_quote_value("350282366920938463463374607431768211455"),
+        cmp::Ordering::Greater
+    );
+    assert_eq!(
+        compare_with_max_quote_value("440282366920938463463374607431768211455"),
+        cmp::Ordering::Greater
+    );
+
+    assert_eq!(
+        compare_with_max_quote_value(
+            "1340282366920938463463374607431768211455"
+        ),
+        cmp::Ordering::Greater
+    );
 }

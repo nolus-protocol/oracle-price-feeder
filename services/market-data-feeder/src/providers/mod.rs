@@ -1,3 +1,5 @@
+pub(crate) mod bound_checked;
+
 macro_rules! define_provider {
     ($($module:ident::$provider:ident),+ $(,)?) => {
         use self::{
