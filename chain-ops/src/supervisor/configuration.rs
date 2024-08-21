@@ -103,22 +103,27 @@ impl Service {
         &self.admin_contract
     }
 
+    #[must_use]
     pub fn idle_duration(&self) -> Duration {
         self.idle_duration
     }
 
+    #[must_use]
     pub fn timeout_duration(&self) -> Duration {
         self.timeout_duration
     }
 
+    #[must_use]
     pub fn balance_reporter_idle_duration(&self) -> Duration {
         self.balance_reporter_idle_duration
     }
 
+    #[must_use]
     pub fn broadcast_delay_duration(&self) -> Duration {
         self.broadcast_delay_duration
     }
 
+    #[must_use]
     pub fn broadcast_retry_delay_duration(&self) -> Duration {
         self.broadcast_retry_delay_duration
     }

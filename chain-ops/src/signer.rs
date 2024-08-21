@@ -175,6 +175,7 @@ impl Signer {
     }
 }
 
+#[must_use]
 pub struct GasAndFeeConfiguration {
     pub gas_adjustment_numerator: u32,
     pub gas_adjustment_denominator: NonZeroU32,

@@ -40,6 +40,7 @@ pub trait Reconnect {
 }
 
 #[derive(Clone)]
+#[must_use]
 pub struct Client
 where
     Self: Reconnect,
