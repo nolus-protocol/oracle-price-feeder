@@ -93,6 +93,7 @@ jobs:
       - "check_formatting"
       - "audit_dependencies"
       - "linting"
+      - "test_encoding_compatibility"
       - "code_coverage"
       - "test_release_profile"
     if: |-
