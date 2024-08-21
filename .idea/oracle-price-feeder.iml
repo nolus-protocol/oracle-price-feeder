@@ -6,8 +6,6 @@
       <sourceFolder url="file://$MODULE_DIR$/services/alarms-dispatcher/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/services/market-data-feeder/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/services/market-data-feeder/tests" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/tests/encoding-compatibility/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/tests/encoding-compatibility/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/test-encoding-compatibility/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/test-encoding-compatibility/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
