@@ -31,14 +31,18 @@ pub struct TaskResult<Id, Output> {
 
 type TaskHandlesChannel<Identifier, Output> =
     bounded::Channel<(Identifier, JoinHandle<Output>)>;
+
 type TaskHandlesSender<Identifier, Output> =
     <TaskHandlesChannel<Identifier, Output> as channel::Channel>::Sender;
+
 type TaskHandlesReceiver<Identifier, Output> =
     <TaskHandlesChannel<Identifier, Output> as channel::Channel>::Receiver;
 
 type TaskResultsChannel<Id, Output> = bounded::Channel<TaskResult<Id, Output>>;
+
 type TaskResultsSender<Id, Output> =
     <TaskResultsChannel<Id, Output> as channel::Channel>::Sender;
+
 pub type TaskResultsReceiver<Id, Output> =
     <TaskResultsChannel<Id, Output> as channel::Channel>::Receiver;
 
