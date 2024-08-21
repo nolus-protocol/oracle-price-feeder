@@ -1,11 +1,15 @@
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeMap, collections::BTreeSet, sync::Arc, time::Duration,
+};
 
 use anyhow::{Context as _, Result};
 use tokio::{sync::mpsc, time::sleep};
 
-use crate::contract::Admin as AdminContract;
+use crate::{
+    channel, contract::Admin as AdminContract, supervisor::configuration, task,
+};
 
-use super::Runnable;
+use super::{application_defined, BuiltIn, Runnable, State};
 
 macro_rules! log {
     ($macro:ident![$protocol:expr]($($body:tt)+)) => {
@@ -72,6 +76,36 @@ impl Runnable for ProtocolWatcher {
             }
 
             sleep(IDLE_DURATION).await;
+        }
+    }
+}
+
+impl BuiltIn for ProtocolWatcher {
+    type ServiceConfiguration = configuration::Service;
+}
+
+impl super::ProtocolWatcher for ProtocolWatcher {
+    fn new<ApplicationDefined>(
+        service_configuration: &Self::ServiceConfiguration,
+        task_states: &BTreeMap<task::Id<ApplicationDefined>, State>,
+        command_tx: channel::bounded::Sender<Command>,
+    ) -> Self
+    where
+        ApplicationDefined: application_defined::Id,
+    {
+        Self {
+            admin_contract: service_configuration.admin_contract().clone(),
+            protocol_tasks: task_states
+                .keys()
+                .filter_map(|id| {
+                    if let task::Id::ApplicationDefined(id) = id {
+                        id.protocol().cloned()
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            command_tx,
         }
     }
 }

@@ -6,7 +6,7 @@ use cosmrs::Gas;
 use chain_ops::{
     channel::unbounded,
     node,
-    task::{application_defined, Runnable, TxPackage, WithExpiration},
+    task::{application_defined, Runnable, TimeBasedExpiration, TxPackage},
     tx::ExecuteTemplate,
 };
 
@@ -37,7 +37,7 @@ impl Runnable for Task {
 }
 
 impl application_defined::Task for Task {
-    type TxExpiration = WithExpiration;
+    type TxExpiration = TimeBasedExpiration;
 
     type Id = Id;
 
@@ -65,5 +65,5 @@ struct Base {
     idle_duration: Duration,
     timeout_duration: Duration,
     hard_gas_limit: Gas,
-    transaction_tx: unbounded::Sender<TxPackage<WithExpiration>>,
+    transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
 }

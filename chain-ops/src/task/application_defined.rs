@@ -2,9 +2,9 @@ use std::{borrow::Cow, fmt::Debug, future::Future, sync::Arc};
 
 use anyhow::Result;
 
-use crate::supervisor;
+use crate::channel;
 
-use super::{Runnable, TxExpiration};
+use super::{Runnable, TxExpiration, TxPackage};
 
 pub trait Task: Runnable + Send + Sized + 'static {
     type TxExpiration: TxExpiration;
@@ -19,6 +19,8 @@ pub trait Task: Runnable + Send + Sized + 'static {
 }
 
 pub trait Id: Debug + Clone + Ord + Send + Sized + 'static {
+    type ServiceConfiguration: Send + 'static;
+
     type TaskCreationContext: Send + 'static;
 
     type Task: Task<Id = Self>;
@@ -27,10 +29,12 @@ pub trait Id: Debug + Clone + Ord + Send + Sized + 'static {
 
     fn name(&self) -> Cow<'static, str>;
 
-    fn into_task(
+    fn into_task<'r>(
         self,
-        task_creation_context: supervisor::TaskCreationContext<'_, Self::Task>,
-    ) -> impl Future<Output = Result<Self::Task>> + Send + '_;
+        service_configuration: &'r mut Self::ServiceConfiguration,
+        task_creation_context: &'r mut Self::TaskCreationContext,
+        transaction_tx: &'r channel::unbounded::Sender<
+            TxPackage<<Self::Task as Task>::TxExpiration>,
+        >,
+    ) -> impl Future<Output = Result<Self::Task>> + Send + 'r;
 }
-
-pub type TaskCreationContext<T> = <<T as Task>::Id as Id>::TaskCreationContext;

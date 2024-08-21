@@ -2,14 +2,15 @@ use std::{
     borrow::Cow, collections::btree_map::Entry as BTreeMapEntry, sync::Arc,
 };
 
-use anyhow::{bail, Context as _};
+use anyhow::{bail, Context as _, Result};
 
 use chain_ops::{
+    channel,
     contract::admin::{Dex, Protocol, ProtocolContracts},
     env::ReadFromVar,
     node,
-    supervisor::TaskCreationContext,
-    task::application_defined,
+    supervisor::configuration,
+    task::{application_defined, TimeBasedExpiration, TxPackage},
     tx::ExecuteTemplate,
 };
 
@@ -77,6 +78,8 @@ impl Id {
 }
 
 impl application_defined::Id for Id {
+    type ServiceConfiguration = configuration::Service;
+
     type TaskCreationContext = ApplicationDefinedContext;
 
     type Task = Task;
@@ -91,10 +94,14 @@ impl application_defined::Id for Id {
         Cow::Owned(self.protocol.to_string())
     }
 
-    async fn into_task(
+    async fn into_task<'r>(
         self,
-        mut task_creation_context: TaskCreationContext<'_, Task>,
-    ) -> anyhow::Result<Task> {
+        service_configuration: &'r mut Self::ServiceConfiguration,
+        task_creation_context: &'r mut Self::TaskCreationContext,
+        transaction_tx: &'r channel::unbounded::Sender<
+            TxPackage<TimeBasedExpiration>,
+        >,
+    ) -> Result<Task> {
         let Protocol {
             network,
             dex,
@@ -102,8 +109,9 @@ impl application_defined::Id for Id {
                 ProtocolContracts {
                     oracle: oracle_address,
                 },
-        } = task_creation_context
+        } = service_configuration
             .admin_contract()
+            .clone()
             .protocol(&self.protocol)
             .await
             .with_context(|| {
@@ -113,11 +121,10 @@ impl application_defined::Id for Id {
                 )
             })?;
 
-        let node_client = task_creation_context.node_client().clone();
+        let node_client = service_configuration.node_client().clone();
 
         let dex_node_client = {
             let entry = task_creation_context
-                .application_defined()
                 .dex_node_clients
                 .entry(network.clone());
 
@@ -135,16 +142,13 @@ impl application_defined::Id for Id {
         };
 
         task_creation_context
-            .application_defined()
             .dex_node_clients
             .insert(network, dex_node_client.clone());
 
         Oracle::new(
             node_client.clone().query_wasm(),
             oracle_address.clone(),
-            task_creation_context
-                .application_defined()
-                .update_currencies_interval,
+            task_creation_context.update_currencies_interval,
         )
         .await
         .map(|oracle| Base {
@@ -158,19 +162,15 @@ impl application_defined::Id for Id {
                 self.protocol,
             )
             .into(),
-            duration_before_start: task_creation_context
-                .application_defined()
-                .duration_before_start,
+            duration_before_start: task_creation_context.duration_before_start,
             execute_template: ExecuteTemplate::new(
-                task_creation_context.signer_address().into(),
+                service_configuration.signer().address().into(),
                 oracle_address,
             ),
-            idle_duration: task_creation_context.idle_duration(),
-            timeout_duration: task_creation_context.timeout_duration(),
-            hard_gas_limit: task_creation_context
-                .application_defined()
-                .gas_limit,
-            transaction_tx: task_creation_context.transaction_tx().clone(),
+            idle_duration: service_configuration.idle_duration(),
+            timeout_duration: service_configuration.timeout_duration(),
+            hard_gas_limit: task_creation_context.gas_limit,
+            transaction_tx: transaction_tx.clone(),
         })
         .map(|base| Task {
             base,

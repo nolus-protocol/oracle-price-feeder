@@ -6,10 +6,13 @@ use crate::{
     log,
     service::{self, ShutdownResult},
     supervisor::{
+        self,
         configuration::{self, Configuration},
-        Supervisor,
     },
-    task::application_defined::{Id, TaskCreationContext},
+    task::{
+        application_defined, balance_reporter::BalanceReporter,
+        broadcast::Broadcast, protocol_watcher::ProtocolWatcher,
+    },
 };
 
 #[inline]
@@ -28,17 +31,18 @@ pub async fn run<
 where
     LogsDirectory: AsRef<Path>,
     TaskCreationContextCtor: FnOnce() -> Result<
-        TaskCreationContext<<StartupTasksIter::Item as Id>::Task>,
+        <StartupTasksIter::Item as application_defined::Id>::TaskCreationContext,
     >,
     StartupTasksFunctor: FnOnce() -> StartupTasksIter,
     StartupTasksIter: Iterator + Send + 'static,
-    StartupTasksIter::Item: Id + Unpin,
+    StartupTasksIter::Item: application_defined::Id<ServiceConfiguration=configuration::Service> + Unpin,
 {
     log::init(logs_directory).context("Failed to initialize logging!")?;
 
-    let configuration = configuration::Static::read_from_env()
-        .await
-        .context("Failed to read service configuration!")?;
+    let service_configuration =
+        configuration::Service::read_from_env()
+            .await
+            .context("Failed to read service configuration!")?;
 
     let task_creation_context = task_creation_context()
         .context("Failed to construct task creation context!")?;
@@ -46,13 +50,10 @@ where
     let startup_tasks = startup_tasks();
 
     service::run(move |task_spawner, task_result_rx| async move {
-        Supervisor::new(
-            Configuration::<<StartupTasksIter::Item as Id>::Task>::new(
-                configuration,
-                task_spawner,
-                task_result_rx,
-                task_creation_context,
-            ),
+        Supervisor::<StartupTasksIter::Item>::new(
+            Configuration::new(service_configuration, task_creation_context),
+            task_spawner,
+            task_result_rx,
             application_name,
             application_version,
             startup_tasks,
@@ -72,3 +73,14 @@ where
         ShutdownResult::StopSignalReceived => Ok(()),
     })
 }
+
+type Supervisor<Id> = supervisor::Supervisor<
+    BalanceReporter,
+    Broadcast<TxExpiration<Id>>,
+    ProtocolWatcher,
+    Task<Id>,
+>;
+
+type TxExpiration<Id> = <Task<Id> as application_defined::Task>::TxExpiration;
+
+type Task<Id> = <Id as application_defined::Id>::Task;

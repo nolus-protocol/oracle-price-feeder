@@ -9,9 +9,9 @@ use cosmrs::{
 };
 use tokio::{sync::mpsc, time::sleep};
 
-use crate::{node, signer::Signer};
+use crate::{channel, node, signer::Signer, supervisor::configuration};
 
-use super::{Runnable, TxExpiration, TxPackage};
+use super::{BuiltIn, Runnable, TxExpiration, TxPackage};
 
 macro_rules! log_simulation {
     ($macro:ident![$source:expr]($($body:tt)+)) => {
@@ -251,6 +251,36 @@ where
                 .context("Failed to broadcast transaction!")?;
 
             sleep(self.delay_duration).await;
+        }
+    }
+}
+
+impl<Expiration> BuiltIn for Broadcast<Expiration>
+where
+    Expiration: TxExpiration,
+{
+    type ServiceConfiguration = configuration::Service;
+}
+
+impl<Expiration> super::Broadcast for Broadcast<Expiration>
+where
+    Expiration: TxExpiration,
+{
+    type TxExpiration = Expiration;
+
+    fn new(
+        service_configuration: &Self::ServiceConfiguration,
+        transaction_rx: channel::unbounded::Receiver<
+            TxPackage<Self::TxExpiration>,
+        >,
+    ) -> Self {
+        Self {
+            client: service_configuration.node_client().clone().broadcast_tx(),
+            signer: service_configuration.signer().clone(),
+            transaction_rx,
+            delay_duration: service_configuration.broadcast_delay_duration(),
+            retry_delay_duration: service_configuration
+                .broadcast_retry_delay_duration(),
         }
     }
 }

@@ -1,21 +1,46 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use anyhow::{Context as _, Error, Result};
 use zeroize::Zeroizing;
 
 use crate::{
+    contract,
     env::ReadFromVar,
     key, node,
-    service::{task_spawner::TaskSpawner, TaskResultsReceiver},
     signer::{GasAndFeeConfiguration, Signer},
-    task::{self, application_defined},
+    task::application_defined,
 };
 
 #[must_use]
-pub struct Static {
+pub struct Configuration<Id>
+where
+    Id: application_defined::Id,
+{
+    pub(super) service_configuration: Id::ServiceConfiguration,
+    pub(super) task_creation_context: Id::TaskCreationContext,
+}
+
+impl<Id> Configuration<Id>
+where
+    Id: application_defined::Id,
+{
+    #[inline]
+    pub fn new(
+        service_configuration: Id::ServiceConfiguration,
+        task_creation_context: Id::TaskCreationContext,
+    ) -> Self {
+        Self {
+            service_configuration,
+            task_creation_context,
+        }
+    }
+}
+
+#[must_use]
+pub struct Service {
     node_client: node::Client,
     signer: Signer,
-    admin_contract_address: Arc<str>,
+    admin_contract: contract::Admin,
     idle_duration: Duration,
     timeout_duration: Duration,
     balance_reporter_idle_duration: Duration,
@@ -23,7 +48,7 @@ pub struct Static {
     broadcast_retry_delay_duration: Duration,
 }
 
-impl Static {
+impl Service {
     pub async fn read_from_env() -> Result<Self> {
         let node_client = node::Client::connect(&Self::read_node_grpc_uri()?)
             .await
@@ -37,8 +62,10 @@ impl Static {
         )
         .await?;
 
-        let admin_contract_address =
-            Self::read_admin_contract_address()?.into();
+        let admin_contract = contract::Admin::new(
+            node_client.clone().query_wasm(),
+            Self::read_admin_contract_address()?.into(),
+        );
 
         let idle_duration = Self::read_idle_duration()?;
 
@@ -55,13 +82,45 @@ impl Static {
         Ok(Self {
             node_client,
             signer,
-            admin_contract_address,
+            admin_contract,
             idle_duration,
             timeout_duration,
             balance_reporter_idle_duration,
             broadcast_delay_duration,
             broadcast_retry_delay_duration,
         })
+    }
+
+    pub fn node_client(&self) -> &node::Client {
+        &self.node_client
+    }
+
+    pub fn signer(&self) -> &Signer {
+        &self.signer
+    }
+
+    pub fn admin_contract(&self) -> &contract::Admin {
+        &self.admin_contract
+    }
+
+    pub fn idle_duration(&self) -> Duration {
+        self.idle_duration
+    }
+
+    pub fn timeout_duration(&self) -> Duration {
+        self.timeout_duration
+    }
+
+    pub fn balance_reporter_idle_duration(&self) -> Duration {
+        self.balance_reporter_idle_duration
+    }
+
+    pub fn broadcast_delay_duration(&self) -> Duration {
+        self.broadcast_delay_duration
+    }
+
+    pub fn broadcast_retry_delay_duration(&self) -> Duration {
+        self.broadcast_retry_delay_duration
     }
 
     fn read_node_grpc_uri() -> Result<String> {
@@ -123,60 +182,5 @@ impl Static {
         u64::read_from_var("BROADCAST_RETRY_DELAY_DURATION_MILLISECONDS")
             .map(Duration::from_millis)
             .context("Failed to read between broadcast retries delay period duration!")
-    }
-}
-
-#[must_use]
-pub struct Configuration<T>
-where
-    T: application_defined::Task,
-{
-    pub(super) node_client: node::Client,
-    pub(super) signer: Signer,
-    pub(super) admin_contract_address: Arc<str>,
-    pub(super) task_spawner: TaskSpawner<task::Id<T::Id>, Result<()>>,
-    pub(super) task_result_rx: TaskResultsReceiver<task::Id<T::Id>, Result<()>>,
-    pub(super) idle_duration: Duration,
-    pub(super) timeout_duration: Duration,
-    pub(super) balance_reporter_idle_duration: Duration,
-    pub(super) broadcast_delay_duration: Duration,
-    pub(super) broadcast_retry_delay_duration: Duration,
-    pub(super) task_creation_context:
-        application_defined::TaskCreationContext<T>,
-}
-
-impl<T> Configuration<T>
-where
-    T: application_defined::Task,
-{
-    pub fn new(
-        Static {
-            node_client,
-            signer,
-            admin_contract_address,
-            idle_duration,
-            timeout_duration,
-            balance_reporter_idle_duration,
-            broadcast_delay_duration,
-            broadcast_retry_delay_duration,
-        }: Static,
-        task_spawner: TaskSpawner<task::Id<T::Id>, Result<()>>,
-        task_result_rx: TaskResultsReceiver<task::Id<T::Id>, Result<()>>,
-        task_creation_context:
-        <T::Id as application_defined::Id>::TaskCreationContext,
-    ) -> Self {
-        Self {
-            node_client,
-            signer,
-            admin_contract_address,
-            task_spawner,
-            task_result_rx,
-            idle_duration,
-            timeout_duration,
-            balance_reporter_idle_duration,
-            broadcast_delay_duration,
-            broadcast_retry_delay_duration,
-            task_creation_context,
-        }
     }
 }

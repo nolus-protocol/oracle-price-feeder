@@ -17,7 +17,7 @@ use tokio::{
 
 use chain_ops::{
     defer::Defer,
-    task::{TxPackage, WithExpiration},
+    task::{TimeBasedExpiration, TxPackage},
     task_set::TaskSet,
     tx,
 };
@@ -398,7 +398,7 @@ where
                         hard_gas_limit: self.base.hard_gas_limit,
                         fallback_gas,
                         feedback_sender,
-                        expiration: WithExpiration::new(
+                        expiration: TimeBasedExpiration::new(
                             Instant::now() + self.base.timeout_duration,
                         ),
                     })

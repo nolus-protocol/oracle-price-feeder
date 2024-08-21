@@ -3,9 +3,9 @@ use std::time::Duration;
 use anyhow::Result;
 use tokio::time::sleep;
 
-use crate::node;
+use crate::{node, supervisor::configuration};
 
-use super::Runnable;
+use super::{BuiltIn, Runnable};
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -26,7 +26,7 @@ macro_rules! log_span {
 pub struct BalanceReporter {
     client: node::QueryBank,
     address: Box<str>,
-    denom: Box<str>,
+    fee_token: Box<str>,
     idle_duration: Duration,
 }
 
@@ -41,7 +41,7 @@ impl BalanceReporter {
         Self {
             client,
             address: signer_address,
-            denom,
+            fee_token: denom,
             idle_duration,
         }
     }
@@ -67,19 +67,37 @@ impl Runnable for BalanceReporter {
         loop {
             let amount = self
                 .client
-                .balance(self.address.to_string(), self.denom.to_string())
+                .balance(self.address.to_string(), self.fee_token.to_string())
                 .await?
                 .to_string();
 
             log_span!(info_span!("Balance Report") {
                 log!(info!(""));
 
-                log!(info!("Amount available: {} {}", Self::format_amount(amount), self.denom));
+                log!(info!("Account address: {}", self.address));
+
+                log!(info!("Amount available: {} {}", Self::format_amount(amount), self.fee_token));
 
                 log!(info!(""));
             });
 
             sleep(self.idle_duration).await;
+        }
+    }
+}
+
+impl BuiltIn for BalanceReporter {
+    type ServiceConfiguration = configuration::Service;
+}
+
+impl super::BalanceReporter for BalanceReporter {
+    fn new(service_configuration: &Self::ServiceConfiguration) -> Self {
+        Self {
+            client: service_configuration.node_client().clone().query_bank(),
+            address: service_configuration.signer().address().into(),
+            fee_token: service_configuration.signer().fee_token().into(),
+            idle_duration: service_configuration
+                .balance_reporter_idle_duration(),
         }
     }
 }

@@ -3,9 +3,10 @@ use std::{borrow::Cow, sync::Arc};
 use anyhow::Result;
 
 use chain_ops::{
+    channel,
     contract::admin::{BaseProtocol, ProtocolContracts},
-    supervisor::TaskCreationContext,
-    task::{application_defined, NoExpiration, Runnable},
+    supervisor::configuration,
+    task::{application_defined, NoExpiration, Runnable, TxPackage},
 };
 
 use crate::ApplicationDefinedContext;
@@ -31,31 +32,31 @@ pub enum Id {
 
 impl Id {
     async fn create_time_alarms_task(
-        task_creation_context: &mut TaskCreationContext<'_, Task>,
+        service_configuration: &configuration::Service,
+        task_creation_context: &ApplicationDefinedContext,
+        transaction_tx: &channel::unbounded::Sender<
+            TxPackage<<Task as application_defined::Task>::TxExpiration>,
+        >,
     ) -> Result<Task> {
-        task_creation_context
+        service_configuration
             .admin_contract()
+            .clone()
             .platform()
             .await
             .and_then(|platform| {
                 alarms_generator::AlarmsGenerator::new_time_alarms(
                     alarms_generator::Configuration {
-                        node_client: task_creation_context
+                        node_client: service_configuration
                             .node_client()
                             .clone(),
-                        transaction_tx: task_creation_context
-                            .transaction_tx()
-                            .clone(),
-                        sender: task_creation_context.signer_address().into(),
+                        transaction_tx: transaction_tx.clone(),
+                        sender: service_configuration.signer().address().into(),
                         address: platform.time_alarms.into(),
                         alarms_per_message: task_creation_context
-                            .application_defined()
                             .time_alarms_per_message,
-                        gas_per_alarm: task_creation_context
-                            .application_defined()
-                            .gas_per_time_alarm,
-                        idle_duration: task_creation_context.idle_duration(),
-                        timeout_duration: task_creation_context
+                        gas_per_alarm: task_creation_context.gas_per_time_alarm,
+                        idle_duration: service_configuration.idle_duration(),
+                        timeout_duration: service_configuration
                             .timeout_duration(),
                     },
                     TimeAlarms {},
@@ -65,11 +66,14 @@ impl Id {
     }
 
     async fn create_price_alarms_task(
-        mut task_creation_context: TaskCreationContext<'_, Task>,
+        service_configuration: &configuration::Service,
+        task_creation_context: &ApplicationDefinedContext,
+        transaction_tx: &channel::unbounded::Sender<TxPackage<NoExpiration>>,
         protocol_name: Arc<str>,
     ) -> Result<Task> {
-        task_creation_context
+        service_configuration
             .admin_contract()
+            .clone()
             .base_protocol(&protocol_name)
             .await
             .and_then(
@@ -78,25 +82,22 @@ impl Id {
                  }| {
                     alarms_generator::AlarmsGenerator::new_price_alarms(
                         alarms_generator::Configuration {
-                            node_client: task_creation_context
+                            node_client: service_configuration
                                 .node_client()
                                 .clone(),
-                            transaction_tx: task_creation_context
-                                .transaction_tx()
-                                .clone(),
-                            sender: task_creation_context
-                                .signer_address()
+                            transaction_tx: transaction_tx.clone(),
+                            sender: service_configuration
+                                .signer()
+                                .address()
                                 .into(),
                             address: oracle.into(),
                             alarms_per_message: task_creation_context
-                                .application_defined()
                                 .price_alarms_per_message,
                             gas_per_alarm: task_creation_context
-                                .application_defined()
                                 .gas_per_price_alarm,
-                            idle_duration: task_creation_context
+                            idle_duration: service_configuration
                                 .idle_duration(),
-                            timeout_duration: task_creation_context
+                            timeout_duration: service_configuration
                                 .timeout_duration(),
                         },
                         PriceAlarms::new(protocol_name),
@@ -108,6 +109,8 @@ impl Id {
 }
 
 impl application_defined::Id for Id {
+    type ServiceConfiguration = configuration::Service;
+
     type TaskCreationContext = ApplicationDefinedContext;
 
     type Task = Task;
@@ -128,15 +131,22 @@ impl application_defined::Id for Id {
         }
     }
 
-    async fn into_task(
+    async fn into_task<'r>(
         self,
-        mut task_creation_context: TaskCreationContext<'_, Task>,
+        &mut ref service_configuration: &'r mut Self::ServiceConfiguration,
+        &mut ref task_creation_context: &'r mut Self::TaskCreationContext,
+        transaction_tx: &'r channel::unbounded::Sender<TxPackage<NoExpiration>>,
     ) -> Result<Task> {
         match self {
             Id::TimeAlarmsGenerator => {
                 log!(info!("Creating time alarms generator."));
 
-                Self::create_time_alarms_task(&mut task_creation_context).await
+                Self::create_time_alarms_task(
+                    service_configuration,
+                    task_creation_context,
+                    transaction_tx,
+                )
+                .await
             },
             Id::PriceAlarmsGenerator {
                 protocol: protocol_name,
@@ -147,7 +157,9 @@ impl application_defined::Id for Id {
                 ));
 
                 Self::create_price_alarms_task(
+                    service_configuration,
                     task_creation_context,
+                    transaction_tx,
                     protocol_name,
                 )
                 .await

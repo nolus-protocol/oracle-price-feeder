@@ -17,13 +17,9 @@ use tokio::{
 };
 use tracing::{error, error_span};
 
-use crate::service::task_spawner::{
-    CancellationToken, ServiceStopped, TaskSpawner,
-};
-
-use self::{
-    balance_reporter::BalanceReporter, broadcast::Broadcast,
-    protocol_watcher::ProtocolWatcher,
+use crate::{
+    channel,
+    service::task_spawner::{CancellationToken, ServiceStopped, TaskSpawner},
 };
 
 pub mod application_defined;
@@ -35,76 +31,78 @@ pub trait Runnable: Sized {
     fn run(self) -> impl Future<Output = Result<()>> + Send;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Id<T>
+pub trait BuiltIn: Runnable + Send + Sized + 'static {
+    type ServiceConfiguration;
+}
+
+pub trait BalanceReporter: BuiltIn {
+    fn new(service_configuration: &Self::ServiceConfiguration) -> Self;
+}
+
+pub trait Broadcast: BuiltIn {
+    type TxExpiration: TxExpiration;
+
+    fn new(
+        service_configuration: &Self::ServiceConfiguration,
+        transaction_rx: channel::unbounded::Receiver<
+            TxPackage<Self::TxExpiration>,
+        >,
+    ) -> Self;
+}
+
+pub trait ProtocolWatcher: BuiltIn {
+    fn new<ApplicationDefined>(
+        service_configuration: &Self::ServiceConfiguration,
+        task_states: &BTreeMap<Id<ApplicationDefined>, State>,
+        command_tx: channel::bounded::Sender<protocol_watcher::Command>,
+    ) -> Self
+    where
+        ApplicationDefined: application_defined::Id;
+}
+
+pub enum Task<BalanceReporter, Broadcast, ProtocolWatcher, ApplicationDefined>
 where
-    T: application_defined::Id,
-{
-    BalanceReporter,
-    Broadcast,
-    ProtocolWatcher,
-    ApplicationDefined(T),
-}
-
-impl<T> Id<T>
-where
-    T: application_defined::Id,
-{
-    pub fn name(&self) -> Cow<'static, str> {
-        match &self {
-            Self::BalanceReporter => Cow::Borrowed("Balance Reporter"),
-            Self::Broadcast => Cow::Borrowed("Broadcast"),
-            Self::ProtocolWatcher => Cow::Borrowed("Protocol Watcher"),
-            Self::ApplicationDefined(id) => id.name(),
-        }
-    }
-}
-
-#[must_use]
-pub struct State {
-    _cancellation_token: CancellationToken,
-    retry: u8,
-}
-
-impl State {
-    const fn new(cancellation_token: CancellationToken) -> Self {
-        Self {
-            _cancellation_token: cancellation_token,
-            retry: 0,
-        }
-    }
-
-    fn replace_and_increment(&mut self, cancellation_token: CancellationToken) {
-        *self = Self {
-            _cancellation_token: cancellation_token,
-            retry: self.retry.saturating_add(1),
-        };
-    }
-
-    #[must_use]
-    pub fn retry(&self) -> u8 {
-        self.retry
-    }
-}
-
-pub enum Task<T>
-where
-    T: application_defined::Task,
+    BalanceReporter: self::BalanceReporter,
+    Broadcast: self::Broadcast<
+        ServiceConfiguration = BalanceReporter::ServiceConfiguration,
+    >,
+    ProtocolWatcher: self::ProtocolWatcher<
+        ServiceConfiguration = BalanceReporter::ServiceConfiguration,
+    >,
+    ApplicationDefined: application_defined::Task<
+        TxExpiration = Broadcast::TxExpiration,
+        Id: application_defined::Id<
+            ServiceConfiguration = BalanceReporter::ServiceConfiguration,
+        >,
+    >,
 {
     BalanceReporter(BalanceReporter),
-    Broadcast(Broadcast<T::TxExpiration>),
+    Broadcast(Broadcast),
     ProtocolWatcher(ProtocolWatcher),
-    ApplicationDefined(T),
+    ApplicationDefined(ApplicationDefined),
 }
 
-impl<T> Task<T>
+impl<BalanceReporter, Broadcast, ProtocolWatcher, ApplicationDefined>
+    Task<BalanceReporter, Broadcast, ProtocolWatcher, ApplicationDefined>
 where
-    T: application_defined::Task,
+    BalanceReporter: self::BalanceReporter,
+    Broadcast: self::Broadcast<
+        ServiceConfiguration = BalanceReporter::ServiceConfiguration,
+    >,
+    ProtocolWatcher: self::ProtocolWatcher<
+        ServiceConfiguration = BalanceReporter::ServiceConfiguration,
+    >,
+    ApplicationDefined: application_defined::Task<
+        TxExpiration = Broadcast::TxExpiration,
+        Id: application_defined::Id<
+            ServiceConfiguration = BalanceReporter::ServiceConfiguration,
+        >,
+    >,
 {
     pub async fn run(
         self,
-        task_spawner: &TaskSpawner<Id<T::Id>, Result<()>>,
-        task_states: &mut BTreeMap<Id<T::Id>, State>,
+        task_spawner: &TaskSpawner<Id<ApplicationDefined::Id>, Result<()>>,
+        task_states: &mut BTreeMap<Id<ApplicationDefined::Id>, State>,
     ) -> Result<(), ServiceStopped> {
         let task_id = self.identifier();
 
@@ -140,7 +138,7 @@ where
         })
     }
 
-    fn identifier(&self) -> Id<T::Id> {
+    fn identifier(&self) -> Id<ApplicationDefined::Id> {
         match self {
             Self::BalanceReporter { .. } => Id::BalanceReporter,
             Self::Broadcast { .. } => Id::Broadcast,
@@ -148,6 +146,31 @@ where
             Self::ApplicationDefined { 0: task } => {
                 Id::ApplicationDefined(task.id())
             },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Id<ApplicationDefined>
+where
+    ApplicationDefined: application_defined::Id,
+{
+    BalanceReporter,
+    Broadcast,
+    ProtocolWatcher,
+    ApplicationDefined(ApplicationDefined),
+}
+
+impl<ApplicationDefined> Id<ApplicationDefined>
+where
+    ApplicationDefined: application_defined::Id,
+{
+    pub fn name(&self) -> Cow<'static, str> {
+        match &self {
+            Self::BalanceReporter => Cow::Borrowed("Balance Reporter"),
+            Self::Broadcast => Cow::Borrowed("Broadcast"),
+            Self::ProtocolWatcher => Cow::Borrowed("Protocol Watcher"),
+            Self::ApplicationDefined(id) => id.name(),
         }
     }
 }
@@ -196,17 +219,17 @@ impl TxExpiration for NoExpiration {
 
 #[derive(Clone, Copy)]
 #[must_use]
-pub struct WithExpiration {
+pub struct TimeBasedExpiration {
     expires_at: Instant,
 }
 
-impl WithExpiration {
+impl TimeBasedExpiration {
     pub const fn new(expires_at: Instant) -> Self {
         Self { expires_at }
     }
 }
 
-impl TxExpiration for WithExpiration {
+impl TxExpiration for TimeBasedExpiration {
     type Expired = Elapsed;
 
     #[inline]
@@ -218,6 +241,33 @@ impl TxExpiration for WithExpiration {
         F: Future + Send,
     {
         timeout_at(self.expires_at, future)
+    }
+}
+
+#[must_use]
+pub struct State {
+    _cancellation_token: CancellationToken,
+    retry: u8,
+}
+
+impl State {
+    const fn new(cancellation_token: CancellationToken) -> Self {
+        Self {
+            _cancellation_token: cancellation_token,
+            retry: 0,
+        }
+    }
+
+    fn replace_and_increment(&mut self, cancellation_token: CancellationToken) {
+        *self = Self {
+            _cancellation_token: cancellation_token,
+            retry: self.retry.saturating_add(1),
+        };
+    }
+
+    #[must_use]
+    pub fn retry(&self) -> u8 {
+        self.retry
     }
 }
 
