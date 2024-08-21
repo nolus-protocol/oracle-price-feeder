@@ -9,8 +9,10 @@ macro_rules! run_app {
             $crate::run::run::<String, _, _, _>(
                 ::core::env!("CARGO_PKG_NAME"),
                 ::core::env!("CARGO_PKG_VERSION"),
-                $crate::env::ReadFromVar::read_from_var("LOGS_DIRECTORY")
-                    .context("Failed to fetch log storing directory!")?,
+                ::anyhow::Context::context(
+                    $crate::env::ReadFromVar::read_from_var("LOGS_DIRECTORY"),
+                    "Failed to fetch log storing directory!",
+                )?,
                 || $task_creation_context,
                 || $startup_tasks,
             )
