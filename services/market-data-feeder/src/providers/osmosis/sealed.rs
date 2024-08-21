@@ -117,7 +117,6 @@ impl Provider for Osmosis {
         oracle
             .currency_pairs()
             .iter()
-            .map(|((base, quote), pool)| ((quote, base), pool))
             .map(|((base_ticker, quote_ticker), &pool_id)| {
                 currencies.get(base_ticker).and_then(|base| {
                     currencies.get(quote_ticker).map(|quote| {
