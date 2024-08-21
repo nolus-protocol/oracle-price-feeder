@@ -2,6 +2,7 @@ use anyhow::{Context as _, Result};
 use bip32::{Language, Mnemonic};
 
 pub type Signing = cosmrs::crypto::secp256k1::SigningKey;
+
 pub type Public = cosmrs::crypto::PublicKey;
 
 pub fn derive_from_mnemonic(phrase: &str, password: &str) -> Result<Signing>
