@@ -48,22 +48,27 @@ where
     let task_creation_context = task_creation_context()
         .context("Failed to construct task creation context!")?;
 
-    let startup_tasks = startup_tasks();
+    service::run({
+        let startup_tasks = startup_tasks();
 
-    service::run(move |task_spawner, task_result_rx| async move {
-        Supervisor::<StartupTasksIter::Item>::new(
-            Configuration::new(service_configuration, task_creation_context),
-            task_spawner,
-            task_result_rx,
-            application_name,
-            application_version,
-            startup_tasks,
-        )
-        .await
-        .context("Failed to create tasks supervisor!")?
-        .run()
-        .await
-        .context("Supervisor exited with an error!")
+        move |task_spawner, task_result_rx| async move {
+            Supervisor::<StartupTasksIter::Item>::new(
+                Configuration::new(
+                    service_configuration,
+                    task_creation_context,
+                ),
+                task_spawner,
+                task_result_rx,
+                application_name,
+                application_version,
+                startup_tasks,
+            )
+            .await
+            .context("Failed to create tasks supervisor!")?
+            .run()
+            .await
+            .context("Supervisor exited with an error!")
+        }
     })
     .await
     .context("Running service failed!")
