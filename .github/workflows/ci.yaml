@@ -58,6 +58,17 @@ jobs:
       - name: "Run clippy"
         run: |-
           "cargo" "clippy" --workspace -- -D "warnings"
+  test_encoding_compatibility:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+      - uses: "nolus-protocol/rust-ci-actions/rust_cache@main"
+        with:
+          update_and_cache_toolchains: "true"
+      - name: "Run encoding compatibility tests"
+        run: |-
+          "cargo" "test" --workspace
+        working-directory: "./test-encoding-compatibility"
   code_coverage:
     runs-on: "ubuntu-latest"
     steps:
