@@ -34,7 +34,8 @@ where
         <StartupTasksIter::Item as application_defined::Id>::TaskCreationContext,
     >,
     StartupTasksFunctor: FnOnce() -> StartupTasksIter,
-    StartupTasksIter: Iterator + Send + 'static,
+    StartupTasksIter: IntoIterator + Send + 'static,
+    StartupTasksIter::IntoIter: Send,
     StartupTasksIter::Item: application_defined::Id<ServiceConfiguration=configuration::Service> + Unpin,
 {
     log::init(logs_directory).context("Failed to initialize logging!")?;

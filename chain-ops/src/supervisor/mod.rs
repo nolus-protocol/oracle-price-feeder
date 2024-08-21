@@ -103,7 +103,7 @@ where
         tasks: U,
     ) -> Result<Self>
     where
-        U: Iterator<Item = ApplicationDefined::Id>,
+        U: IntoIterator<Item = ApplicationDefined::Id>,
     {
         log!(info!(
             %application,
@@ -182,7 +182,7 @@ where
         tasks: U,
     ) -> Result<()>
     where
-        U: Iterator<Item = ApplicationDefined::Id>,
+        U: IntoIterator<Item = ApplicationDefined::Id>,
     {
         Task::<
             BalanceReporter,
