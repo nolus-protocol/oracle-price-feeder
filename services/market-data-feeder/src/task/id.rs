@@ -14,17 +14,15 @@ use chain_ops::{
     tx::ExecuteTemplate,
 };
 
-use market_data_feeder::{
+use crate::{
     oracle::Oracle,
     providers::{astroport::Astroport, osmosis::Osmosis, Provider},
 };
 
-use crate::ApplicationDefinedContext;
-
-use super::{Base, Task};
+use super::{context, Base, Task};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct Id {
+pub struct Id {
     protocol: Arc<str>,
 }
 
@@ -80,7 +78,7 @@ impl Id {
 impl application_defined::Id for Id {
     type ServiceConfiguration = configuration::Service;
 
-    type TaskCreationContext = ApplicationDefinedContext;
+    type TaskCreationContext = context::ApplicationDefined;
 
     type Task = Task;
 

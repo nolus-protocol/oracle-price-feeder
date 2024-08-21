@@ -1,33 +1,26 @@
-#![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc)]
-
 use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::{Context as _, Result};
 use cosmrs::Gas;
 
-use chain_ops::{env::ReadFromVar as _, node, run_app};
+use chain_ops::{env::ReadFromVar, node};
 
-mod task;
+pub struct ApplicationDefined {
+    pub(super) dex_node_clients: BTreeMap<String, node::Client>,
+    pub(super) duration_before_start: Duration,
+    pub(super) gas_limit: Gas,
+    pub(super) update_currencies_interval: Duration,
+}
 
-run_app!(
-    task_creation_context: {
-        Ok(ApplicationDefinedContext {
+impl ApplicationDefined {
+    pub fn new() -> Result<Self> {
+        Ok(ApplicationDefined {
             dex_node_clients: BTreeMap::new(),
             duration_before_start: read_duration_before_start()?,
             gas_limit: read_gas_limit()?,
             update_currencies_interval: read_update_currencies_interval()?,
         })
-    },
-    startup_tasks: None::<task::Id>.into_iter(),
-);
-
-struct ApplicationDefinedContext {
-    dex_node_clients: BTreeMap<String, node::Client>,
-    duration_before_start: Duration,
-    gas_limit: Gas,
-    update_currencies_interval: Duration,
+    }
 }
 
 fn read_duration_before_start() -> Result<Duration> {

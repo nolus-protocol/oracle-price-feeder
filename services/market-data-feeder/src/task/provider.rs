@@ -22,11 +22,10 @@ use chain_ops::{
     tx,
 };
 
-use market_data_feeder::provider::{
-    self, Amount, Base, CurrencyPair, Decimal, Quote,
+use crate::{
+    provider::{self, Amount, Base, CurrencyPair, Decimal, Quote},
+    task,
 };
-
-use crate::task;
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -559,7 +558,7 @@ struct Coin {
 fn test_pretty_price_formatting() {
     use chain_ops::node;
 
-    use market_data_feeder::oracle::Oracle;
+    use crate::oracle::Oracle;
 
     enum Never {}
 

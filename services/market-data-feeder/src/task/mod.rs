@@ -10,15 +10,19 @@ use chain_ops::{
     tx::ExecuteTemplate,
 };
 
-use market_data_feeder::{oracle::Oracle, providers};
+use crate::{oracle::Oracle, providers};
 
-pub(crate) use self::id::Id;
 use self::provider::Provider;
 
+pub use self::{
+    context::ApplicationDefined as ApplicationDefinedContext, id::Id,
+};
+
+mod context;
 mod id;
 mod provider;
 
-pub(crate) struct Task {
+pub struct Task {
     base: Base,
     provider: providers::Provider,
 }
