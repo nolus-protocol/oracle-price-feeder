@@ -3,7 +3,7 @@ use std::{
 };
 
 use anyhow::{Context as _, Result};
-use tokio::{sync::mpsc, time::sleep};
+use tokio::time::sleep;
 
 use crate::{
     channel, contract::Admin as AdminContract, supervisor::configuration, task,
@@ -25,14 +25,14 @@ macro_rules! log {
 pub struct ProtocolWatcher {
     admin_contract: AdminContract,
     protocol_tasks: BTreeSet<Arc<str>>,
-    command_tx: mpsc::Sender<Command>,
+    command_tx: channel::bounded::Sender<Command>,
 }
 
 impl ProtocolWatcher {
     pub const fn new(
         admin_contract: AdminContract,
         protocol_tasks: BTreeSet<Arc<str>>,
-        command_tx: mpsc::Sender<Command>,
+        command_tx: channel::bounded::Sender<Command>,
     ) -> Self {
         Self {
             admin_contract,
