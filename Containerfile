@@ -1,5 +1,17 @@
 ARG package
 
+FROM docker.io/library/rust:latest AS compiled-base
+
+ENV CARGO_INCREMENTAL="0"
+
+RUN ["apt-get", "update"]
+
+RUN ["apt-get", "upgrade", "--purge", "--yes"]
+
+RUN ["apt-get", "install", "--yes", "libc6-dev"]
+
+WORKDIR "/code/"
+
 FROM scratch AS service-base
 
 VOLUME ["/service/logs/"]
@@ -39,20 +51,7 @@ ENV DURATION_BEFORE_START="600"
 ENV GAS_LIMIT="###"
 ENV UPDATE_CURRENCIES_INTERVAL_SECONDS="15"
 
-FROM docker.io/library/rust:latest AS compiled
-
-ENV CARGO_INCREMENTAL="0"
-
-RUN ["apt-get", "update"]
-
-RUN ["apt-get", "upgrade", "--purge", "--yes"]
-
-RUN ["apt-get", "install", "--yes", "libc6-dev"]
-
-WORKDIR "/code/"
-
-RUN --mount=type="bind",source=".",target="/code/" \
-    ["cargo", "fetch", "--locked"]
+FROM compiled-base AS compiled
 
 ARG package
 
@@ -62,18 +61,19 @@ ARG profile
 
 LABEL "profile"="${profile}"
 
-RUN --mount=type="bind",source=".",target="/code/" \
-    "cargo" \
-        "rustc" \
-        "--bin" "${package}" \
-        "--locked" \
-        "--manifest-path" "/code/services/${package}/Cargo.toml" \
-        "--package" "${package}" \
-        "--profile" "${profile}" \
-        "--target" "x86_64-unknown-linux-gnu" \
-        "--target-dir" "/build-output/" \
-        "--" \
-        "-C" "target-feature=+crt-static"
+COPY --chown="0":"0" --chmod="0555" "." "/code/"
+
+RUN "cargo" \
+    "rustc" \
+    "--bin" "${package}" \
+    "--locked" \
+    "--manifest-path" "/code/services/${package}/Cargo.toml" \
+    "--package" "${package}" \
+    "--profile" "${profile}" \
+    "--target" "x86_64-unknown-linux-gnu" \
+    "--target-dir" "/build-output/" \
+    "--" \
+    "-C" "target-feature=+crt-static"
 
 FROM ${package}-base AS service
 
