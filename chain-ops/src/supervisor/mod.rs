@@ -139,13 +139,13 @@ where
         log!(info!("Running."));
 
         loop {
-            let result = select! {
+            select!(
                 biased;
                 task_result = self.task_result_rx.recv() => {
-                    self.handle_task_result_and_restart(
-                        Self::handle_task_result_channel_output(task_result)?,
-                    )
-                    .await
+                    let result =
+                        Self::handle_task_result_channel_output(task_result)?;
+
+                    self.handle_task_result_and_restart(result).await
                 },
                 Some(protocol_command) = self.protocol_watcher_rx.recv() => {
                     self.handle_protocol_command(protocol_command)
@@ -157,16 +157,10 @@ where
                 ), if !self.restart_queue.is_empty() => {
                     self.run_task(task_id).await
                 },
-            };
-
-            match result {
-                Ok(()) => {},
-                Err(error) => {
-                    log!(error!(?error, "Fatal error occurred!"));
-
-                    break Err(error);
-                },
-            }
+            )
+            .inspect_err(|error| {
+                log!(error!(?error, "Fatal error occurred!"));
+            })?;
         }
     }
 
