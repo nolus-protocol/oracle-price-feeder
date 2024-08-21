@@ -18,6 +18,7 @@ pub struct Static {
     admin_contract_address: Arc<str>,
     idle_duration: Duration,
     timeout_duration: Duration,
+    balance_reporter_idle_duration: Duration,
     broadcast_delay_duration: Duration,
     broadcast_retry_delay_duration: Duration,
 }
@@ -43,6 +44,9 @@ impl Static {
 
         let timeout_duration = Self::read_timeout_duration()?;
 
+        let balance_reporter_idle_duration =
+            Self::read_balance_reporter_idle_duration()?;
+
         let broadcast_delay_duration = Self::read_broadcast_delay_duration()?;
 
         let broadcast_retry_delay_duration =
@@ -54,6 +58,7 @@ impl Static {
             admin_contract_address,
             idle_duration,
             timeout_duration,
+            balance_reporter_idle_duration,
             broadcast_delay_duration,
             broadcast_retry_delay_duration,
         })
@@ -102,6 +107,12 @@ impl Static {
             .context("Failed to read timeout period duration!")
     }
 
+    fn read_balance_reporter_idle_duration() -> Result<Duration, Error> {
+        u64::read_from_var("BALANCE_REPORTER_IDLE_DURATION_SECONDS")
+            .map(Duration::from_secs)
+            .context("Failed to read between balance reporter idle delay period duration!")
+    }
+
     fn read_broadcast_delay_duration() -> Result<Duration, Error> {
         u64::read_from_var("BROADCAST_DELAY_DURATION_SECONDS")
             .map(Duration::from_secs)
@@ -127,6 +138,7 @@ where
     pub(super) task_result_rx: TaskResultsReceiver<task::Id<T::Id>, Result<()>>,
     pub(super) idle_duration: Duration,
     pub(super) timeout_duration: Duration,
+    pub(super) balance_reporter_idle_duration: Duration,
     pub(super) broadcast_delay_duration: Duration,
     pub(super) broadcast_retry_delay_duration: Duration,
     pub(super) task_creation_context:
@@ -144,6 +156,7 @@ where
             admin_contract_address,
             idle_duration,
             timeout_duration,
+            balance_reporter_idle_duration,
             broadcast_delay_duration,
             broadcast_retry_delay_duration,
         }: Static,
@@ -160,6 +173,7 @@ where
             task_result_rx,
             idle_duration,
             timeout_duration,
+            balance_reporter_idle_duration,
             broadcast_delay_duration,
             broadcast_retry_delay_duration,
             task_creation_context,

@@ -60,6 +60,7 @@ where
     protocol_watcher_rx: bounded::Receiver<ProtocolWatcherCommand>,
     idle_duration: Duration,
     timeout_duration: Duration,
+    balance_reporter_idle_duration: Duration,
     broadcast_delay_duration: Duration,
     broadcast_retry_delay_duration: Duration,
     task_creation_context: application_defined::TaskCreationContext<T>,
@@ -78,6 +79,7 @@ where
             task_result_rx,
             idle_duration,
             timeout_duration,
+            balance_reporter_idle_duration,
             broadcast_delay_duration,
             broadcast_retry_delay_duration,
             task_creation_context,
@@ -116,6 +118,7 @@ where
             protocol_watcher_rx,
             idle_duration,
             timeout_duration,
+            balance_reporter_idle_duration,
             broadcast_delay_duration,
             broadcast_retry_delay_duration,
             task_creation_context,
@@ -292,7 +295,7 @@ where
             self.node_client.clone().query_bank(),
             self.signer.address().into(),
             self.signer.fee_token().into(),
-            self.idle_duration,
+            self.balance_reporter_idle_duration,
         )
     }
 
