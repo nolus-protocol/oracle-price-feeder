@@ -385,7 +385,7 @@ where
             } => {
                 log::broadcast_result(result);
 
-                self.cancel_tasks().await?;
+                self.cancel_tasks().await.context("Killing tasks failed!")?;
             },
             TaskResult {
                 identifier: task::Id::ProtocolWatcher,
