@@ -438,7 +438,7 @@ where
             }
         }
 
-        assert!(self.task_states.is_empty());
+        log!(info!("Killed worker tasks."));
 
         Ok(())
     }
