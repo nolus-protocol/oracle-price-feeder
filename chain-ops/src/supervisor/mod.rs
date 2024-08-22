@@ -403,11 +403,15 @@ where
     async fn cancel_tasks(&mut self) -> Result<()> {
         log!(info!("Killing worker tasks."));
 
-        let tasks_count = self.task_states.len();
+        let tasks = 0..{
+            let tasks_count = self.task_states.len();
 
-        self.task_states.clear();
+            self.task_states.clear();
 
-        for _ in 0..tasks_count {
+            tasks_count
+        };
+
+        for _ in tasks {
             match self.task_result_rx.recv().await {
                 Some(TaskResult {
                     identifier: task::Id::BalanceReporter,
