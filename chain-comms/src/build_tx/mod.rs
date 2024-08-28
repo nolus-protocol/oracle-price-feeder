@@ -71,7 +71,7 @@ impl ContractTx {
 
     pub fn commit(
         self,
-        signer: &mut Signer,
+        signer: &Signer,
         fee: Fee,
         memo: Option<&str>,
         timeout: Option<u32>,

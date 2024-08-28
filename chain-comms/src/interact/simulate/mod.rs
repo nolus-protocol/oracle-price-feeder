@@ -24,7 +24,7 @@ use self::error::Error;
 pub mod error;
 
 pub fn simulate<'r>(
-    signer: &mut Signer,
+    signer: &Signer,
     client: &'r Client,
     config: &'r Node,
     gas_limit: NonZeroU64,
@@ -39,7 +39,7 @@ pub fn simulate<'r>(
 }
 
 pub fn with_serialized_messages<'r>(
-    signer: &mut Signer,
+    signer: &Signer,
     client: &'r Client,
     config: &'r Node,
     gas_limit: NonZeroU64,
