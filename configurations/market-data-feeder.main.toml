@@ -1,10 +1,15 @@
 hard_gas_limit = 10_000_000
 
 [oracles]
+osmosis-osmosis-st_osmo = "nolus1mtcv0vhpt94s82mcemj5sc3v94pq3k2g62yfa5p82npfnd3xqx8q2w8c5f"
 osmosis-osmosis-usdc_axelar = "nolus1436kxs0w2es6xlqpp9rd35e3d0cjnw4sv8j3a7483sgks29jqwgsv3wzl4"
 osmosis-osmosis-usdc_noble = "nolus1vjlaegqa7ssm2ygf2nnew6smsj8ref9cmurerc7pzwxqjre2wzpqyez4w6"
 neutron-astroport-usdc_axelar = "nolus1jew4l5nq7m3xhkqzy8j7cc99083m5j8d9w004ayyv8xl3yv4h0dql2dd4e"
 neutron-astroport-usdc_noble = "nolus1vhzdx9lqexuqc0wqd48c5hc437yzw7jy7ggum9k25yy2hz7eaatq0mepvn"
+
+[providers.osmosis_osmosis_st_atom]
+name = "osmosis"
+oracle_id = "osmosis-osmosis-st_osmo"
 
 [providers.osmosis_osmosis_usdc_axelar]
 name = "osmosis"
