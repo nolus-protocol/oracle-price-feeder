@@ -110,7 +110,7 @@ struct Output {
 }
 
 fn sign_and_serialize_tx(
-    signer: &mut Signer,
+    signer: &Signer,
     node_config: &NodeConfig,
     gas_limit: NonZeroU64,
     tx_body: TxBody,
