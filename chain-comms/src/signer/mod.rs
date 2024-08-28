@@ -48,7 +48,7 @@ impl Signer {
         &self.account.address
     }
 
-    pub fn sign(&mut self, body: Body, fee: Fee) -> ModuleResult<TxRaw> {
+    pub fn sign(&self, body: Body, fee: Fee) -> ModuleResult<TxRaw> {
         let body = Message::encode_to_vec(&body.into_proto());
 
         let auth_info = Message::encode_to_vec(
