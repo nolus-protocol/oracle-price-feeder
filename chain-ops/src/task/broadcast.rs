@@ -197,7 +197,9 @@ where
 
                 Self::log_tx_response(source.as_ref(), tx_code, &response);
 
-                if tx_code.is_err() {
+                if tx_code.is_ok() {
+                    self.consecutive_errors = 0;
+                } else {
                     self.consecutive_errors = (self.consecutive_errors + 1) % 5;
 
                     if self.consecutive_errors == 0 {
