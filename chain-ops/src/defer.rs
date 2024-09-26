@@ -25,7 +25,7 @@ where
 
 impl<T, F> Defer<T, F>
 where
-    T: Copy + ?Sized,
+    T: Copy,
     F: FnMut(&mut T) + Copy,
 {
     pub const fn copied(&self) -> Self {
