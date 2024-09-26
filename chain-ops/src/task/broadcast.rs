@@ -59,6 +59,7 @@ impl<Expiration> Broadcast<Expiration>
 where
     Expiration: TxExpiration,
 {
+    #[inline]
     pub const fn new(
         client: node::BroadcastTx,
         signer: Signer,
@@ -268,6 +269,7 @@ where
 {
     type TxExpiration = Expiration;
 
+    #[inline]
     fn new(
         service_configuration: &Self::ServiceConfiguration,
         transaction_rx: channel::unbounded::Receiver<
