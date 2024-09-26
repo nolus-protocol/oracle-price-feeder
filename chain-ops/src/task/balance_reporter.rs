@@ -92,13 +92,12 @@ impl BuiltIn for BalanceReporter {
 
 impl super::BalanceReporter for BalanceReporter {
     fn new(service_configuration: &Self::ServiceConfiguration) -> Self {
-        Self {
-            client: service_configuration.node_client().clone().query_bank(),
-            address: service_configuration.signer().address().into(),
-            fee_token: service_configuration.signer().fee_token().into(),
-            idle_duration: service_configuration
-                .balance_reporter_idle_duration(),
-        }
+        Self::new(
+            service_configuration.node_client().clone().query_bank(),
+            service_configuration.signer().address().into(),
+            service_configuration.signer().fee_token().into(),
+            service_configuration.balance_reporter_idle_duration(),
+        )
     }
 }
 
