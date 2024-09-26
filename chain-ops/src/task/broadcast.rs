@@ -112,17 +112,21 @@ where
     }
 
     fn log_tx_response(source: &str, tx_code: TxCode, response: &TxResponse) {
-        if tx_code.is_ok() {
-            log_broadcast_with_source!(info![source](
-                hash = %response.txhash,
-                "Transaction broadcast successful.",
-            ));
-        } else {
-            log_broadcast_with_source!(error![source](
-                hash = %response.txhash,
-                log = ?response.raw_log,
-                "Transaction broadcast failed!",
-            ));
+        match tx_code {
+            TxCode::Ok => {
+                log_broadcast_with_source!(info![source](
+                    hash = %response.txhash,
+                    "Transaction broadcast successful.",
+                ));
+            },
+            TxCode::Err(code) => {
+                log_broadcast_with_source!(error![source](
+                    hash = %response.txhash,
+                    log = ?response.raw_log,
+                    code = %code,
+                    "Transaction broadcast failed!",
+                ));
+            },
         }
     }
 
