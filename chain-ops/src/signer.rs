@@ -161,6 +161,12 @@ impl Signer {
             })
     }
 
+    #[must_use]
+    #[inline]
+    pub const fn sequence_number(&self) -> SequenceNumber {
+        self.sequence_number
+    }
+
     pub async fn fetch_sequence_number(&mut self) -> Result<()> {
         self.query_auth
             .account(self.immutable.account_id.to_string())
