@@ -274,13 +274,12 @@ where
             TxPackage<Self::TxExpiration>,
         >,
     ) -> Self {
-        Self {
-            client: service_configuration.node_client().clone().broadcast_tx(),
-            signer: service_configuration.signer().clone(),
+        Self::new(
+            service_configuration.node_client().clone().broadcast_tx(),
+            service_configuration.signer().clone(),
             transaction_rx,
-            delay_duration: service_configuration.broadcast_delay_duration(),
-            retry_delay_duration: service_configuration
-                .broadcast_retry_delay_duration(),
-        }
+            service_configuration.broadcast_delay_duration(),
+            service_configuration.broadcast_retry_delay_duration(),
+        )
     }
 }
