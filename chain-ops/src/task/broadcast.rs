@@ -53,6 +53,7 @@ where
     transaction_rx: mpsc::UnboundedReceiver<TxPackage<Expiration>>,
     delay_duration: Duration,
     retry_delay_duration: Duration,
+    consecutive_errors: u8,
 }
 
 impl<Expiration> Broadcast<Expiration>
@@ -73,6 +74,7 @@ where
             transaction_rx,
             delay_duration,
             retry_delay_duration,
+            consecutive_errors: 0,
         }
     }
 
@@ -154,8 +156,6 @@ where
     ) -> Result<()> {
         const SIGNATURE_VERIFICATION_ERROR_CODE: u32 = 32;
 
-        let mut consecutive_sequence_mismatch: u8 = 0;
-
         'broadcast_loop: loop {
             let raw_tx = self
                 .simulate_and_sign_tx(
@@ -198,10 +198,9 @@ where
                 Self::log_tx_response(source.as_ref(), tx_code, &response);
 
                 if tx_code.is_err() {
-                    consecutive_sequence_mismatch =
-                        (consecutive_sequence_mismatch + 1) % 10;
+                    self.consecutive_errors = (self.consecutive_errors + 1) % 5;
 
-                    if consecutive_sequence_mismatch == 0 {
+                    if self.consecutive_errors == 0 {
                         self.fetch_sequence_number()
                             .await
                             .context("Failed to fetch sequence number!")?;
