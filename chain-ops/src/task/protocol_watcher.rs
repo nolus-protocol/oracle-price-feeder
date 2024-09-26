@@ -93,9 +93,9 @@ impl super::ProtocolWatcher for ProtocolWatcher {
     where
         ApplicationDefined: application_defined::Id,
     {
-        Self {
-            admin_contract: service_configuration.admin_contract().clone(),
-            protocol_tasks: task_states
+        Self::new(
+            service_configuration.admin_contract().clone(),
+            task_states
                 .keys()
                 .filter_map(|id| {
                     if let task::Id::ApplicationDefined(id) = id {
@@ -106,7 +106,7 @@ impl super::ProtocolWatcher for ProtocolWatcher {
                 })
                 .collect(),
             command_tx,
-        }
+        )
     }
 }
 
