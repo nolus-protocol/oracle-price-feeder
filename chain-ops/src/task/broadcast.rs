@@ -130,7 +130,10 @@ where
         log_broadcast!(info!("Fetching sequence number."));
 
         self.signer.fetch_sequence_number().await.map(|()| {
-            log_broadcast!(info!("Fetched sequence number."));
+            log_broadcast!(info!(
+                value = self.signer.sequence_number(),
+                "Fetched sequence number.",
+            ));
         })
     }
 
