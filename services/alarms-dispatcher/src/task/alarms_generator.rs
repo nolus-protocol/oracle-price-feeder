@@ -20,7 +20,7 @@ use chain_ops::{
     channel::unbounded,
     contract::{Compatibility, SemVer},
     node,
-    task::{NoExpiration, Runnable, TxPackage},
+    task::{NoExpiration, Runnable, RunnableState, TxPackage},
     tx,
 };
 
@@ -314,7 +314,7 @@ impl<T> Runnable for AlarmsGenerator<T>
 where
     T: Alarms,
 {
-    async fn run(mut self) -> Result<()> {
+    async fn run(mut self, _: RunnableState) -> Result<()> {
         self.check_version().await?;
 
         self.dispatch_alarms().await

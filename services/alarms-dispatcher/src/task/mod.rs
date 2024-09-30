@@ -6,7 +6,9 @@ use chain_ops::{
     channel,
     contract::admin::{BaseProtocol, ProtocolContracts},
     supervisor::configuration,
-    task::{application_defined, NoExpiration, Runnable, TxPackage},
+    task::{
+        application_defined, NoExpiration, Runnable, RunnableState, TxPackage,
+    },
 };
 
 use crate::ApplicationDefinedContext;
@@ -174,10 +176,14 @@ pub enum Task {
 }
 
 impl Runnable for Task {
-    async fn run(self) -> Result<()> {
+    async fn run(self, is_retry: RunnableState) -> Result<()> {
         match self {
-            Task::TimeAlarms(alarms_generator) => alarms_generator.run().await,
-            Task::PriceAlarms(alarms_generator) => alarms_generator.run().await,
+            Task::TimeAlarms(alarms_generator) => {
+                alarms_generator.run(is_retry).await
+            },
+            Task::PriceAlarms(alarms_generator) => {
+                alarms_generator.run(is_retry).await
+            },
         }
     }
 }
