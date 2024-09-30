@@ -55,21 +55,21 @@ FROM compiled-base AS compiled
 
 ARG package
 
-LABEL "package"="${package}"
+LABEL "package"="${package:?}"
 
 ARG profile
 
-LABEL "profile"="${profile}"
+LABEL "profile"="${profile:?}"
 
 COPY --chown="0":"0" --chmod="0555" "." "/code/"
 
 RUN "cargo" \
     "rustc" \
-    "--bin" "${package}" \
+    "--bin" "${package:?}" \
     "--locked" \
-    "--manifest-path" "/code/services/${package}/Cargo.toml" \
-    "--package" "${package}" \
-    "--profile" "${profile}" \
+    "--manifest-path" "/code/services/${package:?}/Cargo.toml" \
+    "--package" "${package:?}" \
+    "--profile" "${profile:?}" \
     "--target" "x86_64-unknown-linux-gnu" \
     "--target-dir" "/build-output/" \
     "--" \
@@ -79,14 +79,14 @@ FROM ${package}-base AS service
 
 ARG package
 
-LABEL "package"="${package}"
+LABEL "package"="${package:?}"
 
 ARG profile
 
-LABEL "profile"="${profile}"
+LABEL "profile"="${profile:?}"
 
 ARG profile_output_dir
 
 COPY --from=compiled --chown="0":"0" --chmod="0100" \
-    "/build-output/x86_64-unknown-linux-gnu/${profile_output_dir}/${package}" \
+    "/build-output/x86_64-unknown-linux-gnu/${profile_output_dir:?}/${package:?}" \
     "/service/service"
