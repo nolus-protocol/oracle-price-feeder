@@ -31,7 +31,7 @@ impl Id {
         Self { protocol }
     }
 
-    fn dex_node_grpc_var(mut network: String) -> anyhow::Result<String> {
+    fn dex_node_grpc_var(mut network: String) -> Result<String> {
         const VAR_SUFFIX: &str = "__NODE_GRPC";
 
         if network.is_empty() {
