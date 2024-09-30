@@ -75,7 +75,10 @@ impl Marker for Quote {}
 
 #[must_use]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Amount<T: Marker> {
+pub struct Amount<T>
+where
+    T: Marker,
+{
     amount: Decimal,
     _marker: PhantomData<T>,
 }
