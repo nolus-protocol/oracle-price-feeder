@@ -27,8 +27,16 @@ pub mod balance_reporter;
 pub mod broadcast;
 pub mod protocol_watcher;
 
+pub enum RunnableState {
+    New,
+    Restart,
+}
+
 pub trait Runnable: Sized {
-    fn run(self) -> impl Future<Output = Result<()>> + Send;
+    fn run(
+        self,
+        state: RunnableState,
+    ) -> impl Future<Output = Result<()>> + Send;
 }
 
 pub trait BuiltIn: Runnable + Send + Sized + 'static {
@@ -106,29 +114,37 @@ where
     ) -> Result<(), ServiceStopped> {
         let task_id = self.identifier();
 
+        let task_state = task_states.entry(task_id.clone());
+
+        let state = if matches!(task_state, BTreeMapEntry::Vacant { .. }) {
+            RunnableState::New
+        } else {
+            RunnableState::Restart
+        };
+
         match self {
             Self::BalanceReporter(task) => {
                 task_spawner
-                    .spawn(task_id.clone(), run(task_id.clone(), task))
+                    .spawn(task_id.clone(), run(task_id, task, state))
                     .await
             },
             Self::Broadcast(task) => {
                 task_spawner
-                    .spawn(task_id.clone(), run(task_id.clone(), task))
+                    .spawn(task_id.clone(), run(task_id, task, state))
                     .await
             },
             Self::ProtocolWatcher(task) => {
                 task_spawner
-                    .spawn(task_id.clone(), run(task_id.clone(), task))
+                    .spawn(task_id.clone(), run(task_id, task, state))
                     .await
             },
             Self::ApplicationDefined(task) => {
                 task_spawner
-                    .spawn(task_id.clone(), run(task_id.clone(), task))
+                    .spawn(task_id.clone(), run(task_id, task, state))
                     .await
             },
         }
-        .map(|cancellation_token| match task_states.entry(task_id) {
+        .map(|cancellation_token| match task_state {
             BTreeMapEntry::Vacant(entry) => {
                 entry.insert(State::new(cancellation_token));
             },
@@ -271,12 +287,16 @@ impl State {
     }
 }
 
-async fn run<Id, T>(id: self::Id<Id>, runnable: T) -> Result<()>
+async fn run<Id, T>(
+    id: self::Id<Id>,
+    runnable: T,
+    state: RunnableState,
+) -> Result<()>
 where
     Id: application_defined::Id,
     T: Runnable,
 {
-    runnable.run().await.inspect_err(|error| {
+    runnable.run(state).await.inspect_err(|error| {
         error_span!("run").in_scope(|| {
             error!(
                 target: "task",

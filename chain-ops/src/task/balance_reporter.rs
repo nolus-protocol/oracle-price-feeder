@@ -5,7 +5,7 @@ use tokio::time::sleep;
 
 use crate::{node, supervisor::configuration};
 
-use super::{BuiltIn, Runnable};
+use super::{BuiltIn, Runnable, RunnableState};
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -63,7 +63,7 @@ impl BalanceReporter {
 }
 
 impl Runnable for BalanceReporter {
-    async fn run(mut self) -> Result<()> {
+    async fn run(mut self, _: RunnableState) -> Result<()> {
         loop {
             let amount = self
                 .client

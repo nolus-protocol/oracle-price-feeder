@@ -11,7 +11,7 @@ use tokio::{sync::mpsc, time::sleep};
 
 use crate::{channel, node, signer::Signer, supervisor::configuration};
 
-use super::{BuiltIn, Runnable, TxExpiration, TxPackage};
+use super::{BuiltIn, Runnable, RunnableState, TxExpiration, TxPackage};
 
 macro_rules! log_simulation {
     ($macro:ident![$source:expr]($($body:tt)+)) => {
@@ -247,7 +247,7 @@ impl<Expiration> Runnable for Broadcast<Expiration>
 where
     Expiration: TxExpiration,
 {
-    async fn run(mut self) -> Result<()> {
+    async fn run(mut self, _: RunnableState) -> Result<()> {
         loop {
             let tx_package = self
                 .transaction_rx

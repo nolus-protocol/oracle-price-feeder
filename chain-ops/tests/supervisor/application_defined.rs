@@ -12,7 +12,9 @@ use tracing::info;
 
 use chain_ops::{
     channel,
-    task::{application_defined, NoExpiration, Runnable, TxPackage},
+    task::{
+        application_defined, NoExpiration, Runnable, RunnableState, TxPackage,
+    },
 };
 
 use super::Context;
@@ -31,7 +33,7 @@ impl Drop for Task {
 }
 
 impl Runnable for Task {
-    async fn run(self) -> Result<()> {
+    async fn run(self, _: RunnableState) -> Result<()> {
         info!(protocol = %self.protocol, "Task started.");
 
         self.app_defined_tasks_count.fetch_add(1, Ordering::AcqRel);

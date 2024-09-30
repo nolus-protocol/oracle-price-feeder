@@ -12,7 +12,8 @@ use chain_ops::{
     channel,
     task::{
         protocol_watcher, BalanceReporter, Broadcast, BuiltIn, Id,
-        NoExpiration, ProtocolWatcher, Runnable, State, TxPackage,
+        NoExpiration, ProtocolWatcher, Runnable, RunnableState, State,
+        TxPackage,
     },
 };
 
@@ -29,7 +30,7 @@ impl Drop for TestingBalanceReporter {
 
 impl Runnable for TestingBalanceReporter {
     #[inline]
-    async fn run(self) -> Result<()> {
+    async fn run(self, _: RunnableState) -> Result<()> {
         info!("Balance reporter started.");
 
         pending().await
@@ -57,7 +58,7 @@ impl Drop for TestingBroadcast {
 }
 impl Runnable for TestingBroadcast {
     #[inline]
-    async fn run(self) -> Result<()> {
+    async fn run(self, _: RunnableState) -> Result<()> {
         info!("Broadcast started.");
 
         pending().await
@@ -93,7 +94,7 @@ impl Drop for TestingProtocolWatcher {
 
 impl Runnable for TestingProtocolWatcher {
     #[inline]
-    async fn run(self) -> Result<()> {
+    async fn run(self, _: RunnableState) -> Result<()> {
         info!("Protocol watcher started.");
 
         let initial_count = self

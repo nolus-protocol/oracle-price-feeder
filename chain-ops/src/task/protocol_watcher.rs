@@ -9,7 +9,7 @@ use crate::{
     channel, contract::Admin as AdminContract, supervisor::configuration, task,
 };
 
-use super::{application_defined, BuiltIn, Runnable, State};
+use super::{application_defined, BuiltIn, Runnable, RunnableState, State};
 
 macro_rules! log {
     ($macro:ident![$protocol:expr]($($body:tt)+)) => {
@@ -43,7 +43,7 @@ impl ProtocolWatcher {
 }
 
 impl Runnable for ProtocolWatcher {
-    async fn run(mut self) -> Result<()> {
+    async fn run(mut self, _: RunnableState) -> Result<()> {
         const IDLE_DURATION: Duration = Duration::from_secs(15);
 
         loop {
