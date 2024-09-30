@@ -17,7 +17,7 @@ use tokio::{
 
 use chain_ops::{
     defer::Defer,
-    task::{TimeBasedExpiration, TxPackage},
+    task::{RunnableState, TimeBasedExpiration, TxPackage},
     task_set::TaskSet,
     tx,
 };
@@ -62,7 +62,7 @@ where
         Self { base, provider }
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(mut self, state: RunnableState) -> Result<()> {
         let mut query_messages =
             self.provider.price_query_messages(&self.base.oracle)?;
 
@@ -73,15 +73,17 @@ where
 
         let mut dex_block_height = self.get_dex_block_height().await?;
 
-        self.spawn_query_tasks(
-            &mut query_messages,
-            &mut queries_task_set,
-            &mut price_collection_buffer,
-        )
-        .await
-        .context("Failed to spawn price querying tasks!")?;
+        if matches!(state, RunnableState::New) {
+            self.spawn_query_tasks(
+                &mut query_messages,
+                &mut queries_task_set,
+                &mut price_collection_buffer,
+            )
+            .await
+            .context("Failed to spawn price querying tasks!")?;
 
-        self.initial_fetch_and_print(&mut queries_task_set).await?;
+            self.initial_fetch_and_print(&mut queries_task_set).await?;
+        }
 
         let mut fetch_delivered_set =
             Defer::new(JoinSet::new(), JoinSet::abort_all);

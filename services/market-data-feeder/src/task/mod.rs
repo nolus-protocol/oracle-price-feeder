@@ -6,7 +6,10 @@ use cosmrs::Gas;
 use chain_ops::{
     channel::unbounded,
     node,
-    task::{application_defined, Runnable, TimeBasedExpiration, TxPackage},
+    task::{
+        application_defined, Runnable, RunnableState, TimeBasedExpiration,
+        TxPackage,
+    },
     tx::ExecuteTemplate,
 };
 
@@ -28,13 +31,13 @@ pub struct Task {
 }
 
 impl Runnable for Task {
-    async fn run(self) -> Result<()> {
+    async fn run(self, state: RunnableState) -> Result<()> {
         match self.provider {
             providers::Provider::Astroport(provider) => {
-                Provider::new(self.base, provider).run().await
+                Provider::new(self.base, provider).run(state).await
             },
             providers::Provider::Osmosis(provider) => {
-                Provider::new(self.base, provider).run().await
+                Provider::new(self.base, provider).run(state).await
             },
         }
     }
