@@ -166,20 +166,17 @@ where
                 )
                 .await;
 
-                match result {
-                    Ok(()) => {}
-                    Err(channel::Closed {}) => {
-                        log!(error!(
-                            "Channel for sending task results to supervisor \
-                            closed!"
-                        ));
+                if let Err::<(), _>(channel::Closed {}) = result {
+                    log!(error!(
+                        "Channel for sending task results to supervisor \
+                        closed!"
+                    ));
 
-                        drop(task_handle_rx);
+                    drop(task_handle_rx);
 
-                        drop(task_results_tx);
+                    drop(task_results_tx);
 
-                        break supervisor_handle.await;
-                    }
+                    break supervisor_handle.await;
                 }
             }
         }
