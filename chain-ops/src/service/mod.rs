@@ -98,7 +98,8 @@ where
     tasks_set.abort_all();
 
     while !tasks_set.is_empty() {
-        _ = tasks_set.join_next().await;
+        let _: Option<(TaskIdentifier, Result<TaskOutput, JoinError>)> =
+            tasks_set.join_next().await;
     }
 
     supervisor_task_result
