@@ -48,6 +48,8 @@ jobs:
         with:
           update_and_cache_toolchains: "true"
       - uses: "nolus-protocol/rust-ci-actions/audit_dependencies@main"
+        with:
+          working_directory: "."
   linting:
     runs-on: "ubuntu-latest"
     steps:
@@ -77,6 +79,8 @@ jobs:
         with:
           update_and_cache_toolchains: "true"
       - uses: "nolus-protocol/rust-ci-actions/code_coverage@main"
+        with:
+          working_directory: "."
   test_release_profile:
     runs-on: "ubuntu-latest"
     steps:
