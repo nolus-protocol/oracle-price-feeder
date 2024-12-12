@@ -8,19 +8,10 @@ rust-version.workspace = true
 chain-ops.workspace = true
 
 anyhow.workspace = true
-bip32.workspace = true
 cosmrs.workspace = true
-data-encoding.workspace = true
-serde-json-wasm.workspace = true
-thiserror.workspace = true
 tokio.workspace = true
-tonic.workspace = true
 tracing.workspace = true
-tracing-appender.workspace = true
-tracing-subscriber.workspace = true
-prost.workspace = true
 serde.workspace = true
-zeroize.workspace = true
 
 [dev-dependencies.tokio]
 version = "1.38.0"
