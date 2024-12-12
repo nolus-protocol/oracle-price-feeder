@@ -6,6 +6,18 @@ rust-version = "1.83.0"
 
 autobins = false
 
+[lints.rust]
+unexpected_cfgs = "forbid"
+unsafe_code = "forbid"
+warnings = "deny"
+
+[lints.clippy]
+missing_errors_doc = "allow"
+
+[lints.clippy.pedantic]
+priority = -1
+level = "deny"
+
 [dev-dependencies.market-data-feeder]
 path = "../services/market-data-feeder"
 

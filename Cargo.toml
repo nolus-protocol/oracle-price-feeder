@@ -112,6 +112,18 @@ features = [
 version = "1.8.1"
 features = ["std"]
 
+[workspace.lints.rust]
+unexpected_cfgs = "forbid"
+unsafe_code = "forbid"
+warnings = "deny"
+
+[workspace.lints.clippy]
+missing_errors_doc = "allow"
+
+[workspace.lints.clippy.pedantic]
+priority = -1
+level = "deny"
+
 [profile.release]
 codegen-units = 1
 incremental = false
