@@ -19,21 +19,21 @@ bip32 = "0.5.2"
 data-encoding = "2.6.0"
 fraction = "0.15.3"
 serde-json-wasm = "1.0.1"
-thiserror = "1.0.65"
+thiserror = "2.0.6"
 tracing-appender = "0.2.3"
 
 [workspace.dependencies.anyhow]
-version = "1.0.91"
+version = "1.0.94"
 default-features = false
 features = ["std"]
 
 [workspace.dependencies.chrono]
-version = "0.4.38"
+version = "0.4.39"
 default-features = false
 features = ["now"]
 
 [workspace.dependencies.cosmrs]
-version = "0.20.0"
+version = "0.21.0"
 default-features = false
 features = [
     "bip32",
@@ -53,12 +53,12 @@ features = [
 ]
 
 [workspace.dependencies.prost]
-version = "0.13.3"
+version = "0.13.4"
 default-features = false
 features = ["derive", "std"]
 
 [workspace.dependencies.serde]
-version = "1.0.213"
+version = "1.0.216"
 default-features = false
 features = [
     "derive",
@@ -67,7 +67,7 @@ features = [
 ]
 
 [workspace.dependencies.tokio]
-version = "1.41.0"
+version = "1.42.0"
 default-features = false
 features = [
     "io-util",
@@ -90,7 +90,7 @@ features = [
 ]
 
 [workspace.dependencies.tracing]
-version = "0.1.40"
+version = "0.1.41"
 default-features = false
 features = [
     "max_level_debug",
@@ -98,7 +98,7 @@ features = [
 ]
 
 [workspace.dependencies.tracing-subscriber]
-version = "0.3.18"
+version = "0.3.19"
 default-features = false
 features = [
     "alloc",

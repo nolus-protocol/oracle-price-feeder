@@ -12,15 +12,15 @@ path = "../services/market-data-feeder"
 ################################################################################
 
 [dev-dependencies.astroport]
-version = "5.2.0"
+version = "5.5.0"
 default-features = false
 
 [dev-dependencies.osmosis-std]
-version = "0.25.0"
+version = "0.27.0"
 default-features = false
 
 [dev-dependencies.prost]
-version = "0.13.1"
+version = "0.13.4"
 default-features = false
 features = ["std"]
 
