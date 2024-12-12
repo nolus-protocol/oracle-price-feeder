@@ -2,7 +2,6 @@ use osmosis_std::types::osmosis::poolmanager::v2::{
     SpotPriceRequest as LibraryRequest, SpotPriceResponse as LibraryResponse,
 };
 use prost::Message as _;
-use prost_0_12::Message as _;
 
 use market_data_feeder::providers::osmosis::{
     SpotPriceRequest as LocalRequest, SpotPriceResponse as LocalResponse,
