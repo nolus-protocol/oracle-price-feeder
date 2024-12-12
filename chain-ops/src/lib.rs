@@ -1,7 +1,3 @@
-#![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc)]
-
 pub mod channel;
 pub mod contract;
 pub mod defer;

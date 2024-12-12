@@ -1,7 +1,3 @@
-#![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
-#![allow(clippy::missing_errors_doc)]
-
 use anyhow::{Context as _, Result};
 use cosmrs::Gas;
 
