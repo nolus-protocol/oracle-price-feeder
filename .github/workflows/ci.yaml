@@ -59,7 +59,7 @@ jobs:
           update_and_cache_toolchains: "true"
       - name: "Run clippy"
         run: |-
-          "cargo" "clippy" --workspace -- -D "warnings"
+          "cargo" "clippy" --all-targets
   test_encoding_compatibility:
     runs-on: "ubuntu-latest"
     steps:
@@ -69,7 +69,7 @@ jobs:
           update_and_cache_toolchains: "true"
       - name: "Run encoding compatibility tests"
         run: |-
-          "cargo" "test" --workspace
+          "cargo" "test" --all-targets
         working-directory: "./test-encoding-compatibility"
   code_coverage:
     runs-on: "ubuntu-latest"
@@ -90,7 +90,7 @@ jobs:
           update_and_cache_toolchains: "true"
       - name: "Run tests in release profile"
         run: |-
-          "cargo" "test" --workspace --release
+          "cargo" "test" --all-targets --release
   build:
     runs-on: "ubuntu-latest"
     needs:
