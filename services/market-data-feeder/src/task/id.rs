@@ -27,6 +27,7 @@ pub struct Id {
 }
 
 impl Id {
+    #[must_use]
     pub const fn new(protocol: Arc<str>) -> Self {
         Self { protocol }
     }
