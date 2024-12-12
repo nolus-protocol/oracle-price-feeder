@@ -76,7 +76,7 @@ struct DateTimeSegmentedWriter<'r> {
     file: Option<(DateAndHour, File)>,
 }
 
-impl<'r> DateTimeSegmentedWriter<'r> {
+impl DateTimeSegmentedWriter<'_> {
     fn open_file(
         &mut self,
         date_and_hour: DateAndHour,
@@ -114,7 +114,7 @@ impl<'r> DateTimeSegmentedWriter<'r> {
     }
 }
 
-impl<'r> Write for DateTimeSegmentedWriter<'r> {
+impl Write for DateTimeSegmentedWriter<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let now = DateAndHour::now();
 

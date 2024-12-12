@@ -76,7 +76,7 @@ pub struct JoinNext<'r, T, U> {
     next_to_poll: &'r mut usize,
 }
 
-impl<'r, T, U> Future for JoinNext<'r, T, U>
+impl<T, U> Future for JoinNext<'_, T, U>
 where
     T: Unpin,
 {
