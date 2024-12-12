@@ -10,7 +10,8 @@ use super::Closed;
 pub enum Generic {}
 
 impl super::Generic for Generic {
-    type Channel<T> = Channel<T>
+    type Channel<T>
+        = Channel<T>
     where
         T: Send;
 }
