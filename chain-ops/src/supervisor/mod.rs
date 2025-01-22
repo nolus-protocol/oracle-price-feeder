@@ -460,9 +460,7 @@ where
             ProtocolWatcherCommand::ProtocolRemoved(ref protocol) => {
                 () = self.task_states.retain(|id, _| match id {
                     task::Id::ApplicationDefined(id) => {
-                        id.protocol().map_or(true, |task_protocol| {
-                            task_protocol != protocol
-                        })
+                        id.protocol() != Some(protocol)
                     },
                     _ => true,
                 });
