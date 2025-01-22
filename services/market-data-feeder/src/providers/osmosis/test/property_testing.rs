@@ -65,7 +65,7 @@ impl TestCase {
             .len()
             .checked_sub(usize::from(minimal_exponent))
             .and_then(|end| trimmed.get(..end))
-            .map_or(false, greater_than_max_quote_value)
+            .is_some_and(greater_than_max_quote_value)
         {
             None
         } else {
