@@ -26,7 +26,7 @@ impl Oracle {
     ) -> Result<Self> {
         const QUERY_MSG: &[u8; 23] = br#"{"contract_version":{}}"#;
 
-        const CONTRACT_VERSION: SemVer = SemVer::new(0, 5, 15);
+        const CONTRACT_VERSION: SemVer = SemVer::new(0, 6, 0);
 
         query_wasm
             .smart::<SemVer>(address.clone(), QUERY_MSG.to_vec())
