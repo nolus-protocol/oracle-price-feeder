@@ -62,7 +62,6 @@ impl Admin {
                 serde_json_wasm::to_vec(&QueryMsg::Protocol(name))?,
             )
             .await
-            .map_err(Into::into)
     }
 }
 
