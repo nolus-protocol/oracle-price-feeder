@@ -349,7 +349,7 @@ impl PriceAlarms {
 impl Alarms for PriceAlarms {
     const TARGET_CONTRACT_NAME: &'static str = "Oracle";
 
-    const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 12);
+    const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 6, 0);
 }
 
 #[derive(Clone, Copy)]
@@ -358,7 +358,7 @@ pub struct TimeAlarms;
 impl Alarms for TimeAlarms {
     const TARGET_CONTRACT_NAME: &'static str = "Time Alarms";
 
-    const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 4, 4);
+    const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
 }
 
 type DispatchAlarmsResponse = u32;
