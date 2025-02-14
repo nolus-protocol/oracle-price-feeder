@@ -1,4 +1,4 @@
-use std::{borrow::Cow, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::Context as _;
 use serde::Deserialize;
@@ -8,7 +8,7 @@ pub use self::admin::Admin;
 pub mod admin;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Deserialize)]
-#[serde(try_from = "Cow<'de, str>")]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
 pub struct SemVer {
     major: VersionSegment,
     minor: VersionSegment,
@@ -65,15 +65,6 @@ impl FromStr for SemVer {
                         })
                     })
             })
-    }
-}
-
-impl TryFrom<Cow<'_, str>> for SemVer {
-    type Error = anyhow::Error;
-
-    #[inline]
-    fn try_from(value: Cow<'_, str>) -> Result<Self, Self::Error> {
-        value.parse()
     }
 }
 
