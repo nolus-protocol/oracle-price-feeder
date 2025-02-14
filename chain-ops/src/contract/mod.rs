@@ -84,3 +84,22 @@ pub enum Compatibility {
 }
 
 type VersionSegment = u16;
+
+#[test]
+fn test_parsing() {
+    for invalid_version in [
+        "", ".", ".0", "0", "0.", ".0.0", "0.0", "0.0.", ".0.0.0", "0.0.0.",
+        ".0.0.0.0", "0.0.0.0", "0.0.0.0.",
+    ] {
+        invalid_version.parse::<SemVer>().unwrap_err();
+    }
+
+    assert_eq!("0.0.0".parse::<SemVer>().unwrap(), SemVer::new(0, 0, 0));
+
+    assert_eq!("1.2.3".parse::<SemVer>().unwrap(), SemVer::new(1, 2, 3));
+
+    assert_eq!(
+        "10.02.030".parse::<SemVer>().unwrap(),
+        SemVer::new(10, 2, 30)
+    );
+}
