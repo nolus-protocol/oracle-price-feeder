@@ -458,7 +458,7 @@ where
                     ));
 
                     fallback_gas = self.base.hard_gas_limit;
-                };
+                }
             },
             Ok(None) => {},
             Err(error) => {
