@@ -10,7 +10,7 @@ use cosmrs::{
     tx::Body as TxBody,
     Any, Gas,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tokio::{
     sync::{mpsc, oneshot},
     time::sleep,
@@ -58,6 +58,12 @@ pub trait Alarms: Send + Sized + 'static {
     const TARGET_CONTRACT_NAME: &'static str;
 
     const COMPATIBLE_VERSION: SemVer;
+
+    type ContractVersion;
+
+    fn extract_semantic_version(
+        contract_version: Self::ContractVersion,
+    ) -> Result<SemVer>;
 }
 
 #[derive(Clone)]
@@ -156,12 +162,34 @@ where
         &self.alarms
     }
 
-    async fn check_version(&mut self) -> Result<()> {
+    async fn check_version(&mut self) -> Result<()>
+    where
+        T::ContractVersion: DeserializeOwned,
+    {
         const QUERY_MSG: &[u8; 23] = br#"{"contract_version":{}}"#;
 
         self.query_wasm
-            .smart::<SemVer>(self.address.to_string(), QUERY_MSG.to_vec())
+            .smart::<T::ContractVersion>(
+                self.address.to_string(),
+                QUERY_MSG.to_vec(),
+            )
             .await
+            .with_context(|| {
+                format!(
+                    "Failed to fetch {} contract's version!",
+                    T::TARGET_CONTRACT_NAME
+                )
+            })
+            .and_then(|contract_version| {
+                T::extract_semantic_version(contract_version).with_context(
+                    || {
+                        format!(
+                            "Extract {} contract's semantic version!",
+                            T::TARGET_CONTRACT_NAME
+                        )
+                    },
+                )
+            })
             .and_then(|version| {
                 match version.check_compatibility(T::COMPATIBLE_VERSION) {
                     Compatibility::Compatible => Ok(()),
@@ -312,7 +340,7 @@ where
 
 impl<T> Runnable for AlarmsGenerator<T>
 where
-    T: Alarms,
+    T: Alarms<ContractVersion: DeserializeOwned>,
 {
     async fn run(mut self, _: RunnableState) -> Result<()> {
         self.check_version().await?;
@@ -350,6 +378,17 @@ impl Alarms for PriceAlarms {
     const TARGET_CONTRACT_NAME: &'static str = "Oracle";
 
     const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 6, 0);
+
+    type ContractVersion = String;
+
+    #[inline]
+    fn extract_semantic_version(
+        contract_version: Self::ContractVersion,
+    ) -> Result<SemVer> {
+        contract_version
+            .parse()
+            .context("Failed to parse contract version!")
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -359,6 +398,15 @@ impl Alarms for TimeAlarms {
     const TARGET_CONTRACT_NAME: &'static str = "Time Alarms";
 
     const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
+
+    type ContractVersion = SemVer;
+
+    #[inline]
+    fn extract_semantic_version(
+        contract_version: Self::ContractVersion,
+    ) -> Result<SemVer> {
+        Ok(contract_version)
+    }
 }
 
 type DispatchAlarmsResponse = u32;
