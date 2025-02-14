@@ -29,9 +29,10 @@ impl Oracle {
         const CONTRACT_VERSION: SemVer = SemVer::new(0, 6, 0);
 
         query_wasm
-            .smart::<SemVer>(address.clone(), QUERY_MSG.to_vec())
+            .smart(address.clone(), QUERY_MSG.to_vec())
             .await
-            .and_then(|version| {
+            .and_then(|contract_version: String| contract_version.parse())
+            .and_then(|version: SemVer| {
                 match version.check_compatibility(CONTRACT_VERSION) {
                     Compatibility::Compatible => Ok(()),
                     Compatibility::Incompatible => Err(anyhow!(
