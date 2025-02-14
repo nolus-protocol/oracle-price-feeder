@@ -23,9 +23,7 @@ impl QueryTx {
                 .tx_response
                 .context(MISSING_RESPONSE_ERROR)
                 .map(Some),
-            Err(status)
-                if matches!(status.code(), tonic::Code::NotFound {}) =>
-            {
+            Err(status) if matches!(status.code(), tonic::Code::NotFound) => {
                 Ok(None)
             },
             Err(status) => {
