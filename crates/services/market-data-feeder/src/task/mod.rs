@@ -59,6 +59,25 @@ impl application_defined::Task for Task {
     }
 }
 
+struct TaskWithProvider<OracleType> {
+    source: Arc<str>,
+    protocol: Arc<str>,
+    node_client: node::Client,
+    dex_node_client: node::Client,
+    duration_before_start: Duration,
+    execute_template: ExecuteTemplate,
+    idle_duration: Duration,
+    timeout_duration: Duration,
+    hard_gas_limit: Gas,
+    transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+}
+
+trait Contract {
+    type Dex: Dex;
+
+    fn fetch_prices(&self)
+}
+
 struct Base {
     protocol: Arc<str>,
     node_client: node::Client,
