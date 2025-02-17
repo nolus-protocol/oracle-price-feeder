@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["./**/src/.."]
-exclude = [
-    "./target/**",
-    "./test-encoding-compatibility",
-]
+members = ["./crates/*/**/src/.."]
 
 [workspace.package]
 version = "0.65.0"
@@ -12,7 +8,7 @@ edition = "2021"
 rust-version = "1.83.0"
 
 [workspace.dependencies.chain-ops]
-path = "./chain-ops"
+path = "./crates/chain-ops"
 
 [workspace.dependencies]
 bip32 = "0.5.2"

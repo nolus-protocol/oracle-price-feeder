@@ -1,3 +1,6 @@
+[workspace]
+resolver = "2"
+
 [package]
 name = "test-encoding-compatibility"
 version = "0.0.0"
@@ -19,7 +22,7 @@ priority = -1
 level = "deny"
 
 [dev-dependencies.market-data-feeder]
-path = "../services/market-data-feeder"
+path = "../crates/services/market-data-feeder"
 
 ################################################################################
 

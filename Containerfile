@@ -67,7 +67,7 @@ RUN "cargo" \
     "rustc" \
     "--bin" "${package:?}" \
     "--locked" \
-    "--manifest-path" "/code/services/${package:?}/Cargo.toml" \
+    "--manifest-path" "/code/crates/services/${package:?}/Cargo.toml" \
     "--package" "${package:?}" \
     "--profile" "${profile:?}" \
     "--target" "x86_64-unknown-linux-gnu" \

@@ -1,7 +1,6 @@
 **/
 
 !.cargo/
-!chain-ops/
-!services/**
+!crates/
 !Cargo.toml
 !Cargo.lock
