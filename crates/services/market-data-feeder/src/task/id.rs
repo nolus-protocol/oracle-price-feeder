@@ -13,8 +13,7 @@ use chain_ops::{
     task::{application_defined, TimeBasedExpiration, TxPackage},
     tx::ExecuteTemplate,
 };
-
-use crate::{
+use dex::{
     oracle::Oracle,
     providers::{astroport::Astroport, osmosis::Osmosis, Provider},
 };

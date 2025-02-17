@@ -1,4 +1,4 @@
-use std::{cmp, collections::BTreeMap, future::Future};
+use std::{borrow::Borrow, cmp, collections::BTreeMap, future::Future};
 
 use anyhow::{bail, Context as _, Result};
 use tracing::debug;
@@ -6,8 +6,8 @@ use tracing::debug;
 use chain_ops::node;
 
 use crate::{
-    oracle::Oracle,
-    provider::{Amount, Base, CurrencyPair, Decimal, Provider, Quote},
+    oracle::{Currencies, PoolId},
+    provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote},
 };
 
 use super::{Osmosis, SpotPriceRequest, SpotPriceResponse};
@@ -103,31 +103,37 @@ impl Osmosis {
     }
 }
 
-impl Provider for Osmosis {
+impl Dex for Osmosis {
+    type AssociatedPairData = PoolId;
+
     type PriceQueryMessage = QueryMessage;
 
     const PROVIDER_NAME: &'static str = "Osmosis";
 
-    fn price_query_messages(
+    fn price_query_messages_with_associated_data<
+        Pairs,
+        Ticker,
+        AssociatedPairData,
+    >(
         &self,
-        oracle: &Oracle,
-    ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
-        let currencies = oracle.currencies();
-
-        oracle
-            .currency_pairs()
-            .iter()
-            .map(|((base_ticker, quote_ticker), &pool_id)| {
-                currencies.get(base_ticker).and_then(|base| {
-                    currencies.get(quote_ticker).map(|quote| {
+        pairs: Pairs,
+        currencies: &Currencies,
+    ) -> Result<BTreeMap<CurrencyPair<Ticker>, Self::PriceQueryMessage>>
+    where
+        Pairs: IntoIterator<Item = (CurrencyPair<Ticker>, AssociatedPairData)>,
+        Ticker: Borrow<str> + Ord,
+        AssociatedPairData: Borrow<Self::AssociatedPairData>,
+    {
+        pairs
+            .into_iter()
+            .map(|(pair, pool_id)| {
+                currencies.get(pair.base.borrow()).and_then(|base| {
+                    currencies.get(pair.quote.borrow()).map(|quote| {
                         (
-                            CurrencyPair {
-                                base: base_ticker.clone().into(),
-                                quote: quote_ticker.clone().into(),
-                            },
+                            pair,
                             QueryMessage {
                                 request: SpotPriceRequest {
-                                    pool_id,
+                                    pool_id: *pool_id.borrow(),
                                     base_asset_denom: base.dex_symbol.clone(),
                                     quote_asset_denom: quote.dex_symbol.clone(),
                                 },

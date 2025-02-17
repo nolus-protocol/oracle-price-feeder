@@ -413,6 +413,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "dex"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "fraction",
+ "proptest",
+ "prost",
+ "serde",
+ "serde-json-wasm",
+ "tokio",
+ "tonic",
+ "tracing",
+]
+
+[[package]]
 name = "digest"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -932,6 +948,7 @@ dependencies = [
  "anyhow",
  "chain-ops",
  "cosmrs",
+ "dex",
  "fraction",
  "proptest",
  "prost",
@@ -1666,6 +1683,10 @@ name = "subtle-ng"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
+
+[[package]]
+name = "swap-route-optimizer"
+version = "0.65.0"
 
 [[package]]
 name = "syn"

@@ -1,23 +1,54 @@
 use std::{
-    collections::BTreeMap, fmt::Debug, future::Future, marker::PhantomData,
-    sync::Arc,
+    borrow::Borrow, collections::BTreeMap, fmt::Debug, future::Future,
+    marker::PhantomData, sync::Arc,
 };
 
 use anyhow::Result;
 
 use chain_ops::node;
 
-use crate::oracle::Oracle;
+use crate::oracle::Currencies;
 
-pub trait Provider: Send + Sized {
+pub trait Dex: Send + Sized {
+    type AssociatedPairData;
+
     type PriceQueryMessage: Send + 'static;
 
     const PROVIDER_NAME: &'static str;
 
-    fn price_query_messages(
+    #[inline]
+    fn price_query_messages<Pairs, Ticker>(
         &self,
-        oracle: &Oracle,
-    ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>>;
+        pairs: Pairs,
+        currencies: &Currencies,
+    ) -> Result<BTreeMap<CurrencyPair<Ticker>, Self::PriceQueryMessage>>
+    where
+        Self: Dex<AssociatedPairData = ()>,
+        Pairs: IntoIterator<Item = CurrencyPair<Ticker>>,
+        Ticker: Borrow<str> + Ord,
+    {
+        self.price_query_messages_with_associated_data(
+            pairs.into_iter().map(
+                #[inline]
+                |pair| (pair, ()),
+            ),
+            currencies,
+        )
+    }
+
+    fn price_query_messages_with_associated_data<
+        Pairs,
+        Ticker,
+        AssociatedPairData,
+    >(
+        &self,
+        pairs: Pairs,
+        currencies: &Currencies,
+    ) -> Result<BTreeMap<CurrencyPair<Ticker>, Self::PriceQueryMessage>>
+    where
+        Pairs: IntoIterator<Item = (CurrencyPair<Ticker>, AssociatedPairData)>,
+        Ticker: Borrow<str> + Ord,
+        AssociatedPairData: Borrow<Self::AssociatedPairData>;
 
     fn price_query(
         &self,
@@ -107,7 +138,10 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct CurrencyPair {
-    pub base: Arc<str>,
-    pub quote: Arc<str>,
+pub struct CurrencyPair<T = Arc<str>>
+where
+    T: Borrow<str>,
+{
+    pub base: T,
+    pub quote: T,
 }

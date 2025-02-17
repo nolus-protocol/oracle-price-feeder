@@ -12,11 +12,9 @@ use chain_ops::{
     },
     tx::ExecuteTemplate,
 };
-
-use crate::{oracle::Oracle, providers};
+use dex::{oracle::Oracle, provider::Dex, providers::Provider as DexProvider};
 
 use self::provider::Provider;
-
 pub use self::{
     context::ApplicationDefined as ApplicationDefinedContext, id::Id,
 };
@@ -27,16 +25,16 @@ mod provider;
 
 pub struct Task {
     base: Base,
-    provider: providers::Provider,
+    provider: DexProvider,
 }
 
 impl Runnable for Task {
     async fn run(self, state: RunnableState) -> Result<()> {
         match self.provider {
-            providers::Provider::Astroport(provider) => {
+            DexProvider::Astroport(provider) => {
                 Provider::new(self.base, provider).run(state).await
             },
-            providers::Provider::Osmosis(provider) => {
+            DexProvider::Osmosis(provider) => {
                 Provider::new(self.base, provider).run(state).await
             },
         }

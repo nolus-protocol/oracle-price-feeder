@@ -1,5 +1,6 @@
 use std::{
-    collections::BTreeMap, convert::identity, future::Future, sync::Arc,
+    borrow::Borrow, collections::BTreeMap, convert::identity, future::Future,
+    sync::Arc,
 };
 
 use anyhow::{bail, Context as _, Result};
@@ -21,11 +22,12 @@ use chain_ops::{
     task_set::TaskSet,
     tx,
 };
-
-use crate::{
+use dex::{
+    oracle::Currencies,
     provider::{self, Amount, Base, CurrencyPair, Decimal, Quote},
-    task,
 };
+
+use crate::task;
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -48,7 +50,7 @@ macro_rules! log_with_context {
 
 pub(crate) struct Provider<P>
 where
-    P: provider::Provider,
+    P: provider::Dex,
 {
     base: task::Base,
     provider: P,
@@ -56,15 +58,27 @@ where
 
 impl<P> Provider<P>
 where
-    P: provider::Provider,
+    P: provider::Dex,
 {
     pub const fn new(base: task::Base, provider: P) -> Self {
         Self { base, provider }
     }
 
     pub async fn run(mut self, state: RunnableState) -> Result<()> {
-        let mut query_messages =
-            self.provider.price_query_messages(&self.base.oracle)?;
+        let mut query_messages = self.provider.price_query_messages(
+            self.base.oracle.currency_pairs().iter().map(
+                |((base, quote), associated_data)| {
+                    (
+                        CurrencyPair {
+                            base: base.clone(),
+                            quote: quote.clone(),
+                        },
+                        associated_data,
+                    )
+                },
+            ),
+            self.base.oracle.currencies(),
+        )?;
 
         let mut queries_task_set = TaskSet::new();
 
@@ -474,7 +488,10 @@ where
 
     async fn spawn_query_tasks(
         &mut self,
-        query_messages: &mut BTreeMap<CurrencyPair, P::PriceQueryMessage>,
+        query_messages: &mut BTreeMap<
+            CurrencyPair<String>,
+            P::PriceQueryMessage,
+        >,
         task_set: &mut QueryTasksSet,
         replacement_buffer: &mut Vec<Price>,
     ) -> Result<()> {
@@ -486,7 +503,20 @@ where
             .context("Failed to update currencies and currency pairs")?
         {
             *query_messages =
-                self.provider.price_query_messages(&self.base.oracle)?;
+                self.provider.price_query_messages_with_associated_data(
+                    self.base.oracle.currency_pairs().iter().map(
+                        |((base, quote), associated_data)| {
+                            (
+                                CurrencyPair {
+                                    base: base.clone(),
+                                    quote: quote.clone(),
+                                },
+                                associated_data,
+                            )
+                        },
+                    ),
+                    self.base.oracle.currencies(),
+                )?;
 
             let additional_capacity = query_messages
                 .len()
@@ -560,14 +590,17 @@ struct Coin {
 fn test_pretty_price_formatting() {
     use chain_ops::node;
 
-    use crate::oracle::Oracle;
+    use dex::oracle::Oracle;
 
     enum Never {}
 
     struct Dummy;
 
-    impl provider::Provider for Dummy {
+    impl dex::provider::Dex for Dummy {
+        type AssociatedPairData = ();
+
         type PriceQueryMessage = Never;
+
         const PROVIDER_NAME: &'static str = "Dummy";
 
         fn price_query_messages(
@@ -575,6 +608,24 @@ fn test_pretty_price_formatting() {
             _: &Oracle,
         ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
             Ok(BTreeMap::new())
+        }
+
+        fn price_query_messages_with_associated_data<
+            Pairs,
+            Ticker,
+            AssociatedPairData,
+        >(
+            &self,
+            pairs: Pairs,
+            currencies: &Currencies,
+        ) -> Result<BTreeMap<CurrencyPair<Ticker>, Self::PriceQueryMessage>>
+        where
+            Pairs:
+                IntoIterator<Item = (CurrencyPair<Ticker>, AssociatedPairData)>,
+            Ticker: Borrow<str> + Ord,
+            AssociatedPairData: Borrow<Self::AssociatedPairData>,
+        {
+            todo!()
         }
 
         #[allow(clippy::manual_async_fn)]

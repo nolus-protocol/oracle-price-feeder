@@ -1,12 +1,12 @@
-use std::{collections::BTreeMap, future::Future};
+use std::{borrow::Borrow, collections::BTreeMap, future::Future};
 
 use anyhow::{Context as _, Result};
 
 use chain_ops::node;
 
 use crate::{
-    oracle::Oracle,
-    provider::{Amount, Base, CurrencyPair, Decimal, Provider, Quote},
+    oracle::Currencies,
+    provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote},
 };
 
 use super::{
@@ -24,7 +24,7 @@ impl Astroport {
         base_decimal_places: u8,
         quote: String,
         quote_decimal_places: u8,
-    ) -> Result<<Self as Provider>::PriceQueryMessage> {
+    ) -> Result<<Self as Dex>::PriceQueryMessage> {
         let base_amount = 10_u128.pow(base_decimal_places.into());
 
         serde_json_wasm::to_vec(&QueryMsg::SimulateSwapOperations {
@@ -46,45 +46,53 @@ impl Astroport {
     }
 }
 
-impl Provider for Astroport {
+impl Dex for Astroport {
+    type AssociatedPairData = ();
+
     type PriceQueryMessage = PriceQueryMessage;
 
     const PROVIDER_NAME: &'static str = "Astroport";
 
-    fn price_query_messages(
+    fn price_query_messages_with_associated_data<
+        Pairs,
+        Ticker,
+        AssociatedPairData,
+    >(
         &self,
-        oracle: &Oracle,
-    ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
-        let currencies = oracle.currencies();
-
-        oracle
-            .currency_pairs()
-            .keys()
-            .map(|(base, quote)| {
-                let base_currency = currencies.get(base)?;
-                let quote_currency = currencies.get(quote)?;
-
-                Self::price_query_message(
-                    base_currency.dex_symbol.clone(),
-                    base_currency.decimal_digits,
-                    quote_currency.dex_symbol.clone(),
-                    quote_currency.decimal_digits,
-                )
-                .with_context(|| {
-                    format!(
-                        "Failed to construct price query message! \
-                    Currency pair={base}/{quote}"
-                    )
-                })
-                .map(|query_message| {
-                    (
-                        CurrencyPair {
-                            base: base.clone().into(),
-                            quote: quote.clone().into(),
-                        },
-                        query_message,
-                    )
-                })
+        pairs: Pairs,
+        currencies: &Currencies,
+    ) -> Result<BTreeMap<CurrencyPair<Ticker>, Self::PriceQueryMessage>>
+    where
+        Pairs: IntoIterator<Item = (CurrencyPair<Ticker>, AssociatedPairData)>,
+        Ticker: Borrow<str> + Ord,
+        AssociatedPairData: Borrow<Self::AssociatedPairData>,
+    {
+        pairs
+            .into_iter()
+            .map(|(pair, _)| {
+                currencies
+                    .get(pair.base.borrow())
+                    .and_then(|base_currency| {
+                        currencies.get(pair.quote.borrow()).and_then(
+                            |quote_currency| {
+                                Self::price_query_message(
+                                    base_currency.dex_symbol.clone(),
+                                    base_currency.decimal_digits,
+                                    quote_currency.dex_symbol.clone(),
+                                    quote_currency.decimal_digits,
+                                )
+                                .with_context(|| {
+                                    format!(
+                                        "Failed to construct price query \
+                                        message! Currency pair={base}/{quote}",
+                                        base = pair.base.borrow(),
+                                        quote = pair.quote.borrow(),
+                                    )
+                                })
+                                .map(|query_message| (pair, query_message))
+                            },
+                        )
+                    })
             })
             .collect()
     }

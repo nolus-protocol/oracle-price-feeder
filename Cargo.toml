@@ -10,6 +10,9 @@ rust-version = "1.83.0"
 [workspace.dependencies.chain-ops]
 path = "./crates/chain-ops"
 
+[workspace.dependencies.dex]
+path = "./crates/dex"
+
 [workspace.dependencies]
 bip32 = "0.5.2"
 data-encoding = "2.8.0"
