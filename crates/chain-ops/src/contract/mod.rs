@@ -1,4 +1,7 @@
-use std::str::FromStr;
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
 
 use anyhow::Context as _;
 use serde::Deserialize;
@@ -13,6 +16,15 @@ pub struct SemVer {
     major: VersionSegment,
     minor: VersionSegment,
     patch: VersionSegment,
+}
+
+impl Display for SemVer {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!(
+            "{}.{}.{}",
+            self.major, self.minor, self.patch
+        ))
+    }
 }
 
 impl SemVer {
