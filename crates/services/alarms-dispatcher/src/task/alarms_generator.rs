@@ -1,6 +1,4 @@
-use std::{sync::Arc, time::Duration};
-
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result};
 use cosmrs::{
     proto::{
         cosmos::base::abci::v1beta1::TxResponse,
@@ -10,7 +8,8 @@ use cosmrs::{
     tx::Body as TxBody,
     Any, Gas,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
+use std::{sync::Arc, time::Duration};
 use tokio::{
     sync::{mpsc, oneshot},
     time::sleep,
@@ -18,7 +17,7 @@ use tokio::{
 
 use chain_ops::{node, tx};
 use channel::unbounded;
-use semver::{Compatibility, SemVer};
+use contract::{CheckedContract, GeneralizedOracle};
 use service::task::{NoExpiration, Runnable, RunnableState, TxPackage};
 
 macro_rules! log {
@@ -41,26 +40,19 @@ macro_rules! log_with_hash {
 }
 
 pub struct Configuration {
-    pub node_client: node::Client,
     pub transaction_tx: unbounded::Sender<TxPackage<NoExpiration>>,
     pub sender: String,
-    pub address: Arc<str>,
     pub alarms_per_message: u32,
     pub gas_per_alarm: Gas,
     pub idle_duration: Duration,
+    pub query_tx: node::QueryTx,
     pub timeout_duration: Duration,
 }
 
 pub trait Alarms: Send + Sized + 'static {
-    const TARGET_CONTRACT_NAME: &'static str;
+    const TYPE: &'static str;
 
-    const COMPATIBLE_VERSION: SemVer;
-
-    type ContractVersion;
-
-    fn extract_semantic_version(
-        contract_version: Self::ContractVersion,
-    ) -> Result<SemVer>;
+    type Contract: Send + ?Sized;
 }
 
 #[derive(Clone)]
@@ -68,10 +60,9 @@ pub struct AlarmsGenerator<T>
 where
     T: Alarms,
 {
-    query_wasm: node::QueryWasm,
+    contract: CheckedContract<T::Contract>,
     query_tx: node::QueryTx,
     transaction_tx: mpsc::UnboundedSender<TxPackage<NoExpiration>>,
-    address: Arc<str>,
     alarms_per_message: u32,
     gas_per_alarm: Gas,
     idle_duration: Duration,
@@ -85,11 +76,13 @@ impl AlarmsGenerator<PriceAlarms> {
     #[inline]
     pub fn new_price_alarms(
         configuration: Configuration,
+        contract: CheckedContract<<PriceAlarms as Alarms>::Contract>,
         alarms: PriceAlarms,
     ) -> Result<Self> {
         Self::with_source(
             configuration,
             format!("Price Alarms; Protocol={}", alarms.protocol()).into(),
+            contract,
             alarms,
         )
     }
@@ -99,9 +92,10 @@ impl AlarmsGenerator<TimeAlarms> {
     #[inline]
     pub fn new_time_alarms(
         configuration: Configuration,
+        contract: CheckedContract<<TimeAlarms as Alarms>::Contract>,
         alarms: TimeAlarms,
     ) -> Result<Self> {
-        Self::with_source(configuration, "Time Alarms".into(), alarms)
+        Self::with_source(configuration, "Time Alarms".into(), contract, alarms)
     }
 }
 
@@ -111,21 +105,21 @@ where
 {
     pub fn with_source(
         Configuration {
-            node_client,
             transaction_tx,
             sender,
-            address,
             alarms_per_message,
             gas_per_alarm,
             idle_duration,
+            query_tx,
             timeout_duration,
         }: Configuration,
         source: Arc<str>,
+        contract: CheckedContract<T::Contract>,
         alarms: T,
     ) -> Result<Self> {
         Any::from_msg(&MsgExecuteContract {
             sender,
-            contract: address.to_string(),
+            contract: contract.address().to_string(),
             msg: format!(
                 r#"{{"dispatch_alarms":{{"max_count":{alarms_per_message}}}}}"#,
             )
@@ -133,10 +127,9 @@ where
             funds: vec![],
         })
         .map(|message| Self {
-            query_wasm: node_client.clone().query_wasm(),
-            query_tx: node_client.query_tx(),
+            contract,
+            query_tx,
             transaction_tx,
-            address,
             alarms_per_message,
             gas_per_alarm,
             idle_duration,
@@ -157,45 +150,6 @@ where
     #[inline]
     pub(super) const fn alarms(&self) -> &T {
         &self.alarms
-    }
-
-    async fn check_version(&mut self) -> Result<()>
-    where
-        T::ContractVersion: DeserializeOwned,
-    {
-        const QUERY_MSG: &[u8; 23] = br#"{"contract_version":{}}"#;
-
-        self.query_wasm
-            .smart::<T::ContractVersion>(
-                self.address.to_string(),
-                QUERY_MSG.to_vec(),
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to fetch {} contract's version!",
-                    T::TARGET_CONTRACT_NAME
-                )
-            })
-            .and_then(|contract_version| {
-                T::extract_semantic_version(contract_version).with_context(
-                    || {
-                        format!(
-                            "Extract {} contract's semantic version!",
-                            T::TARGET_CONTRACT_NAME
-                        )
-                    },
-                )
-            })
-            .and_then(|version| {
-                match version.check_compatibility(T::COMPATIBLE_VERSION) {
-                    Compatibility::Compatible => Ok(()),
-                    Compatibility::Incompatible => Err(anyhow!(
-                        "{} contract has an incompatible version!",
-                        T::TARGET_CONTRACT_NAME,
-                    )),
-                }
-            })
     }
 
     async fn dispatch_alarms(mut self) -> Result<()> {
@@ -220,8 +174,11 @@ where
     async fn alarms_status(&mut self) -> Result<AlarmsStatusResponse> {
         const QUERY_MSG: &[u8; 20] = br#"{"alarms_status":{}}"#;
 
-        self.query_wasm
-            .smart(self.address.to_string(), QUERY_MSG.to_vec())
+        let address = self.contract.address().to_string();
+
+        self.contract
+            .query_wasm_mut()
+            .smart(address, QUERY_MSG.to_vec())
             .await
     }
 
@@ -337,11 +294,9 @@ where
 
 impl<T> Runnable for AlarmsGenerator<T>
 where
-    T: Alarms<ContractVersion: DeserializeOwned>,
+    T: Alarms,
 {
-    async fn run(mut self, _: RunnableState) -> Result<()> {
-        self.check_version().await?;
-
+    async fn run(self, _: RunnableState) -> Result<()> {
         self.dispatch_alarms().await
     }
 }
@@ -372,38 +327,16 @@ impl PriceAlarms {
 }
 
 impl Alarms for PriceAlarms {
-    const TARGET_CONTRACT_NAME: &'static str = "Oracle";
-
-    const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 6, 0);
-
-    type ContractVersion = String;
-
-    #[inline]
-    fn extract_semantic_version(
-        contract_version: Self::ContractVersion,
-    ) -> Result<SemVer> {
-        contract_version
-            .parse()
-            .context("Failed to parse contract version!")
-    }
+    const TYPE: &'static str = "Price";
+    type Contract = GeneralizedOracle;
 }
 
 #[derive(Clone, Copy)]
 pub struct TimeAlarms;
 
 impl Alarms for TimeAlarms {
-    const TARGET_CONTRACT_NAME: &'static str = "Time Alarms";
-
-    const COMPATIBLE_VERSION: SemVer = SemVer::new(0, 5, 0);
-
-    type ContractVersion = SemVer;
-
-    #[inline]
-    fn extract_semantic_version(
-        contract_version: Self::ContractVersion,
-    ) -> Result<SemVer> {
-        Ok(contract_version)
-    }
+    const TYPE: &'static str = "Time";
+    type Contract = contract::TimeAlarms;
 }
 
 type DispatchAlarmsResponse = u32;

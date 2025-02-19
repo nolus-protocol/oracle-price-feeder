@@ -47,16 +47,19 @@ impl Id {
 
         alarms_generator::AlarmsGenerator::new_time_alarms(
             alarms_generator::Configuration {
-                node_client: service_configuration.node_client().clone(),
                 transaction_tx: transaction_tx.clone(),
                 sender: service_configuration.signer().address().into(),
-                address: time_alarms.check().await?.0.address().into(),
                 alarms_per_message: task_creation_context
                     .time_alarms_per_message,
                 gas_per_alarm: task_creation_context.gas_per_time_alarm,
                 idle_duration: service_configuration.idle_duration(),
+                query_tx: service_configuration
+                    .node_client()
+                    .clone()
+                    .query_tx(),
                 timeout_duration: service_configuration.timeout_duration(),
             },
+            time_alarms.check().await?.0,
             TimeAlarms {},
         )
         .map(Task::TimeAlarms)
@@ -79,16 +82,19 @@ impl Id {
 
         alarms_generator::AlarmsGenerator::new_price_alarms(
             alarms_generator::Configuration {
-                node_client: service_configuration.node_client().clone(),
                 transaction_tx: transaction_tx.clone(),
                 sender: service_configuration.signer().address().into(),
-                address: oracle.check().await?.0.address().into(),
                 alarms_per_message: task_creation_context
                     .price_alarms_per_message,
                 gas_per_alarm: task_creation_context.gas_per_price_alarm,
                 idle_duration: service_configuration.idle_duration(),
+                query_tx: service_configuration
+                    .node_client()
+                    .clone()
+                    .query_tx(),
                 timeout_duration: service_configuration.timeout_duration(),
             },
+            oracle.check().await?.0,
             PriceAlarms::new(protocol_name),
         )
         .map(Task::PriceAlarms)

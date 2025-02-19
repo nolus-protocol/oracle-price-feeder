@@ -167,6 +167,16 @@ where
     Contract: ?Sized,
 {
     #[inline]
+    pub const fn query_wasm(&self) -> &QueryWasm {
+        &self.query_wasm
+    }
+
+    #[inline]
+    pub const fn query_wasm_mut(&mut self) -> &mut QueryWasm {
+        &mut self.query_wasm
+    }
+
+    #[inline]
     pub fn address(&self) -> &str {
         &self.address.0
     }

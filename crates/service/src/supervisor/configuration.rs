@@ -63,10 +63,6 @@ impl Service {
         )
         .await?;
 
-        // let admin_contract = contract::Admin::new(
-        //     node_client.clone().query_wasm(),
-        //     Self::read_admin_contract_address()?.into(),
-        // );
         let (admin_contract, _) = UncheckedContract::admin(
             node_client.clone().query_wasm(),
             Address::new(Self::read_admin_contract_address()?),
