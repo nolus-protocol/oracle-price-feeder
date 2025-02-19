@@ -3,7 +3,7 @@ use osmosis_std::types::osmosis::poolmanager::v2::{
 };
 use prost::Message as _;
 
-use market_data_feeder::providers::osmosis::{
+use dex::providers::osmosis::{
     SpotPriceRequest as LocalRequest, SpotPriceResponse as LocalResponse,
 };
 

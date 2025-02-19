@@ -8,7 +8,7 @@ use astroport::{
 };
 use serde_json_wasm::{from_str, to_string};
 
-use market_data_feeder::providers::astroport::{
+use dex::providers::astroport::{
     AssetInfo as LocalAssetInfo, QueryMsg as LocalQueryMsg,
     SimulateSwapOperationsResponse as LocalResponse,
     SwapOperation as LocalSwapOperation,

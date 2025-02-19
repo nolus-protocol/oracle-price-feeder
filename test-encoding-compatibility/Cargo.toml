@@ -21,8 +21,8 @@ missing_errors_doc = "allow"
 priority = -1
 level = "deny"
 
-[dev-dependencies.market-data-feeder]
-path = "../crates/services/market-data-feeder"
+[dev-dependencies.dex]
+path = "../libraries/dex"
 
 ################################################################################
 

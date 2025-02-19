@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["./crates/*/**/src/.."]
+members = [
+    "./applications/*",
+    "./libraries/*",
+]
 
 [workspace.package]
 version = "0.66.0"
@@ -8,37 +11,37 @@ edition = "2021"
 rust-version = "1.83.0"
 
 [workspace.dependencies.chain-ops]
-path = "./crates/chain-ops"
+path = "./libraries/chain-ops"
 
 [workspace.dependencies.channel]
-path = "./crates/channel"
+path = "./libraries/channel"
 
 [workspace.dependencies.contract]
-path = "./crates/contract"
+path = "./libraries/contract"
 
 [workspace.dependencies.defer]
-path = "./crates/defer"
+path = "./libraries/defer"
 
 [workspace.dependencies.dex]
-path = "./crates/dex"
+path = "./libraries/dex"
 
 [workspace.dependencies.environment]
-path = "./crates/environment"
+path = "./libraries/environment"
 
 [workspace.dependencies.log]
-path = "./crates/log"
+path = "./libraries/log"
 
 [workspace.dependencies.oracle]
-path = "./crates/oracle"
+path = "./libraries/oracle"
 
 [workspace.dependencies.semver]
-path = "./crates/semver"
+path = "./libraries/semver"
 
 [workspace.dependencies.service]
-path = "./crates/service"
+path = "./libraries/service"
 
 [workspace.dependencies.task_set]
-path = "./crates/task_set"
+path = "./libraries/task_set"
 
 [workspace.dependencies]
 bip32 = "0.5.2"

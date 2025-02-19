@@ -8,23 +8,23 @@
       <sourceFolder url="file://$MODULE_DIR$/services/market-data-feeder/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/test-encoding-compatibility/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/test-encoding-compatibility/tests" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/chain-ops/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/dex/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/services/alarms-dispatcher/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/services/alarms-dispatcher/tests" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/services/market-data-feeder/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/services/market-data-feeder/tests" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/services/swap-route-optimizer/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/contract/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/oracle/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/service/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/channel/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/defer/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/environment/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/log/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/semver/src" isTestSource="false" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/service/tests" isTestSource="true" />
-      <sourceFolder url="file://$MODULE_DIR$/crates/task_set/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/applications/alarms-dispatcher/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/applications/alarms-dispatcher/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/applications/market-data-feeder/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/applications/market-data-feeder/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/applications/swap-route-optimizer/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/chain-ops/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/channel/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/contract/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/defer/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/dex/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/environment/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/log/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/oracle/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/semver/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/service/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/service/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/task_set/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/test-encoding-compatibility/target" />
     </content>
