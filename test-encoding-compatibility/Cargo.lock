@@ -445,7 +445,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "chain-ops"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "bip32",
@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "channel"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "thiserror 2.0.11",
  "tokio",
@@ -485,12 +485,12 @@ checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
 
 [[package]]
 name = "contract"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chain-ops",
  "dex",
- "semver 0.65.0",
+ "semver 0.66.0",
  "serde",
  "serde-json-wasm 1.0.1",
 ]
@@ -890,7 +890,7 @@ checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
 
 [[package]]
 name = "defer"
-version = "0.65.0"
+version = "0.66.0"
 
 [[package]]
 name = "der"
@@ -945,7 +945,7 @@ dependencies = [
 
 [[package]]
 name = "dex"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chain-ops",
@@ -1077,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "environment"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
 ]
@@ -1524,7 +1524,7 @@ checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
 name = "log"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1534,7 +1534,7 @@ dependencies = [
 
 [[package]]
 name = "market-data-feeder"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chain-ops",
@@ -1668,13 +1668,13 @@ checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
 
 [[package]]
 name = "oracle"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chain-ops",
  "contract",
  "dex",
- "semver 0.65.0",
+ "semver 0.66.0",
 ]
 
 [[package]]
@@ -2175,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "semver"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "serde",
@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "service"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "anyhow",
  "chain-ops",
@@ -2287,7 +2287,7 @@ dependencies = [
  "contract",
  "cosmrs",
  "environment",
- "log 0.65.0",
+ "log 0.66.0",
  "task_set",
  "thiserror 2.0.11",
  "tokio",
@@ -2446,7 +2446,7 @@ checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 
 [[package]]
 name = "task_set"
-version = "0.65.0"
+version = "0.66.0"
 dependencies = [
  "tokio",
 ]
