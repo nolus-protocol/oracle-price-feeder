@@ -16,8 +16,9 @@ use cosmrs::{
     AccountId, Amount, Coin, Gas,
 };
 
+use environment::ReadFromVar;
+
 use crate::{
-    env::ReadFromVar,
     key::{Public as PublicKey, Signing as SigningKey},
     node,
 };

@@ -10,8 +10,35 @@ rust-version = "1.83.0"
 [workspace.dependencies.chain-ops]
 path = "./crates/chain-ops"
 
+[workspace.dependencies.channel]
+path = "./crates/channel"
+
+[workspace.dependencies.contract]
+path = "./crates/contract"
+
+[workspace.dependencies.defer]
+path = "./crates/defer"
+
 [workspace.dependencies.dex]
 path = "./crates/dex"
+
+[workspace.dependencies.environment]
+path = "./crates/environment"
+
+[workspace.dependencies.log]
+path = "./crates/log"
+
+[workspace.dependencies.oracle]
+path = "./crates/oracle"
+
+[workspace.dependencies.semver]
+path = "./crates/semver"
+
+[workspace.dependencies.service]
+path = "./crates/service"
+
+[workspace.dependencies.task_set]
+path = "./crates/task_set"
 
 [workspace.dependencies]
 bip32 = "0.5.2"

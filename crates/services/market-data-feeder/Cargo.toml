@@ -6,20 +6,20 @@ rust-version.workspace = true
 
 [dependencies]
 chain-ops.workspace = true
+channel.workspace = true
+contract.workspace = true
+defer.workspace = true
 dex.workspace = true
+environment.workspace = true
+oracle.workspace = true
+service.workspace = true
+task_set.workspace = true
 
 anyhow.workspace = true
 cosmrs.workspace = true
 tokio.workspace = true
-tonic.workspace = true
 tracing.workspace = true
 serde.workspace = true
-serde-json-wasm.workspace = true
-prost.workspace = true
-
-[dev-dependencies]
-fraction.workspace = true
-proptest.workspace = true
 
 [lints]
 workspace = true

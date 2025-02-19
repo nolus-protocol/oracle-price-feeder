@@ -4,21 +4,18 @@ use std::{
 
 use anyhow::{bail, Context as _, Result};
 
-use chain_ops::{
-    channel,
-    contract::admin::{Dex, Protocol, ProtocolContracts},
-    env::ReadFromVar,
-    node,
+use chain_ops::{node, tx::ExecuteTemplate};
+use contract::{ProtocolContracts, ProtocolDex};
+use dex::providers::{astroport::Astroport, osmosis::Osmosis};
+use environment::ReadFromVar as _;
+use service::{
     supervisor::configuration,
     task::{application_defined, TimeBasedExpiration, TxPackage},
-    tx::ExecuteTemplate,
-};
-use dex::{
-    oracle::Oracle,
-    providers::{astroport::Astroport, osmosis::Osmosis, Provider},
 };
 
-use super::{context, Base, Task};
+use crate::oracle::Oracle;
+
+use super::{context, Task, TaskWithProvider};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Id {
@@ -57,22 +54,6 @@ impl Id {
 
         Ok(network)
     }
-
-    const fn dex_name(dex: &Dex) -> &'static str {
-        match dex {
-            Dex::Astroport { .. } => "Astroport",
-            Dex::Osmosis => "Osmosis",
-        }
-    }
-
-    fn construct_provider(dex: Dex) -> Provider {
-        match dex {
-            Dex::Astroport { router_address } => {
-                Provider::Astroport(Astroport::new(router_address))
-            },
-            Dex::Osmosis => Provider::Osmosis(Osmosis::new()),
-        }
-    }
 }
 
 impl application_defined::Id for Id {
@@ -100,14 +81,7 @@ impl application_defined::Id for Id {
             TxPackage<TimeBasedExpiration>,
         >,
     ) -> Result<Task> {
-        let Protocol {
-            network,
-            dex,
-            contracts:
-                ProtocolContracts {
-                    oracle: oracle_address,
-                },
-        } = service_configuration
+        let contract::Protocol { network, dex } = service_configuration
             .admin_contract()
             .clone()
             .protocol(&self.protocol)
@@ -143,36 +117,98 @@ impl application_defined::Id for Id {
             .dex_node_clients
             .insert(network, dex_node_client.clone());
 
-        Oracle::new(
-            node_client.clone().query_wasm(),
-            oracle_address.clone(),
-            task_creation_context.update_currencies_interval,
-        )
-        .await
-        .map(|oracle| Base {
-            protocol: self.protocol.clone(),
-            node_client,
-            oracle,
-            dex_node_client,
-            source: format!(
-                "{}; Protocol={}",
-                Self::dex_name(&dex),
-                self.protocol,
-            )
-            .into(),
-            duration_before_start: task_creation_context.duration_before_start,
-            execute_template: ExecuteTemplate::new(
-                service_configuration.signer().address().into(),
-                oracle_address,
-            ),
-            idle_duration: service_configuration.idle_duration(),
-            timeout_duration: service_configuration.timeout_duration(),
-            hard_gas_limit: task_creation_context.gas_limit,
-            transaction_tx: transaction_tx.clone(),
+        Ok(match dex {
+            ProtocolDex::Astroport {
+                contracts: ProtocolContracts { oracle },
+                router_address,
+            } => {
+                let oracle = oracle::Oracle::new(oracle).await?;
+
+                Task::Astroport(TaskWithProvider {
+                    protocol: self.protocol.clone(),
+                    source: format!("Astroport; Protocol={}", self.protocol)
+                        .into(),
+                    node_client,
+                    dex_node_client,
+                    duration_before_start: task_creation_context
+                        .duration_before_start,
+                    execute_template: ExecuteTemplate::new(
+                        service_configuration.signer().address().into(),
+                        oracle.address().into(),
+                    ),
+                    idle_duration: service_configuration.idle_duration(),
+                    timeout_duration: service_configuration.timeout_duration(),
+                    hard_gas_limit: task_creation_context.gas_limit,
+                    oracle: Oracle::new(
+                        oracle,
+                        task_creation_context.update_currencies_interval,
+                    )
+                    .await?,
+                    provider: Astroport::new(router_address),
+                    transaction_tx: transaction_tx.clone(),
+                })
+            },
+            ProtocolDex::Osmosis {
+                contracts: ProtocolContracts { oracle },
+            } => {
+                let oracle = oracle::Oracle::new(oracle).await?;
+
+                Task::Osmosis(TaskWithProvider {
+                    protocol: self.protocol.clone(),
+                    source: format!("Osmosis; Protocol={}", self.protocol)
+                        .into(),
+                    node_client,
+                    dex_node_client,
+                    duration_before_start: task_creation_context
+                        .duration_before_start,
+                    execute_template: ExecuteTemplate::new(
+                        service_configuration.signer().address().into(),
+                        oracle.address().into(),
+                    ),
+                    idle_duration: service_configuration.idle_duration(),
+                    timeout_duration: service_configuration.timeout_duration(),
+                    hard_gas_limit: task_creation_context.gas_limit,
+                    oracle: Oracle::new(
+                        oracle,
+                        task_creation_context.update_currencies_interval,
+                    )
+                    .await?,
+                    provider: Osmosis::new(),
+                    transaction_tx: transaction_tx.clone(),
+                })
+            },
         })
-        .map(|base| Task {
-            base,
-            provider: Self::construct_provider(dex),
-        })
+
+        // Oracle::new(
+        //     node_client.clone().query_wasm(),
+        //     oracle_address.clone(),
+        //     task_creation_context.update_currencies_interval,
+        // )
+        // .await
+        // .map(|oracle| Base {
+        //     protocol: self.protocol.clone(),
+        //     node_client,
+        //     oracle,
+        //     dex_node_client,
+        //     source: format!(
+        //         "{}; Protocol={}",
+        //         Self::dex_name(&dex),
+        //         self.protocol,
+        //     )
+        //     .into(),
+        //     duration_before_start: task_creation_context.duration_before_start,
+        //     execute_template: ExecuteTemplate::new(
+        //         service_configuration.signer().address().into(),
+        //         oracle_address,
+        //     ),
+        //     idle_duration: service_configuration.idle_duration(),
+        //     timeout_duration: service_configuration.timeout_duration(),
+        //     hard_gas_limit: task_creation_context.gas_limit,
+        //     transaction_tx: transaction_tx.clone(),
+        // })
+        // .map(|base| Task {
+        //     base,
+        //     provider: Self::construct_provider(dex),
+        // })
     }
 }

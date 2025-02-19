@@ -5,8 +5,8 @@ use anyhow::{Context as _, Result};
 use chain_ops::node;
 
 use crate::{
-    oracle::Currencies,
     provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote},
+    Currencies,
 };
 
 use super::{
@@ -47,7 +47,7 @@ impl Astroport {
 }
 
 impl Dex for Astroport {
-    type AssociatedPairData = ();
+    type AssociatedPairData = u64;
 
     type PriceQueryMessage = PriceQueryMessage;
 

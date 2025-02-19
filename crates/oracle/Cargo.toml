@@ -1,0 +1,16 @@
+[package]
+name = "oracle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chain-ops.workspace = true
+contract.workspace = true
+dex.workspace = true
+semver.workspace = true
+
+anyhow.workspace = true
+
+[lints]
+workspace = true

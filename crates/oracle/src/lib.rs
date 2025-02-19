@@ -1,0 +1,61 @@
+use std::future::Future;
+
+use anyhow::Result;
+
+use chain_ops::node::Reconnect;
+use contract::{CheckedContract, UncheckedContract};
+use dex::provider;
+use semver::SemVer;
+
+pub struct Oracle<Dex>
+where
+    Dex: ?Sized,
+{
+    contract: CheckedContract<contract::Oracle<Dex>>,
+    version: SemVer,
+}
+
+impl<Dex> Oracle<Dex>
+where
+    Dex: provider::Dex + ?Sized,
+{
+    pub async fn new(
+        contract: UncheckedContract<contract::Oracle<Dex>>,
+    ) -> Result<Self> {
+        contract
+            .check()
+            .await
+            .map(|(contract, version)| Self { contract, version })
+    }
+
+    #[inline]
+    pub const fn contract(&self) -> &CheckedContract<contract::Oracle<Dex>> {
+        &self.contract
+    }
+
+    #[inline]
+    pub const fn contract_mut(
+        &mut self,
+    ) -> &mut CheckedContract<contract::Oracle<Dex>> {
+        &mut self.contract
+    }
+
+    #[inline]
+    pub fn address(&self) -> &str {
+        self.contract.address()
+    }
+
+    #[inline]
+    pub const fn version(&self) -> SemVer {
+        self.version
+    }
+}
+
+impl<Dex> Reconnect for Oracle<Dex>
+where
+    Dex: ?Sized,
+{
+    fn reconnect(&self) -> impl Future<Output = Result<()>> + Send + '_ {
+        self.contract.reconnect()
+    }
+}

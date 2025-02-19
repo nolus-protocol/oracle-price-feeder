@@ -16,13 +16,10 @@ use tokio::{
     time::sleep,
 };
 
-use chain_ops::{
-    channel::unbounded,
-    contract::{Compatibility, SemVer},
-    node,
-    task::{NoExpiration, Runnable, RunnableState, TxPackage},
-    tx,
-};
+use chain_ops::{node, tx};
+use channel::unbounded;
+use semver::{Compatibility, SemVer};
+use service::task::{NoExpiration, Runnable, RunnableState, TxPackage};
 
 macro_rules! log {
     ($macro:ident![$self:expr]($($body:tt)+)) => {

@@ -23,8 +23,13 @@ version = "0.65.0"
 dependencies = [
  "anyhow",
  "chain-ops",
+ "channel",
+ "contract",
  "cosmrs",
+ "environment",
+ "semver",
  "serde",
+ "service",
  "tokio",
  "tracing",
 ]
@@ -265,18 +270,23 @@ version = "0.65.0"
 dependencies = [
  "anyhow",
  "bip32",
- "chrono",
  "cosmrs",
  "data-encoding",
+ "environment",
  "prost",
  "serde",
  "serde-json-wasm",
- "thiserror 2.0.11",
  "tokio",
  "tonic",
  "tracing",
- "tracing-subscriber",
- "zeroize",
+]
+
+[[package]]
+name = "channel"
+version = "0.65.0"
+dependencies = [
+ "thiserror 2.0.11",
+ "tokio",
 ]
 
 [[package]]
@@ -293,6 +303,18 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "contract"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "dex",
+ "semver",
+ "serde",
+ "serde-json-wasm",
+]
 
 [[package]]
 name = "convert_case"
@@ -394,6 +416,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
 
 [[package]]
+name = "defer"
+version = "0.65.0"
+
+[[package]]
 name = "der"
 version = "0.7.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -423,7 +449,6 @@ dependencies = [
  "prost",
  "serde",
  "serde-json-wasm",
- "tokio",
  "tonic",
  "tracing",
 ]
@@ -512,10 +537,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "environment"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "equivalent"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
+checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "errno"
@@ -702,9 +734,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.4.7"
+version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccae279728d634d083c00f6099cb58f01cc99c145b84b8be2f6c74618d79922e"
+checksum = "5017294ff4bb30944501348f6f8e42e6ad28f42c8bbef7a74029aff064a4e3c2"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -942,20 +974,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
+name = "log"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "market-data-feeder"
 version = "0.65.0"
 dependencies = [
  "anyhow",
  "chain-ops",
+ "channel",
+ "contract",
  "cosmrs",
+ "defer",
  "dex",
- "fraction",
- "proptest",
- "prost",
+ "environment",
+ "oracle",
  "serde",
- "serde-json-wasm",
+ "service",
+ "task_set",
  "tokio",
- "tonic",
  "tracing",
 ]
 
@@ -1106,6 +1150,17 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
+name = "oracle"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "contract",
+ "dex",
+ "semver",
+]
 
 [[package]]
 name = "overload"
@@ -1413,7 +1468,7 @@ version = "0.23.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47796c98c480fce5406ef69d1c76378375492c3b0a0de587be0c1d9feb12f395"
 dependencies = [
- "log",
+ "log 0.4.25",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -1510,6 +1565,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "semver"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "serde",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.217"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1568,6 +1631,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "service"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "channel",
+ "contract",
+ "cosmrs",
+ "environment",
+ "log 0.65.0",
+ "task_set",
+ "thiserror 2.0.11",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -1639,9 +1721,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.13.2"
+version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+checksum = "7fcf8323ef1faaee30a44a340193b1ac6814fd9b7b4e88e9d4519a3e4abe1cfd"
 
 [[package]]
 name = "socket2"
@@ -1706,10 +1788,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 
 [[package]]
+name = "task_set"
+version = "0.65.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "tempfile"
-version = "3.16.0"
+version = "3.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38c246215d7d24f48ae091a2902398798e05d978b24315d6efbc00ede9a8bb91"
+checksum = "22e5a0acb1f3f55f65cc4a866c361b2fb2a0ff6366785ae6fbb5f85df07ba230"
 dependencies = [
  "cfg-if",
  "fastrand",
@@ -2054,9 +2143,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "typenum"
-version = "1.17.0"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
+checksum = "1dccffe3ce07af9386bfd29e80c0ab1a8205a2fc34e4bcd40364df902cfa8f3f"
 
 [[package]]
 name = "unarray"
@@ -2066,9 +2155,9 @@ checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.16"
+version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a210d160f08b701c8721ba1c726c11662f877ea6b7094007e1ca9a1041945034"
+checksum = "00e2473a93778eb0bad35909dff6a10d28e63f792f16ed15e404fca9d5eeedbe"
 
 [[package]]
 name = "unicode-segmentation"

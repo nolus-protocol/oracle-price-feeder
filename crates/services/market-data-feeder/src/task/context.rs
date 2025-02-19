@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, time::Duration};
 use anyhow::{Context as _, Result};
 use cosmrs::Gas;
 
-use chain_ops::{env::ReadFromVar, node};
+use chain_ops::node;
+use environment::ReadFromVar as _;
 
 pub struct ApplicationDefined {
     pub(super) dex_node_clients: BTreeMap<String, node::Client>,

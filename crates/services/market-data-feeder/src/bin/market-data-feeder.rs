@@ -2,7 +2,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-use chain_ops::run_app;
+use service::run_app;
 
 use market_data_feeder::task::{ApplicationDefinedContext, Id};
 

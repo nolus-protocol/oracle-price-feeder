@@ -2,9 +2,8 @@ use std::{borrow::Cow, sync::Arc};
 
 use anyhow::Result;
 
-use chain_ops::{
-    channel,
-    contract::admin::{BaseProtocol, ProtocolContracts},
+use contract::{GeneralizedProtocol, GeneralizedProtocolContracts, Platform};
+use service::{
     supervisor::configuration,
     task::{
         application_defined, NoExpiration, Runnable, RunnableState, TxPackage,
@@ -40,31 +39,27 @@ impl Id {
             TxPackage<<Task as application_defined::Task>::TxExpiration>,
         >,
     ) -> Result<Task> {
-        service_configuration
+        let Platform { time_alarms } = service_configuration
             .admin_contract()
             .clone()
             .platform()
-            .await
-            .and_then(|platform| {
-                alarms_generator::AlarmsGenerator::new_time_alarms(
-                    alarms_generator::Configuration {
-                        node_client: service_configuration
-                            .node_client()
-                            .clone(),
-                        transaction_tx: transaction_tx.clone(),
-                        sender: service_configuration.signer().address().into(),
-                        address: platform.time_alarms.into(),
-                        alarms_per_message: task_creation_context
-                            .time_alarms_per_message,
-                        gas_per_alarm: task_creation_context.gas_per_time_alarm,
-                        idle_duration: service_configuration.idle_duration(),
-                        timeout_duration: service_configuration
-                            .timeout_duration(),
-                    },
-                    TimeAlarms {},
-                )
-            })
-            .map(Task::TimeAlarms)
+            .await?;
+
+        alarms_generator::AlarmsGenerator::new_time_alarms(
+            alarms_generator::Configuration {
+                node_client: service_configuration.node_client().clone(),
+                transaction_tx: transaction_tx.clone(),
+                sender: service_configuration.signer().address().into(),
+                address: time_alarms.check().await?.0.address().into(),
+                alarms_per_message: task_creation_context
+                    .time_alarms_per_message,
+                gas_per_alarm: task_creation_context.gas_per_time_alarm,
+                idle_duration: service_configuration.idle_duration(),
+                timeout_duration: service_configuration.timeout_duration(),
+            },
+            TimeAlarms {},
+        )
+        .map(Task::TimeAlarms)
     }
 
     async fn create_price_alarms_task(
@@ -73,40 +68,30 @@ impl Id {
         transaction_tx: &channel::unbounded::Sender<TxPackage<NoExpiration>>,
         protocol_name: Arc<str>,
     ) -> Result<Task> {
-        service_configuration
+        let GeneralizedProtocol {
+            contracts: GeneralizedProtocolContracts { oracle, .. },
+            network: _,
+        } = service_configuration
             .admin_contract()
             .clone()
-            .base_protocol(&protocol_name)
-            .await
-            .and_then(
-                |BaseProtocol {
-                     contracts: ProtocolContracts { oracle, .. },
-                 }| {
-                    alarms_generator::AlarmsGenerator::new_price_alarms(
-                        alarms_generator::Configuration {
-                            node_client: service_configuration
-                                .node_client()
-                                .clone(),
-                            transaction_tx: transaction_tx.clone(),
-                            sender: service_configuration
-                                .signer()
-                                .address()
-                                .into(),
-                            address: oracle.into(),
-                            alarms_per_message: task_creation_context
-                                .price_alarms_per_message,
-                            gas_per_alarm: task_creation_context
-                                .gas_per_price_alarm,
-                            idle_duration: service_configuration
-                                .idle_duration(),
-                            timeout_duration: service_configuration
-                                .timeout_duration(),
-                        },
-                        PriceAlarms::new(protocol_name),
-                    )
-                },
-            )
-            .map(Task::PriceAlarms)
+            .generalized_protocol(&protocol_name)
+            .await?;
+
+        alarms_generator::AlarmsGenerator::new_price_alarms(
+            alarms_generator::Configuration {
+                node_client: service_configuration.node_client().clone(),
+                transaction_tx: transaction_tx.clone(),
+                sender: service_configuration.signer().address().into(),
+                address: oracle.check().await?.0.address().into(),
+                alarms_per_message: task_creation_context
+                    .price_alarms_per_message,
+                gas_per_alarm: task_creation_context.gas_per_price_alarm,
+                idle_duration: service_configuration.idle_duration(),
+                timeout_duration: service_configuration.timeout_duration(),
+            },
+            PriceAlarms::new(protocol_name),
+        )
+        .map(Task::PriceAlarms)
     }
 }
 

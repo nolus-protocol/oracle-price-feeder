@@ -1,6 +1,5 @@
 use std::{
-    borrow::Borrow, collections::BTreeMap, convert::identity, future::Future,
-    sync::Arc,
+    collections::BTreeMap, convert::identity, future::Future, sync::Arc,
 };
 
 use anyhow::{bail, Context as _, Result};
@@ -16,18 +15,13 @@ use tokio::{
     time::{interval, sleep, timeout, Instant, MissedTickBehavior},
 };
 
-use chain_ops::{
-    defer::Defer,
-    task::{RunnableState, TimeBasedExpiration, TxPackage},
-    task_set::TaskSet,
-    tx,
-};
-use dex::{
-    oracle::Currencies,
-    provider::{self, Amount, Base, CurrencyPair, Decimal, Quote},
-};
+use chain_ops::tx;
+use defer::Defer;
+use dex::provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote};
+use service::task::{RunnableState, TimeBasedExpiration, TxPackage};
+use task_set::TaskSet;
 
-use crate::task;
+use super::Contract;
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -41,44 +35,25 @@ macro_rules! log {
 macro_rules! log_with_context {
     ($macro:ident![$protocol:expr, $provider:ty]($($body:tt)+)) => {
         log!($macro!(
-            provider = %<$provider>::PROVIDER_NAME,
+            provider = %<<$provider>::Dex as Dex>::PROVIDER_NAME,
             protocol = %$protocol,
             $($body)+
         ))
     };
 }
 
-pub(crate) struct Provider<P>
+impl<P> super::TaskWithProvider<P>
 where
-    P: provider::Dex,
+    P: Contract,
 {
-    base: task::Base,
-    provider: P,
-}
-
-impl<P> Provider<P>
-where
-    P: provider::Dex,
-{
-    pub const fn new(base: task::Base, provider: P) -> Self {
-        Self { base, provider }
-    }
-
     pub async fn run(mut self, state: RunnableState) -> Result<()> {
-        let mut query_messages = self.provider.price_query_messages(
-            self.base.oracle.currency_pairs().iter().map(
-                |((base, quote), associated_data)| {
-                    (
-                        CurrencyPair {
-                            base: base.clone(),
-                            quote: quote.clone(),
-                        },
-                        associated_data,
-                    )
-                },
-            ),
-            self.base.oracle.currencies(),
-        )?;
+        let mut query_messages =
+            self.provider.price_query_messages_with_associated_data(
+                self.oracle.currency_pairs().iter().map(
+                    |(pair, associated_data)| (pair.clone(), associated_data),
+                ),
+                self.oracle.currencies(),
+            )?;
 
         let mut queries_task_set = TaskSet::new();
 
@@ -102,7 +77,9 @@ where
         let mut fetch_delivered_set =
             Defer::new(JoinSet::new(), JoinSet::abort_all);
 
-        let mut next_feed_interval = interval(self.base.idle_duration);
+        let fetch_delivered_set = fetch_delivered_set.as_mut();
+
+        let mut next_feed_interval = interval(self.idle_duration);
 
         next_feed_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -151,7 +128,7 @@ where
                     let new_block_height = self.get_dex_block_height().await?;
 
                     if dex_block_height >= new_block_height {
-                        log_with_context!(error![self.base.protocol, P](
+                        log_with_context!(error![self.protocol, P](
                             last_recorded = dex_block_height,
                             latest_reported = new_block_height,
                             "Dex node's latest block height didn't increment!",
@@ -176,7 +153,7 @@ where
 
     async fn get_dex_block_height(&self) -> Result<u64> {
         let mut query_tendermint =
-            self.base.dex_node_client.clone().query_tendermint();
+            self.dex_node_client.clone().query_tendermint();
 
         if query_tendermint.syncing().await? {
             bail!("Dex node reported in with syncing status!");
@@ -211,7 +188,7 @@ where
 
         self.log_prices_and_errors(prices, fetch_errors);
 
-        sleep(self.base.duration_before_start).await;
+        sleep(self.duration_before_start).await;
 
         Ok(())
     }
@@ -233,7 +210,7 @@ where
     }
 
     fn log_prices(&self, prices: Vec<QueryTaskResponse>) {
-        log_with_context!(info![self.base.protocol, P]("Collected prices:"));
+        log_with_context!(info![self.protocol, P]("Collected prices:"));
 
         for (CurrencyPair { base, quote }, (base_amount, quote_amount)) in
             prices
@@ -261,7 +238,7 @@ where
     }
 
     fn log_errors(&self, fetch_errors: Vec<(CurrencyPair, anyhow::Error)>) {
-        log_with_context!(error![self.base.protocol, P](
+        log_with_context!(error![self.protocol, P](
             "Errors which occurred while collecting prices:"
         ));
 
@@ -348,7 +325,7 @@ where
                 });
             },
             Err(error) => {
-                log_with_context!(error![self.base.protocol, P](
+                log_with_context!(error![self.protocol, P](
                     ?error,
                     "Price fetching failed!",
                 ));
@@ -360,13 +337,13 @@ where
         &self,
         feedback_response_rx: oneshot::Receiver<TxResponse>,
     ) -> impl Future<Output = Result<Option<TxResponse>>> + Send + 'static {
-        let mut query_tx = self.base.node_client.clone().query_tx();
+        let mut query_tx = self.node_client.clone().query_tx();
 
-        let source = self.base.source.clone();
+        let source = self.source.clone();
 
-        let timeout_duration = self.base.timeout_duration;
+        let timeout_duration = self.timeout_duration;
 
-        let protocol = self.base.protocol.clone();
+        let protocol = self.protocol.clone();
 
         async move {
             let response = feedback_response_rx.await?;
@@ -396,8 +373,7 @@ where
         price_collection_buffer: &Vec<Price>,
         fallback_gas: Gas,
     ) -> Result<oneshot::Receiver<TxResponse>> {
-        self.base
-            .execute_template
+        self.execute_template
             .apply(&ExecuteMsg::FeedPrices {
                 prices: price_collection_buffer,
             })
@@ -405,16 +381,15 @@ where
             .and_then(|tx_body| {
                 let (feedback_sender, feedback_receiver) = oneshot::channel();
 
-                self.base
-                    .transaction_tx
+                self.transaction_tx
                     .send(TxPackage {
                         tx_body,
-                        source: self.base.source.clone(),
-                        hard_gas_limit: self.base.hard_gas_limit,
+                        source: self.source.clone(),
+                        hard_gas_limit: self.hard_gas_limit,
                         fallback_gas,
                         feedback_sender,
                         expiration: TimeBasedExpiration::new(
-                            Instant::now() + self.base.timeout_duration,
+                            Instant::now() + self.timeout_duration,
                         ),
                     })
                     .map(|()| feedback_receiver)
@@ -432,19 +407,19 @@ where
                 let code: TxCode = response.code.into();
 
                 if code.is_ok() {
-                    log_with_context!(info![self.base.protocol, P](
+                    log_with_context!(info![self.protocol, P](
                         hash = %response.txhash,
                         height = %response.height,
                         "Transaction included in block successfully.",
                     ));
                 } else if code.value() == tx::OUT_OF_GAS_ERROR_CODE {
-                    log_with_context!(error![self.base.protocol, P](
+                    log_with_context!(error![self.protocol, P](
                         hash = %response.txhash,
                         log = ?response.raw_log,
                         "Transaction failed, likely because it ran out of gas.",
                     ));
                 } else {
-                    log_with_context!(error![self.base.protocol, P](
+                    log_with_context!(error![self.protocol, P](
                         hash = %response.txhash,
                         log = ?response.raw_log,
                         "Transaction failed because of unknown reason!",
@@ -458,25 +433,25 @@ where
                     response.gas_used.unsigned_abs(),
                 )?;
 
-                if fallback_gas <= self.base.hard_gas_limit {
-                    log_with_context!(info![self.base.protocol, P](
+                if fallback_gas <= self.hard_gas_limit {
+                    log_with_context!(info![self.protocol, P](
                         %fallback_gas,
                         "Fallback gas adjusted.",
                     ));
                 } else {
-                    log_with_context!(warn![self.base.protocol, P](
+                    log_with_context!(warn![self.protocol, P](
                         %fallback_gas,
-                        limit = %self.base.hard_gas_limit,
+                        limit = %self.hard_gas_limit,
                         "Fallback gas exceeds gas limit per alarm! \
                         Clamping down!",
                     ));
 
-                    fallback_gas = self.base.hard_gas_limit;
+                    fallback_gas = self.hard_gas_limit;
                 }
             },
             Ok(None) => {},
             Err(error) => {
-                log_with_context!(error![self.base.protocol, P](
+                log_with_context!(error![self.protocol, P](
                     ?error,
                     "Fetching delivered transaction failed!",
                 ));
@@ -489,14 +464,13 @@ where
     async fn spawn_query_tasks(
         &mut self,
         query_messages: &mut BTreeMap<
-            CurrencyPair<String>,
-            P::PriceQueryMessage,
+            CurrencyPair,
+            <P::Dex as Dex>::PriceQueryMessage,
         >,
         task_set: &mut QueryTasksSet,
         replacement_buffer: &mut Vec<Price>,
     ) -> Result<()> {
         if self
-            .base
             .oracle
             .update_currencies_and_pairs()
             .await
@@ -504,18 +478,12 @@ where
         {
             *query_messages =
                 self.provider.price_query_messages_with_associated_data(
-                    self.base.oracle.currency_pairs().iter().map(
-                        |((base, quote), associated_data)| {
-                            (
-                                CurrencyPair {
-                                    base: base.clone(),
-                                    quote: quote.clone(),
-                                },
-                                associated_data,
-                            )
+                    self.oracle.currency_pairs().iter().map(
+                        |(currency_pair, associated_data)| {
+                            (currency_pair.clone(), associated_data)
                         },
                     ),
-                    self.base.oracle.currencies(),
+                    self.oracle.currencies(),
                 )?;
 
             let additional_capacity = query_messages
@@ -535,13 +503,13 @@ where
     pub(crate) fn spawn_query_task<'r>(
         &'r self,
         task_set: &'r mut QueryTasksSet,
-    ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r {
-        let duration = self.base.idle_duration;
+    ) -> impl FnMut((&CurrencyPair, &<P::Dex as Dex>::PriceQueryMessage)) + 'r
+    {
+        let duration = self.idle_duration;
 
         move |(currency_pair, message)| {
-            let price_query = self
-                .provider
-                .price_query(&self.base.dex_node_client, message);
+            let price_query =
+                self.provider.price_query(&self.dex_node_client, message);
 
             task_set.add_handle(
                 currency_pair.clone(),
@@ -588,27 +556,21 @@ struct Coin {
 
 #[test]
 fn test_pretty_price_formatting() {
-    use chain_ops::node;
+    use std::borrow::Borrow;
 
-    use dex::oracle::Oracle;
+    use chain_ops::node;
+    use dex::{Currencies, CurrencyPairs};
 
     enum Never {}
 
     struct Dummy;
 
-    impl dex::provider::Dex for Dummy {
+    impl Dex for Dummy {
         type AssociatedPairData = ();
 
         type PriceQueryMessage = Never;
 
         const PROVIDER_NAME: &'static str = "Dummy";
-
-        fn price_query_messages(
-            &self,
-            _: &Oracle,
-        ) -> Result<BTreeMap<CurrencyPair, Self::PriceQueryMessage>> {
-            Ok(BTreeMap::new())
-        }
 
         fn price_query_messages_with_associated_data<
             Pairs,
@@ -616,8 +578,8 @@ fn test_pretty_price_formatting() {
             AssociatedPairData,
         >(
             &self,
-            pairs: Pairs,
-            currencies: &Currencies,
+            _pairs: Pairs,
+            _currencies: &Currencies,
         ) -> Result<BTreeMap<CurrencyPair<Ticker>, Self::PriceQueryMessage>>
         where
             Pairs:
@@ -625,7 +587,7 @@ fn test_pretty_price_formatting() {
             Ticker: Borrow<str> + Ord,
             AssociatedPairData: Borrow<Self::AssociatedPairData>,
         {
-            todo!()
+            Ok(BTreeMap::new())
         }
 
         #[allow(clippy::manual_async_fn)]
@@ -642,12 +604,24 @@ fn test_pretty_price_formatting() {
         }
     }
 
+    impl Contract for Dummy {
+        type Dex = Self;
+
+        fn fetch_currencies(&mut self) -> Result<()> {
+            todo!()
+        }
+
+        fn fetch_currency_pairs(&mut self) -> Result<CurrencyPairs<Self::Dex>> {
+            todo!()
+        }
+    }
+
     let base = Amount::new(Decimal::new("100000000000000000".into(), 17));
 
     let quote = Amount::new(Decimal::new("1811002280600015".into(), 17));
 
     assert_eq!(
-        Provider::<Dummy>::pretty_formatted_price(
+        super::TaskWithProvider::<Dummy>::pretty_formatted_price(
             "NLS",
             &base,
             "USDC_NOBLE",
@@ -661,7 +635,7 @@ fn test_pretty_price_formatting() {
     let quote = Amount::new(Decimal::new("67247624153".into(), 7));
 
     assert_eq!(
-        Provider::<Dummy>::pretty_formatted_price(
+        super::TaskWithProvider::<Dummy>::pretty_formatted_price(
             "WETH", &base, "OSMO", &quote,
         ),
         "1.0 WETH ~ 6724.7624153 OSMO"

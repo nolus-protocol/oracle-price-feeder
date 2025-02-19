@@ -4,13 +4,14 @@ use std::{
 };
 
 use anyhow::Result;
+use serde::Deserialize;
 
 use chain_ops::node;
 
-use crate::oracle::Currencies;
+use crate::Currencies;
 
 pub trait Dex: Send + Sized {
-    type AssociatedPairData;
+    type AssociatedPairData: for<'r> Deserialize<'r> + Send + Sync + 'static;
 
     type PriceQueryMessage: Send + 'static;
 

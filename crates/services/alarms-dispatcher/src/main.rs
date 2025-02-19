@@ -1,7 +1,8 @@
 use anyhow::{Context as _, Result};
 use cosmrs::Gas;
 
-use chain_ops::{env::ReadFromVar as _, run_app};
+use environment::ReadFromVar as _;
+use service::run_app;
 
 mod task;
 

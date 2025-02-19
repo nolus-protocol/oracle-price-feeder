@@ -6,8 +6,8 @@ use tracing::debug;
 use chain_ops::node;
 
 use crate::{
-    oracle::{Currencies, PoolId},
     provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote},
+    Currencies,
 };
 
 use super::{Osmosis, SpotPriceRequest, SpotPriceResponse};
@@ -104,7 +104,7 @@ impl Osmosis {
 }
 
 impl Dex for Osmosis {
-    type AssociatedPairData = PoolId;
+    type AssociatedPairData = u64;
 
     type PriceQueryMessage = QueryMessage;
 

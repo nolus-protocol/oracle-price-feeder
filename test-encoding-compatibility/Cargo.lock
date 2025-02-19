@@ -449,18 +449,23 @@ version = "0.65.0"
 dependencies = [
  "anyhow",
  "bip32",
- "chrono",
  "cosmrs",
  "data-encoding",
+ "environment",
  "prost 0.13.5",
  "serde",
  "serde-json-wasm 1.0.1",
- "thiserror 2.0.11",
  "tokio",
  "tonic",
  "tracing",
- "tracing-subscriber",
- "zeroize",
+]
+
+[[package]]
+name = "channel"
+version = "0.65.0"
+dependencies = [
+ "thiserror 2.0.11",
+ "tokio",
 ]
 
 [[package]]
@@ -477,6 +482,18 @@ name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2459377285ad874054d797f3ccebf984978aa39129f6eafde5cdc8315b612f8"
+
+[[package]]
+name = "contract"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "dex",
+ "semver 0.65.0",
+ "serde",
+ "serde-json-wasm 1.0.1",
+]
 
 [[package]]
 name = "cosmos-sdk-proto"
@@ -832,7 +849,7 @@ dependencies = [
  "cosmwasm-std 1.5.10",
  "cw2",
  "schemars",
- "semver",
+ "semver 1.0.25",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -847,7 +864,7 @@ dependencies = [
  "cosmwasm-std 1.5.10",
  "cw-storage-plus 1.2.0",
  "schemars",
- "semver",
+ "semver 1.0.25",
  "serde",
  "thiserror 1.0.69",
 ]
@@ -870,6 +887,10 @@ name = "data-encoding"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "575f75dfd25738df5b91b8e43e14d44bda14637a58fae779fd2b064f8bf3e010"
+
+[[package]]
+name = "defer"
+version = "0.65.0"
 
 [[package]]
 name = "der"
@@ -931,7 +952,6 @@ dependencies = [
  "prost 0.13.5",
  "serde",
  "serde-json-wasm 1.0.1",
- "tokio",
  "tonic",
  "tracing",
 ]
@@ -1053,6 +1073,13 @@ dependencies = [
  "sec1",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "environment"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
 ]
 
 [[package]]
@@ -1496,18 +1523,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
+name = "log"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "market-data-feeder"
 version = "0.65.0"
 dependencies = [
  "anyhow",
  "chain-ops",
+ "channel",
+ "contract",
  "cosmrs",
+ "defer",
  "dex",
- "prost 0.13.5",
+ "environment",
+ "oracle",
  "serde",
- "serde-json-wasm 1.0.1",
+ "service",
+ "task_set",
  "tokio",
- "tonic",
  "tracing",
 ]
 
@@ -1624,6 +1665,17 @@ name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+
+[[package]]
+name = "oracle"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "contract",
+ "dex",
+ "semver 0.65.0",
+]
 
 [[package]]
 name = "osmosis-std"
@@ -2003,7 +2055,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
- "semver",
+ "semver 1.0.25",
 ]
 
 [[package]]
@@ -2012,7 +2064,7 @@ version = "0.23.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47796c98c480fce5406ef69d1c76378375492c3b0a0de587be0c1d9feb12f395"
 dependencies = [
- "log",
+ "log 0.4.25",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -2123,6 +2175,14 @@ dependencies = [
 
 [[package]]
 name = "semver"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "serde",
+]
+
+[[package]]
+name = "semver"
 version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f79dfe2d285b0488816f30e700a7438c5a73d816b5b7d3ac72fbc48b0d185e03"
@@ -2215,6 +2275,25 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.98",
+]
+
+[[package]]
+name = "service"
+version = "0.65.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "channel",
+ "contract",
+ "cosmrs",
+ "environment",
+ "log 0.65.0",
+ "task_set",
+ "thiserror 2.0.11",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "zeroize",
 ]
 
 [[package]]
@@ -2364,6 +2443,13 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
+
+[[package]]
+name = "task_set"
+version = "0.65.0"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "tendermint"
