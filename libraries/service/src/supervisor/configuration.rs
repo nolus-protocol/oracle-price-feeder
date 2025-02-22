@@ -39,14 +39,14 @@ where
 
 #[must_use]
 pub struct Service {
-    node_client: node::Client,
-    signer: Signer,
-    admin_contract: CheckedContract<Admin>,
-    idle_duration: Duration,
-    timeout_duration: Duration,
-    balance_reporter_idle_duration: Duration,
-    broadcast_delay_duration: Duration,
-    broadcast_retry_delay_duration: Duration,
+    pub node_client: node::Client,
+    pub signer: Signer,
+    pub admin_contract: CheckedContract<Admin>,
+    pub idle_duration: Duration,
+    pub timeout_duration: Duration,
+    pub balance_reporter_idle_duration: Duration,
+    pub broadcast_delay_duration: Duration,
+    pub broadcast_retry_delay_duration: Duration,
 }
 
 impl Service {

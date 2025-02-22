@@ -27,7 +27,9 @@ where
             .await
             .map(|(contract, version)| Self { contract, version })
     }
+}
 
+impl<Dex> Oracle<Dex> {
     #[inline]
     pub const fn contract(&self) -> &CheckedContract<contract::Oracle<Dex>> {
         &self.contract

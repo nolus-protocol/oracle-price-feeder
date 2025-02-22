@@ -11,11 +11,13 @@ use chain_ops::node;
 use crate::Currencies;
 
 pub trait Dex: Send + Sized {
+    type ProviderTypeDescriptor;
+
     type AssociatedPairData: for<'r> Deserialize<'r> + Send + Sync + 'static;
 
     type PriceQueryMessage: Send + 'static;
 
-    const PROVIDER_NAME: &'static str;
+    const PROVIDER_TYPE: Self::ProviderTypeDescriptor;
 
     #[inline]
     fn price_query_messages<Pairs, Ticker>(

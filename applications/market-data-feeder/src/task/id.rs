@@ -5,8 +5,7 @@ use std::{
 use anyhow::{bail, Context as _, Result};
 
 use chain_ops::{node, tx::ExecuteTemplate};
-use contract::{ProtocolContracts, ProtocolDex};
-use dex::providers::{astroport::Astroport, osmosis::Osmosis};
+use contract::{ProtocolDex, ProtocolProviderAndContracts};
 use environment::ReadFromVar as _;
 use service::{
     supervisor::configuration,
@@ -81,7 +80,10 @@ impl application_defined::Id for Id {
             TxPackage<TimeBasedExpiration>,
         >,
     ) -> Result<Task> {
-        let contract::Protocol { network, dex } = service_configuration
+        let contract::Protocol {
+            network,
+            provider_and_contracts: dex,
+        } = service_configuration
             .admin_contract()
             .clone()
             .protocol(&self.protocol)
@@ -93,7 +95,7 @@ impl application_defined::Id for Id {
                 )
             })?;
 
-        let node_client = service_configuration.node_client().clone();
+        let query_tx = service_configuration.node_client().clone().query_tx();
 
         let dex_node_client = {
             let entry = task_creation_context
@@ -118,17 +120,17 @@ impl application_defined::Id for Id {
             .insert(network, dex_node_client.clone());
 
         Ok(match dex {
-            ProtocolDex::Astroport {
-                contracts: ProtocolContracts { oracle },
-                router_address,
-            } => {
+            ProtocolDex::Astroport(ProtocolProviderAndContracts {
+                provider,
+                oracle,
+            }) => {
                 let oracle = oracle::Oracle::new(oracle).await?;
 
                 Task::Astroport(TaskWithProvider {
                     protocol: self.protocol.clone(),
                     source: format!("Astroport; Protocol={}", self.protocol)
                         .into(),
-                    node_client,
+                    query_tx,
                     dex_node_client,
                     duration_before_start: task_creation_context
                         .duration_before_start,
@@ -144,20 +146,21 @@ impl application_defined::Id for Id {
                         task_creation_context.update_currencies_interval,
                     )
                     .await?,
-                    provider: Astroport::new(router_address),
+                    provider,
                     transaction_tx: transaction_tx.clone(),
                 })
             },
-            ProtocolDex::Osmosis {
-                contracts: ProtocolContracts { oracle },
-            } => {
+            ProtocolDex::Osmosis(ProtocolProviderAndContracts {
+                provider,
+                oracle,
+            }) => {
                 let oracle = oracle::Oracle::new(oracle).await?;
 
                 Task::Osmosis(TaskWithProvider {
                     protocol: self.protocol.clone(),
                     source: format!("Osmosis; Protocol={}", self.protocol)
                         .into(),
-                    node_client,
+                    query_tx,
                     dex_node_client,
                     duration_before_start: task_creation_context
                         .duration_before_start,
@@ -173,7 +176,7 @@ impl application_defined::Id for Id {
                         task_creation_context.update_currencies_interval,
                     )
                     .await?,
-                    provider: Osmosis::new(),
+                    provider,
                     transaction_tx: transaction_tx.clone(),
                 })
             },

@@ -1,5 +1,6 @@
 use std::{
-    collections::BTreeMap, convert::identity, future::Future, sync::Arc,
+    collections::BTreeMap, convert::identity, fmt::Display, future::Future,
+    sync::Arc,
 };
 
 use anyhow::{bail, Context as _, Result};
@@ -21,8 +22,6 @@ use dex::provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote};
 use service::task::{RunnableState, TimeBasedExpiration, TxPackage};
 use task_set::TaskSet;
 
-use super::Contract;
-
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
         ::tracing::$macro!(
@@ -35,7 +34,7 @@ macro_rules! log {
 macro_rules! log_with_context {
     ($macro:ident![$protocol:expr, $provider:ty]($($body:tt)+)) => {
         log!($macro!(
-            provider = %<<$provider>::Dex as Dex>::PROVIDER_NAME,
+            provider = %<$provider>::PROVIDER_TYPE,
             protocol = %$protocol,
             $($body)+
         ))
@@ -44,7 +43,7 @@ macro_rules! log_with_context {
 
 impl<P> super::TaskWithProvider<P>
 where
-    P: Contract,
+    P: Dex<ProviderTypeDescriptor: Display>,
 {
     pub async fn run(mut self, state: RunnableState) -> Result<()> {
         let mut query_messages =
@@ -337,7 +336,7 @@ where
         &self,
         feedback_response_rx: oneshot::Receiver<TxResponse>,
     ) -> impl Future<Output = Result<Option<TxResponse>>> + Send + 'static {
-        let mut query_tx = self.node_client.clone().query_tx();
+        let mut query_tx = self.query_tx.clone();
 
         let source = self.source.clone();
 
@@ -465,7 +464,7 @@ where
         &mut self,
         query_messages: &mut BTreeMap<
             CurrencyPair,
-            <P::Dex as Dex>::PriceQueryMessage,
+            P::PriceQueryMessage,
         >,
         task_set: &mut QueryTasksSet,
         replacement_buffer: &mut Vec<Price>,
@@ -503,7 +502,7 @@ where
     pub(crate) fn spawn_query_task<'r>(
         &'r self,
         task_set: &'r mut QueryTasksSet,
-    ) -> impl FnMut((&CurrencyPair, &<P::Dex as Dex>::PriceQueryMessage)) + 'r
+    ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r
     {
         let duration = self.idle_duration;
 
@@ -566,11 +565,13 @@ fn test_pretty_price_formatting() {
     struct Dummy;
 
     impl Dex for Dummy {
+        type ProviderTypeDescriptor = &'static str;
+
         type AssociatedPairData = ();
 
         type PriceQueryMessage = Never;
 
-        const PROVIDER_NAME: &'static str = "Dummy";
+        const PROVIDER_TYPE: &'static str = "Dummy";
 
         fn price_query_messages_with_associated_data<
             Pairs,
@@ -601,18 +602,6 @@ fn test_pretty_price_formatting() {
             async move {
                 unreachable!();
             }
-        }
-    }
-
-    impl Contract for Dummy {
-        type Dex = Self;
-
-        fn fetch_currencies(&mut self) -> Result<()> {
-            todo!()
-        }
-
-        fn fetch_currency_pairs(&mut self) -> Result<CurrencyPairs<Self::Dex>> {
-            todo!()
         }
     }
 

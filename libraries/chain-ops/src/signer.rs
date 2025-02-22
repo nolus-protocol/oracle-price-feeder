@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context as _, Result};
+pub use cosmrs::Gas;
 use cosmrs::{
     auth::BaseAccount,
     tendermint::chain::Id as ChainId,
@@ -13,7 +14,7 @@ use cosmrs::{
         AccountNumber, Body as TxBody, Fee, Raw, SequenceNumber, SignDoc,
         SignerInfo,
     },
-    AccountId, Amount, Coin, Gas,
+    AccountId, Amount, Coin,
 };
 
 use environment::ReadFromVar;

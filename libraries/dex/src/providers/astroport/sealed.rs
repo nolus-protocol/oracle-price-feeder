@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-    AssetInfo, Astroport, QueryMsg, SimulateSwapOperationsResponse,
-    SwapOperation,
+    super::ProviderType, AssetInfo, Astroport, QueryMsg,
+    SimulateSwapOperationsResponse, SwapOperation,
 };
 
 impl Astroport {
@@ -47,11 +47,13 @@ impl Astroport {
 }
 
 impl Dex for Astroport {
+    type ProviderTypeDescriptor = ProviderType;
+
     type AssociatedPairData = u64;
 
     type PriceQueryMessage = PriceQueryMessage;
 
-    const PROVIDER_NAME: &'static str = "Astroport";
+    const PROVIDER_TYPE: ProviderType = ProviderType::Astroport;
 
     fn price_query_messages_with_associated_data<
         Pairs,

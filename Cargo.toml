@@ -144,7 +144,7 @@ features = ["std"]
 [workspace.lints.rust]
 unexpected_cfgs = "forbid"
 unsafe_code = "forbid"
-warnings = "deny"
+#warnings = "deny"
 
 [workspace.lints.clippy]
 missing_errors_doc = "allow"

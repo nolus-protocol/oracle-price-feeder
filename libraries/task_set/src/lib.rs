@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -6,18 +7,12 @@ use std::{
 
 use tokio::task::{JoinError, JoinHandle};
 
-pub struct TaskSet<T, U>
-where
-    T: Unpin,
-{
+pub struct TaskSet<T, U> {
     tasks: Vec<(T, JoinHandle<U>)>,
     next_to_poll: usize,
 }
 
-impl<T, U> TaskSet<T, U>
-where
-    T: Unpin,
-{
+impl<T, U> TaskSet<T, U> {
     #[inline]
     #[must_use]
     pub const fn new() -> Self {
@@ -37,10 +32,17 @@ where
         self.tasks.push((data, handle));
     }
 
-    pub fn join_next(&mut self) -> JoinNext<'_, T, U> {
-        JoinNext {
-            tasks: &mut self.tasks,
-            next_to_poll: &mut self.next_to_poll,
+    pub fn abort<Q>(&mut self, data: &Q)
+    where
+        T: Borrow<Q>,
+        Q: Eq + ?Sized,
+    {
+        if let Some((_, handle)) = self
+            .tasks
+            .iter()
+            .find(|(task_data, _)| task_data.borrow() == data)
+        {
+            handle.abort();
         }
     }
 
@@ -52,19 +54,26 @@ where
     }
 }
 
-impl<T, U> Default for TaskSet<T, U>
+impl<T, U> TaskSet<T, U>
 where
     T: Unpin,
 {
+    pub fn join_next(&mut self) -> JoinNext<'_, T, U> {
+        JoinNext {
+            tasks: &mut self.tasks,
+            next_to_poll: &mut self.next_to_poll,
+        }
+    }
+}
+
+impl<T, U> Default for TaskSet<T, U> {
+    #[inline]
     fn default() -> Self {
         const { Self::new() }
     }
 }
 
-impl<T, U> Drop for TaskSet<T, U>
-where
-    T: Unpin,
-{
+impl<T, U> Drop for TaskSet<T, U> {
     fn drop(&mut self) {
         self.abort_all();
     }

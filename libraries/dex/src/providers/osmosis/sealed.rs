@@ -10,7 +10,9 @@ use crate::{
     Currencies,
 };
 
-use super::{Osmosis, SpotPriceRequest, SpotPriceResponse};
+use super::{
+    super::ProviderType, Osmosis, SpotPriceRequest, SpotPriceResponse,
+};
 
 impl Osmosis {
     pub(super) fn normalized_price(
@@ -104,11 +106,13 @@ impl Osmosis {
 }
 
 impl Dex for Osmosis {
+    type ProviderTypeDescriptor = ProviderType;
+
     type AssociatedPairData = u64;
 
     type PriceQueryMessage = QueryMessage;
 
-    const PROVIDER_NAME: &'static str = "Osmosis";
+    const PROVIDER_TYPE: ProviderType = ProviderType::Osmosis;
 
     fn price_query_messages_with_associated_data<
         Pairs,

@@ -308,6 +308,17 @@ impl CheckedContract<Admin> {
             network: String,
         }
 
+        fn construct_provider_and_contracts<Dex>(
+            query_wasm: &QueryWasm,
+            provider: Dex,
+            Contracts { oracle }: Contracts,
+        ) -> ProtocolProviderAndContracts<Dex> {
+            ProtocolProviderAndContracts {
+                provider,
+                oracle: UncheckedContract::new(query_wasm.clone(), oracle),
+            }
+        }
+
         self.query_wasm
             .smart(
                 self.address.0.clone(),
@@ -315,33 +326,30 @@ impl CheckedContract<Admin> {
             )
             .await
             .map(
-                |Protocol {
-                     contracts: Contracts { oracle },
-                     dex,
-                     network,
-                 }| self::Protocol {
-                    dex: match dex {
-                        Dex::Astroport { router_address } => {
-                            ProtocolDex::Astroport {
-                                contracts: ProtocolContracts {
-                                    oracle: UncheckedContract::new(
-                                        self.query_wasm.clone(),
-                                        oracle,
-                                    ),
-                                },
-                                router_address,
-                            }
-                        },
-                        Dex::Osmosis => ProtocolDex::Osmosis {
-                            contracts: ProtocolContracts {
-                                oracle: UncheckedContract::new(
-                                    self.query_wasm.clone(),
-                                    oracle,
-                                ),
-                            },
-                        },
-                    },
+                move |Protocol {
+                          contracts,
+                          dex,
+                          network,
+                      }| self::Protocol {
                     network,
+                    provider_and_contracts: match dex {
+                        Dex::Astroport { router_address } => {
+                            ProtocolDex::Astroport(
+                                construct_provider_and_contracts(
+                                    &self.query_wasm,
+                                    Astroport::new(router_address),
+                                    contracts,
+                                ),
+                            )
+                        },
+                        Dex::Osmosis => ProtocolDex::Osmosis(
+                            construct_provider_and_contracts(
+                                &self.query_wasm,
+                                Osmosis::new(),
+                                contracts,
+                            ),
+                        ),
+                    },
                 },
             )
     }
@@ -457,24 +465,17 @@ pub struct GeneralizedProtocolContracts {
 }
 
 pub struct Protocol {
-    pub dex: ProtocolDex,
     pub network: String,
+    pub provider_and_contracts: ProtocolDex,
 }
 
 pub enum ProtocolDex {
-    Astroport {
-        contracts: ProtocolContracts<Astroport>,
-        router_address: String,
-    },
-    Osmosis {
-        contracts: ProtocolContracts<Osmosis>,
-    },
+    Astroport(ProtocolProviderAndContracts<Astroport>),
+    Osmosis(ProtocolProviderAndContracts<Osmosis>),
 }
 
-pub struct ProtocolContracts<Dex>
-where
-    Dex: ?Sized,
-{
+pub struct ProtocolProviderAndContracts<Dex> {
+    pub provider: Dex,
     pub oracle: UncheckedContract<Oracle<Dex>>,
 }
 
