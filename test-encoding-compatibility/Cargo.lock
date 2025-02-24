@@ -175,9 +175,9 @@ dependencies = [
 
 [[package]]
 name = "astroport"
-version = "5.5.0"
+version = "5.7.0-cw1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "079959b98988f2adcf8b884f8dd536d70c5306e231b1b047dc7c0f68800f6da3"
+checksum = "79c5e85aa198b21b94e4cac6454192701f7373460aa6a953de14279cf9ce3f92"
 dependencies = [
  "astroport-circular-buffer",
  "cosmos-sdk-proto 0.19.0",

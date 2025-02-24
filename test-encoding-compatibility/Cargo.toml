@@ -27,7 +27,7 @@ path = "../libraries/dex"
 ################################################################################
 
 [dev-dependencies.astroport]
-version = "5.5.0"
+version = "5.7.0-cw1.0"
 default-features = false
 
 [dev-dependencies.osmosis-std]
@@ -35,7 +35,7 @@ version = "0.27.0"
 default-features = false
 
 [dev-dependencies.prost]
-version = "0.13.4"
+version = "0.13.5"
 default-features = false
 features = ["std"]
 
