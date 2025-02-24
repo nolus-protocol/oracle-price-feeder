@@ -1,6 +1,6 @@
 use std::{
     collections::BTreeMap, convert::identity, fmt::Display, future::Future,
-    sync::Arc,
+    sync::Arc, time::Duration,
 };
 
 use anyhow::{bail, Context as _, Result};
@@ -16,11 +16,36 @@ use tokio::{
     time::{interval, sleep, timeout, Instant, MissedTickBehavior},
 };
 
-use chain_ops::tx;
+use chain_ops::{
+    node,
+    tx::{self, ExecuteTemplate},
+};
+use channel::unbounded;
 use defer::Defer;
 use dex::provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote};
-use service::task::{RunnableState, TimeBasedExpiration, TxPackage};
+use task::RunnableState;
 use task_set::TaskSet;
+use ::tx::{TimeBasedExpiration, TxPackage};
+
+use crate::oracle::Oracle;
+
+pub struct TaskWithProvider<Dex>
+where
+    Dex: dex::provider::Dex,
+{
+    pub protocol: Arc<str>,
+    pub source: Arc<str>,
+    pub query_tx: node::QueryTx,
+    pub dex_node_client: node::Client,
+    pub duration_before_start: Duration,
+    pub execute_template: ExecuteTemplate,
+    pub idle_duration: Duration,
+    pub timeout_duration: Duration,
+    pub hard_gas_limit: Gas,
+    pub oracle: Oracle<Dex>,
+    pub provider: Dex,
+    pub transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+}
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -41,7 +66,7 @@ macro_rules! log_with_context {
     };
 }
 
-impl<P> super::TaskWithProvider<P>
+impl<P> TaskWithProvider<P>
 where
     P: Dex<ProviderTypeDescriptor: Display>,
 {
@@ -462,10 +487,7 @@ where
 
     async fn spawn_query_tasks(
         &mut self,
-        query_messages: &mut BTreeMap<
-            CurrencyPair,
-            P::PriceQueryMessage,
-        >,
+        query_messages: &mut BTreeMap<CurrencyPair, P::PriceQueryMessage>,
         task_set: &mut QueryTasksSet,
         replacement_buffer: &mut Vec<Price>,
     ) -> Result<()> {
@@ -502,8 +524,7 @@ where
     pub(crate) fn spawn_query_task<'r>(
         &'r self,
         task_set: &'r mut QueryTasksSet,
-    ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r
-    {
+    ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r {
         let duration = self.idle_duration;
 
         move |(currency_pair, message)| {
@@ -558,7 +579,7 @@ fn test_pretty_price_formatting() {
     use std::borrow::Borrow;
 
     use chain_ops::node;
-    use dex::{Currencies, CurrencyPairs};
+    use dex::Currencies;
 
     enum Never {}
 
@@ -610,7 +631,7 @@ fn test_pretty_price_formatting() {
     let quote = Amount::new(Decimal::new("1811002280600015".into(), 17));
 
     assert_eq!(
-        super::TaskWithProvider::<Dummy>::pretty_formatted_price(
+        TaskWithProvider::<Dummy>::pretty_formatted_price(
             "NLS",
             &base,
             "USDC_NOBLE",
@@ -624,7 +645,7 @@ fn test_pretty_price_formatting() {
     let quote = Amount::new(Decimal::new("67247624153".into(), 7));
 
     assert_eq!(
-        super::TaskWithProvider::<Dummy>::pretty_formatted_price(
+        TaskWithProvider::<Dummy>::pretty_formatted_price(
             "WETH", &base, "OSMO", &quote,
         ),
         "1.0 WETH ~ 6724.7624153 OSMO"

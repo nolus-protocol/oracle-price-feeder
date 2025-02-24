@@ -1,25 +1,19 @@
 [package]
-name = "service"
+name = "protocol-watcher"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-chain-ops.workspace = true
 channel.workspace = true
 contract.workspace = true
-environment.workspace = true
-log.workspace = true
 task.workspace = true
 task_set.workspace = true
+tx.workspace = true
 
 anyhow.workspace = true
-cosmrs.workspace = true
-thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-zeroize.workspace = true
 
 [lints]
 workspace = true

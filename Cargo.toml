@@ -8,7 +8,13 @@ members = [
 [workspace.package]
 version = "0.66.0"
 edition = "2021"
-rust-version = "1.83.0"
+rust-version = "1.85.0"
+
+[workspace.dependencies.balance-reporter]
+path = "./libraries/balance-reporter"
+
+[workspace.dependencies.broadcaster]
+path = "./libraries/broadcaster"
 
 [workspace.dependencies.chain-ops]
 path = "./libraries/chain-ops"
@@ -34,14 +40,26 @@ path = "./libraries/log"
 [workspace.dependencies.oracle]
 path = "./libraries/oracle"
 
+[workspace.dependencies.protocol-watcher]
+path = "./libraries/protocol-watcher"
+
 [workspace.dependencies.semver]
 path = "./libraries/semver"
 
 [workspace.dependencies.service]
 path = "./libraries/service"
 
+[workspace.dependencies.supervisor]
+path = "./libraries/supervisor"
+
+[workspace.dependencies.task]
+path = "./libraries/task"
+
 [workspace.dependencies.task_set]
 path = "./libraries/task_set"
+
+[workspace.dependencies.tx]
+path = "./libraries/tx"
 
 [workspace.dependencies]
 bip32 = "0.5.2"
@@ -144,10 +162,11 @@ features = ["std"]
 [workspace.lints.rust]
 unexpected_cfgs = "forbid"
 unsafe_code = "forbid"
-#warnings = "deny"
+warnings = "deny"
 
 [workspace.lints.clippy]
 missing_errors_doc = "allow"
+needless_maybe_sized = "allow"
 
 [workspace.lints.clippy.pedantic]
 priority = -1

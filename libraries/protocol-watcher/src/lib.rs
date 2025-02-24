@@ -1,17 +1,13 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
 use tokio::time::sleep;
 
+use channel::{bounded, Sender};
 use contract::{Admin, CheckedContract};
-
-use crate::{supervisor::configuration, task};
-
-use super::{application_defined, BuiltIn, Runnable, RunnableState, State};
+use task::RunnableState;
+use task_set::TaskSet;
+use tx::{TxExpiration, TxPackage};
 
 macro_rules! log {
     ($macro:ident![$protocol:expr]($($body:tt)+)) => {
@@ -23,18 +19,85 @@ macro_rules! log {
     };
 }
 
+#[derive(Debug)]
+pub enum Command {
+    ProtocolAdded(Arc<str>),
+    ProtocolRemoved(Arc<str>),
+}
+
+#[derive(Clone)]
+pub struct State {
+    pub admin_contract: CheckedContract<Admin>,
+    pub action_tx: bounded::Sender<Command>,
+}
+
+impl State {
+    pub fn run(
+        self,
+        runnable_state: RunnableState,
+    ) -> impl Future<Output = Result<()>> + Sized + use<> {
+        let Self {
+            admin_contract,
+            action_tx,
+        } = self;
+
+        ProtocolWatcher::new(admin_contract, BTreeSet::new(), action_tx)
+            .run(runnable_state)
+    }
+}
+
+pub fn protocol_watcher_action_handler<
+    Id,
+    State,
+    TxSender,
+    TxExpiration: self::TxExpiration,
+    AddProtocol,
+    RemoveProtocol,
+>(
+    tx: TxSender,
+    mut add_protocol: AddProtocol,
+    mut remove_protocol: RemoveProtocol,
+) -> impl for<'r> AsyncFnMut(
+    &'r mut TaskSet<Id, Result<()>>,
+    State,
+    Command,
+) -> Result<State>
+where
+    TxSender: Sender<Value = TxPackage<TxExpiration>>,
+    AddProtocol: for<'r, 't> AsyncFnMut(
+        &'r mut TaskSet<Id, Result<()>>,
+        State,
+        Arc<str>,
+        &'t TxSender,
+    ) -> Result<State>,
+    RemoveProtocol: for<'r> AsyncFnMut(
+        &'r mut TaskSet<Id, Result<()>>,
+        State,
+        Arc<str>,
+    ) -> Result<State>,
+{
+    async move |task_set, state, command| match command {
+        Command::ProtocolAdded(protocol) => {
+            add_protocol(task_set, state, protocol, &tx).await
+        },
+        Command::ProtocolRemoved(protocol) => {
+            remove_protocol(task_set, state, protocol).await
+        },
+    }
+}
+
 #[must_use]
-pub struct ProtocolWatcher {
+struct ProtocolWatcher {
     admin_contract: CheckedContract<Admin>,
     protocol_tasks: BTreeSet<Arc<str>>,
-    command_tx: channel::bounded::Sender<Command>,
+    command_tx: bounded::Sender<Command>,
 }
 
 impl ProtocolWatcher {
-    pub const fn new(
+    const fn new(
         admin_contract: CheckedContract<Admin>,
         protocol_tasks: BTreeSet<Arc<str>>,
-        command_tx: channel::bounded::Sender<Command>,
+        command_tx: bounded::Sender<Command>,
     ) -> Self {
         Self {
             admin_contract,
@@ -42,9 +105,7 @@ impl ProtocolWatcher {
             command_tx,
         }
     }
-}
 
-impl Runnable for ProtocolWatcher {
     async fn run(mut self, _: RunnableState) -> Result<()> {
         const IDLE_DURATION: Duration = Duration::from_secs(15);
 
@@ -80,42 +141,6 @@ impl Runnable for ProtocolWatcher {
             sleep(IDLE_DURATION).await;
         }
     }
-}
-
-impl BuiltIn for ProtocolWatcher {
-    type ServiceConfiguration = configuration::Service;
-}
-
-impl super::ProtocolWatcher for ProtocolWatcher {
-    fn new<ApplicationDefined>(
-        service_configuration: &Self::ServiceConfiguration,
-        task_states: &BTreeMap<task::Id<ApplicationDefined>, State>,
-        command_tx: channel::bounded::Sender<Command>,
-    ) -> Self
-    where
-        ApplicationDefined: application_defined::Id,
-    {
-        Self::new(
-            service_configuration.admin_contract().clone(),
-            task_states
-                .keys()
-                .filter_map(|id| {
-                    if let task::Id::ApplicationDefined(id) = id {
-                        id.protocol().cloned()
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-            command_tx,
-        )
-    }
-}
-
-#[derive(Debug)]
-pub enum Command {
-    ProtocolAdded(Arc<str>),
-    ProtocolRemoved(Arc<str>),
 }
 
 fn protocols_diff_commands(

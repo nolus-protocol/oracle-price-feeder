@@ -8,6 +8,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
+#[must_use]
 pub struct SemVer {
     major: VersionSegment,
     minor: VersionSegment,
@@ -24,7 +25,6 @@ impl Display for SemVer {
 }
 
 impl SemVer {
-    #[must_use]
     pub const fn new(
         major: VersionSegment,
         minor: VersionSegment,

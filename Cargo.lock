@@ -30,15 +30,16 @@ dependencies = [
  "semver",
  "serde",
  "service",
+ "task",
  "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "anyhow"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
+checksum = "6b964d184e89d9b6b67dd2715bc8e74cf3107fb2b529990c90cf517326150bf4"
 
 [[package]]
 name = "async-stream"
@@ -148,6 +149,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "balance-reporter"
+version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "task",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "base16ct"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -221,6 +233,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
  "generic-array",
+]
+
+[[package]]
+name = "broadcaster"
+version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "channel",
+ "cosmrs",
+ "task",
+ "tokio",
+ "tracing",
+ "tx",
 ]
 
 [[package]]
@@ -969,9 +995,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.25"
+version = "0.4.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
+checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
 
 [[package]]
 name = "log"
@@ -988,6 +1014,8 @@ name = "market-data-feeder"
 version = "0.66.0"
 dependencies = [
  "anyhow",
+ "balance-reporter",
+ "broadcaster",
  "chain-ops",
  "channel",
  "contract",
@@ -996,11 +1024,15 @@ dependencies = [
  "dex",
  "environment",
  "oracle",
+ "protocol-watcher",
  "serde",
  "service",
+ "supervisor",
+ "task",
  "task_set",
  "tokio",
  "tracing",
+ "tx",
 ]
 
 [[package]]
@@ -1342,6 +1374,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "protocol-watcher"
+version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "channel",
+ "contract",
+ "task",
+ "task_set",
+ "tokio",
+ "tracing",
+ "tx",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1468,7 +1514,7 @@ version = "0.23.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47796c98c480fce5406ef69d1c76378375492c3b0a0de587be0c1d9feb12f395"
 dependencies = [
- "log 0.4.25",
+ "log 0.4.26",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -1644,6 +1690,7 @@ dependencies = [
  "cosmrs",
  "environment",
  "log 0.66.0",
+ "task",
  "task_set",
  "thiserror 2.0.11",
  "tokio",
@@ -1767,6 +1814,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "734676eb262c623cec13c3155096e08d1f8f29adce39ba17948b18dad1e54142"
 
 [[package]]
+name = "supervisor"
+version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "channel",
+ "contract",
+ "environment",
+ "task_set",
+ "tokio",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
 name = "swap-route-optimizer"
 version = "0.66.0"
 
@@ -1786,6 +1848,10 @@ name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
+
+[[package]]
+name = "task"
+version = "0.66.0"
 
 [[package]]
 name = "task_set"
@@ -2140,6 +2206,16 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tx"
+version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "chain-ops",
+ "cosmrs",
+ "tokio",
+]
 
 [[package]]
 name = "typenum"

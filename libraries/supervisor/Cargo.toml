@@ -1,31 +1,20 @@
 [package]
-name = "market-data-feeder"
+name = "supervisor"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-balance-reporter.workspace = true
-broadcaster.workspace = true
 chain-ops.workspace = true
 channel.workspace = true
 contract.workspace = true
-defer.workspace = true
-dex.workspace = true
 environment.workspace = true
-protocol-watcher.workspace = true
-oracle.workspace = true
-service.workspace = true
-supervisor.workspace = true
-task.workspace = true
 task_set.workspace = true
-tx.workspace = true
 
 anyhow.workspace = true
-cosmrs.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-serde.workspace = true
+zeroize.workspace = true
 
 [lints]
 workspace = true

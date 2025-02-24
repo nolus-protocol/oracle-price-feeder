@@ -46,7 +46,7 @@ pub mod log;
 
 pub struct TaskSetSpawnWrapper<'r, Id>(&'r mut TaskSet<Id, Result<()>>);
 
-impl<'r, Id> TaskSetSpawnWrapper<'r, Id> {
+impl<Id> TaskSetSpawnWrapper<'_, Id> {
     pub fn spawn(&mut self, id: Id, handle: JoinHandle<Result<()>>) {
         self.0.add_handle(id, handle);
     }

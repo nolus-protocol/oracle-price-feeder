@@ -14,6 +14,7 @@ macro_rules! define_provider {
         }
 
         impl ProviderType {
+            #[must_use]
             pub const fn name(self) -> &'static str {
                 match self {
                     $(Self::$provider => ::core::stringify!($provider),)+

@@ -25,6 +25,12 @@
       <sourceFolder url="file://$MODULE_DIR$/libraries/service/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/libraries/service/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/libraries/task_set/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/balance-reporter/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/broadcaster/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/protocol-watcher/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/supervisor/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/task/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/tx/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/test-encoding-compatibility/target" />
     </content>

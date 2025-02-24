@@ -17,6 +17,8 @@ use tokio::{
 };
 use tracing::{error, error_span};
 
+use task::RunnableState;
+
 use crate::service::task_spawner::{
     CancellationToken, ServiceStopped, TaskSpawner,
 };
@@ -25,11 +27,6 @@ pub mod application_defined;
 pub mod balance_reporter;
 pub mod broadcast;
 pub mod protocol_watcher;
-
-pub enum RunnableState {
-    New,
-    Restart,
-}
 
 pub trait Runnable: Sized {
     fn run(

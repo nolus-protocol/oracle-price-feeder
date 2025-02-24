@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use tokio::time::sleep;
@@ -27,8 +27,8 @@ macro_rules! log_span {
 #[must_use]
 pub struct BalanceReporter {
     client: node::QueryBank,
-    address: Box<str>,
-    fee_token: Box<str>,
+    address: Arc<str>,
+    fee_token: Arc<str>,
     idle_duration: Duration,
 }
 
@@ -36,8 +36,8 @@ impl BalanceReporter {
     #[inline]
     pub const fn new(
         client: node::QueryBank,
-        signer_address: Box<str>,
-        denom: Box<str>,
+        signer_address: Arc<str>,
+        denom: Arc<str>,
         idle_duration: Duration,
     ) -> Self {
         Self {

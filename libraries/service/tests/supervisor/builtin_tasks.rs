@@ -10,8 +10,9 @@ use tracing::info;
 
 use service::task::{
     protocol_watcher, BalanceReporter, Broadcast, BuiltIn, Id, NoExpiration,
-    ProtocolWatcher, Runnable, RunnableState, State, TxPackage,
+    ProtocolWatcher, Runnable, State, TxPackage,
 };
+use task::RunnableState;
 
 use super::Context;
 

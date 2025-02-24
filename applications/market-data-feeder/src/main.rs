@@ -2,34 +2,33 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+use std::{collections::btree_map::BTreeMap, sync::Arc, time::Duration};
+
 use anyhow::Result;
-use chain_ops::node;
-use chain_ops::node::QueryTx;
-use chain_ops::signer::Gas;
-use chain_ops::tx::ExecuteTemplate;
-use channel::{bounded, unbounded};
-use channel::{Channel, Sender};
+use tokio::sync::Mutex;
+
+use chain_ops::{
+    node::{self, QueryTx},
+    signer::Gas,
+    tx::ExecuteTemplate,
+};
+use channel::{bounded, unbounded, Channel};
 use contract::{
     Admin, CheckedContract, Protocol, ProtocolDex,
     ProtocolProviderAndContracts, UncheckedContract,
 };
-use dex::provider;
-use dex::providers::ProviderType;
-use market_data_feeder::task::TaskWithProvider;
+use dex::{provider, providers::ProviderType};
+use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
-use service::supervisor::new_supervisor;
-use service::task::balance_reporter::BalanceReporter;
-use service::task::broadcast::Broadcast;
-use service::task::protocol_watcher::{Command, ProtocolWatcher};
-use service::task::{Runnable, RunnableState, TimeBasedExpiration, TxPackage};
-use std::collections::{
-    btree_map::{self, BTreeMap},
-    BTreeSet,
-};
-use std::sync::Arc;
-use std::time::Duration;
+use supervisor::new_supervisor;
+use ::task::RunnableState;
 use task_set::TaskSet;
-use tokio::sync::Mutex;
+use tx::{TimeBasedExpiration, TxPackage};
+
+use self::{oracle::Oracle, task::TaskWithProvider};
+
+pub mod oracle;
+pub mod task;
 
 fn init_tasks(
     service: Service,
@@ -38,111 +37,104 @@ fn init_tasks(
     &'r mut TaskSet<Id, Result<()>>,
     bounded::Sender<Command>,
 ) -> Result<State> {
-    let state = State {
-        admin_contract: service.admin_contract.clone(),
-        dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
-        idle_duration: service.idle_duration,
-        signer_address: service.signer.address().into(),
-        hard_gas_limit: 0,
-        query_tx: service.node_client.clone().query_tx(),
-        timeout_duration: service.timeout_duration,
-    };
-
     async move |task_set, action_tx| {
+        let signer_address: Arc<str> = service.signer.address().into();
+
+        let balance_reporter = balance_reporter::State {
+            query_bank: service.node_client.clone().query_bank(),
+            address: signer_address.clone(),
+            denom: service.signer.fee_token().into(),
+            idle_duration: service.idle_duration,
+        };
+
+        let broadcaster = broadcaster::State {
+            broadcast_tx: service.node_client.clone().broadcast_tx(),
+            signer: Arc::new(Mutex::new(service.signer)),
+            transaction_rx: Arc::new(Mutex::new(rx)),
+            delay_duration: service.broadcast_delay_duration,
+            retry_delay_duration: service.broadcast_retry_delay_duration,
+        };
+
+        let protocol_watcher = protocol_watcher::State {
+            admin_contract: service.admin_contract.clone(),
+            action_tx,
+        };
+
+        let price_fetcher = PriceFetcherState {
+            admin_contract: service.admin_contract,
+            dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
+            idle_duration: service.idle_duration,
+            signer_address,
+            hard_gas_limit: 0,
+            query_tx: service.node_client.clone().query_tx(),
+            timeout_duration: service.idle_duration,
+        };
+
         task_set.add_handle(
             Id::BalanceReporter,
-            tokio::spawn(
-                BalanceReporter::new(
-                    service.node_client.clone().query_bank(),
-                    service.signer.address().into(),
-                    service.signer.fee_token().into(),
-                    service.balance_reporter_idle_duration,
-                )
-                .run(RunnableState::New),
-            ),
+            tokio::spawn(balance_reporter.clone().run(RunnableState::New)),
         );
 
         task_set.add_handle(
             Id::Broadcaster,
-            tokio::spawn(
-                Broadcast::<TimeBasedExpiration>::new(
-                    service.node_client.broadcast_tx(),
-                    service.signer,
-                    rx,
-                    service.broadcast_delay_duration,
-                    service.broadcast_retry_delay_duration,
-                )
-                .run(RunnableState::New),
-            ),
+            tokio::spawn(broadcaster.clone().run(RunnableState::New)),
         );
 
         task_set.add_handle(
             Id::ProtocolWatcher,
-            tokio::spawn(
-                ProtocolWatcher::new(
-                    service.admin_contract,
-                    BTreeSet::new(),
-                    action_tx,
-                )
-                .run(RunnableState::New),
-            ),
+            tokio::spawn(protocol_watcher.clone().run(RunnableState::New)),
         );
 
-        Ok(state)
+        Ok(State {
+            balance_reporter,
+            broadcaster,
+            protocol_watcher,
+            price_fetcher,
+        })
     }
 }
 
-fn protocol_watcher<TxSender, TaskSpawnerF>(
-    tx: TxSender,
-    mut task_spawner: TaskSpawnerF,
-) -> impl for<'r> AsyncFnMut(
-    &'r mut TaskSet<Id, Result<()>>,
-    State,
-    Command,
-) -> Result<State>
-where
-    TxSender: Sender<Value = TxPackage<TimeBasedExpiration>>,
-    TaskSpawnerF: for<'r, 't> AsyncFnMut(
-        &'r TxSender,
-        &'t mut TaskSet<Id, Result<()>>,
-        State,
-        Arc<str>,
-        Protocol,
-    ) -> Result<State>,
-{
-    async move |task_set, mut state, command| match command {
-        Command::ProtocolAdded(name) => {
-            let protocol = state.admin_contract.protocol(&name).await?;
-
-            task_spawner(&tx, task_set, state, name, protocol).await
-        },
-        Command::ProtocolRemoved(protocol) => {
-            task_set.abort(&Id::PriceFetcher { protocol });
-
-            Ok(state)
-        },
-    }
+#[derive(Clone)]
+struct PriceFetcherState {
+    pub admin_contract: CheckedContract<Admin>,
+    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+    pub idle_duration: Duration,
+    pub signer_address: Arc<str>,
+    pub hard_gas_limit: Gas,
+    pub query_tx: QueryTx,
+    pub timeout_duration: Duration,
 }
 
 async fn spawn_price_fetcher(
-    transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
     task_set: &mut TaskSet<Id, Result<()>>,
     state: State,
     name: Arc<str>,
-    Protocol {
-        provider_and_contracts,
-        ..
-    }: Protocol,
+    transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
 ) -> Result<State> {
+    let PriceFetcherState {
+        mut admin_contract,
+        dex_node_clients,
+        idle_duration,
+        signer_address,
+        hard_gas_limit,
+        query_tx,
+        timeout_duration,
+    } = state.price_fetcher.clone();
+
+    let Protocol {
+        network,
+        provider_and_contracts,
+    } = admin_contract.protocol(&name).await?;
+
     let price_fetcher = PriceFetcher {
         name: name.clone(),
-        idle_duration: state.idle_duration,
+        idle_duration,
         transaction_tx: transaction_tx.clone(),
-        signer_address: state.signer_address.clone(),
-        hard_gas_limit: state.hard_gas_limit,
-        query_tx: state.query_tx.clone(),
-        dex_node_clients: state.dex_node_clients.clone(),
-        timeout_duration: state.timeout_duration,
+        signer_address: signer_address.clone(),
+        hard_gas_limit,
+        query_tx,
+        dex_node_clients: dex_node_clients.clone(),
+        timeout_duration,
     };
 
     task_set.add_handle(
@@ -151,13 +143,23 @@ async fn spawn_price_fetcher(
             ProtocolDex::Astroport(ProtocolProviderAndContracts {
                 provider,
                 oracle,
-            }) => tokio::spawn(price_fetcher.run(oracle, provider)),
+            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
             ProtocolDex::Osmosis(ProtocolProviderAndContracts {
                 provider,
                 oracle,
-            }) => tokio::spawn(price_fetcher.run(oracle, provider)),
+            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
         },
     );
+
+    Ok(state)
+}
+
+async fn remove_price_fetcher(
+    task_set: &mut TaskSet<Id, Result<()>>,
+    state: State,
+    protocol: Arc<str>,
+) -> Result<State> {
+    task_set.abort(&Id::PriceFetcher { protocol });
 
     Ok(state)
 }
@@ -170,11 +172,57 @@ async fn main() -> Result<()> {
 
     new_supervisor::<_, _, bounded::Channel<_>, _, _, _>(
         init_tasks(service, rx),
-        protocol_watcher(tx, spawn_price_fetcher),
-        async |task_set: &mut TaskSet<Id, Result<()>>,
-               state: State,
-               id: Id|
-               -> Result<State> { Ok(state) },
+        protocol_watcher::protocol_watcher_action_handler(
+            tx.clone(),
+            spawn_price_fetcher,
+            remove_price_fetcher,
+        ),
+        async move |task_set: &mut TaskSet<Id, Result<()>>,
+                    mut state: State,
+                    id: Id|
+                    -> Result<State> {
+            match id {
+                Id::BalanceReporter => {
+                    task_set.add_handle(
+                        id,
+                        tokio::spawn(
+                            state
+                                .balance_reporter
+                                .clone()
+                                .run(RunnableState::Restart),
+                        ),
+                    );
+                },
+                Id::Broadcaster => {
+                    task_set.add_handle(
+                        id,
+                        tokio::spawn(
+                            state
+                                .broadcaster
+                                .clone()
+                                .run(RunnableState::Restart),
+                        ),
+                    );
+                },
+                Id::ProtocolWatcher => {
+                    task_set.add_handle(
+                        id,
+                        tokio::spawn(
+                            state
+                                .protocol_watcher
+                                .clone()
+                                .run(RunnableState::Restart),
+                        ),
+                    );
+                },
+                Id::PriceFetcher { protocol: name } => {
+                    state =
+                        spawn_price_fetcher(task_set, state, name, &tx).await?;
+                },
+            }
+
+            Ok(state)
+        },
     )
     .await
     .map(drop)
@@ -182,7 +230,7 @@ async fn main() -> Result<()> {
 
 pub(crate) struct PriceFetcher {
     pub name: Arc<str>,
-    pub dex_node_clients: Arc<Mutex<BTreeMap<ProviderType, node::Client>>>,
+    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
     pub idle_duration: Duration,
     pub signer_address: Arc<str>,
     pub hard_gas_limit: Gas,
@@ -195,24 +243,37 @@ impl PriceFetcher {
     pub async fn run<Dex>(
         self,
         oracle: UncheckedContract<contract::Oracle<Dex>>,
+        provider_network: String,
         provider: Dex,
     ) -> Result<()>
     where
         Dex: provider::Dex<ProviderTypeDescriptor = ProviderType>,
     {
-        let mut oracle = oracle::Oracle::new(oracle).await?;
+        let dex_node_client = {
+            let client = {
+                let guard = self.dex_node_clients.clone().lock_owned().await;
 
-        let dex_node_client = match self
-            .dex_node_clients
-            .lock_owned()
-            .await
-            .entry(Dex::PROVIDER_TYPE)
-        {
-            btree_map::Entry::Vacant(entry) => {
-                todo!()
-            },
-            btree_map::Entry::Occupied(entry) => entry.get().clone(),
+                guard.get(&*provider_network).cloned()
+            };
+
+            if let Some(client) = client {
+                client
+            } else {
+                let client = node::Client::connect(&dex_node_grpc_var(
+                    provider_network.clone(),
+                ))
+                .await?;
+
+                self.dex_node_clients
+                    .lock_owned()
+                    .await
+                    .entry(provider_network.into_boxed_str())
+                    .or_insert(client)
+                    .clone()
+            }
         };
+
+        let oracle = ::oracle::Oracle::new(oracle).await?;
 
         let source = format!(
             "{dex}; Protocol: {name}",
@@ -226,19 +287,15 @@ impl PriceFetcher {
             source,
             query_tx: self.query_tx,
             dex_node_client,
-            duration_before_start: Default::default(),
+            duration_before_start: Duration::default(),
             execute_template: ExecuteTemplate::new(
                 (&*self.signer_address).into(),
-                (&*oracle.address()).into(),
+                oracle.address().into(),
             ),
             idle_duration: self.idle_duration,
             timeout_duration: self.timeout_duration,
             hard_gas_limit: self.hard_gas_limit,
-            oracle: market_data_feeder::oracle::Oracle::new(
-                oracle,
-                Duration::from_secs(15),
-            )
-            .await?,
+            oracle: Oracle::new(oracle, Duration::from_secs(15)).await?,
             provider,
             transaction_tx: self.transaction_tx,
         }
@@ -248,13 +305,10 @@ impl PriceFetcher {
 }
 
 struct State {
-    admin_contract: CheckedContract<Admin>,
-    dex_node_clients: Arc<Mutex<BTreeMap<ProviderType, node::Client>>>,
-    idle_duration: Duration,
-    signer_address: Arc<str>,
-    hard_gas_limit: Gas,
-    query_tx: QueryTx,
-    timeout_duration: Duration,
+    balance_reporter: balance_reporter::State,
+    broadcaster: broadcaster::State,
+    protocol_watcher: protocol_watcher::State,
+    price_fetcher: PriceFetcherState,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -265,9 +319,115 @@ enum Id {
     PriceFetcher { protocol: Arc<str> },
 }
 
-// run_app!(
-//     task_creation_context: {
-//         ApplicationDefinedContext::new()
-//     },
-//     startup_tasks: [] as [Id; 0],
-// );
+const SEPARATOR_CHAR: char = '_';
+
+const SEPARATOR_STR: &str = {
+    const BYTES: [u8; SEPARATOR_CHAR.len_utf8()] = {
+        let mut bytes = [0; SEPARATOR_CHAR.len_utf8()];
+
+        SEPARATOR_CHAR.encode_utf8(&mut bytes);
+
+        bytes
+    };
+
+    if let Ok(s) = core::str::from_utf8(&BYTES) {
+        s
+    } else {
+        panic!("Separator should be valid UTF-8!")
+    }
+};
+
+const VAR_SUFFIX: &str = {
+    const SEGMENTS: &[&str] = &["NODE", "GRPC"];
+
+    const LENGTH: usize = {
+        let mut sum = (SEGMENTS.len() + 1) * SEPARATOR_STR.len();
+
+        let mut index = 0;
+
+        while index < SEGMENTS.len() {
+            sum += SEGMENTS[index].len();
+
+            index += 1;
+        }
+
+        sum
+    };
+
+    const BYTES: [u8; LENGTH] = {
+        const fn write_bytes(
+            destination: &mut [u8; LENGTH],
+            mut destination_index: usize,
+            source: &[u8],
+        ) -> usize {
+            let mut source_index = 0;
+
+            while source_index < source.len() {
+                destination[destination_index] = source[source_index];
+
+                destination_index += 1;
+
+                source_index += 1;
+            }
+
+            destination_index
+        }
+
+        #[inline]
+        const fn write_separator(
+            destination: &mut [u8; LENGTH],
+            index: usize,
+        ) -> usize {
+            write_bytes(destination, index, SEPARATOR_STR.as_bytes())
+        }
+
+        let mut bytes = [0; LENGTH];
+
+        let mut byte_index = write_separator(&mut bytes, 0);
+
+        let mut index = 0;
+
+        while index < SEGMENTS.len() {
+            byte_index = write_separator(&mut bytes, byte_index);
+
+            byte_index =
+                write_bytes(&mut bytes, byte_index, SEGMENTS[index].as_bytes());
+
+            index += 1;
+        }
+
+        bytes
+    };
+
+    if let Ok(s) = core::str::from_utf8(&BYTES) {
+        s
+    } else {
+        panic!("Environment variable name suffix should be valid UTF-8!")
+    }
+};
+
+fn dex_node_grpc_var(mut network: String) -> String {
+    network.make_ascii_uppercase();
+
+    if const { SEPARATOR_CHAR != '-' } {
+        while let Some(index) = network.find('-') {
+            network.replace_range(index..=index, SEPARATOR_STR);
+        }
+    }
+
+    network.reserve_exact(VAR_SUFFIX.len());
+
+    network.push_str(VAR_SUFFIX);
+
+    network
+}
+
+#[test]
+fn test_f() {
+    assert_eq!(VAR_SUFFIX, "__NODE_GRPC");
+
+    assert_eq!(
+        dex_node_grpc_var("AbBCD_e-Fg-H-i".into()),
+        "ABBCD_E_FG_H_I__NODE_GRPC"
+    );
+}

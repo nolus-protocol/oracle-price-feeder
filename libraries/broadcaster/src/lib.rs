@@ -1,22 +1,23 @@
-use std::{sync::Arc, time::Duration};
+use std::{future::Future, sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context, Result};
 use cosmrs::{
     proto::cosmos::base::abci::v1beta1::TxResponse,
     tendermint::abci::Code as TxCode,
-    tx::{Body, Raw as RawTx},
-    Gas,
+    tx::{Body as TxBody, Raw as RawTx},
 };
 use tokio::{
     sync::{mpsc, Mutex, OwnedMutexGuard},
     time::sleep,
 };
 
-use chain_ops::{node, signer::Signer};
-
-use crate::supervisor::configuration;
-
-use super::{BuiltIn, Runnable, RunnableState, TxExpiration, TxPackage};
+use chain_ops::{
+    node::BroadcastTx,
+    signer::{Gas, Signer},
+};
+use channel::unbounded;
+use task::RunnableState;
+use tx::{TimeBasedExpiration, TxExpiration, TxPackage};
 
 macro_rules! log_simulation {
     ($macro:ident![$source:expr]($($body:tt)+)) => {
@@ -48,12 +49,49 @@ macro_rules! log_broadcast_with_source {
     };
 }
 
+#[derive(Clone)]
+pub struct State {
+    pub broadcast_tx: BroadcastTx,
+    pub signer: Arc<Mutex<Signer>>,
+    pub transaction_rx:
+        Arc<Mutex<unbounded::Receiver<TxPackage<TimeBasedExpiration>>>>,
+    pub delay_duration: Duration,
+    pub retry_delay_duration: Duration,
+}
+
+impl State {
+    pub fn run(
+        self,
+        runnable_state: RunnableState,
+    ) -> impl Future<Output = Result<()>> + Sized + use<> {
+        let Self {
+            broadcast_tx,
+            signer,
+            transaction_rx,
+            delay_duration,
+            retry_delay_duration,
+        } = self;
+
+        async move {
+            Broadcast::new(
+                broadcast_tx,
+                signer.lock_owned().await,
+                transaction_rx.lock_owned().await,
+                delay_duration,
+                retry_delay_duration,
+            )
+            .run(runnable_state)
+            .await
+        }
+    }
+}
+
 #[must_use]
 pub struct Broadcast<Expiration>
 where
     Expiration: TxExpiration,
 {
-    client: node::BroadcastTx,
+    client: BroadcastTx,
     signer: OwnedMutexGuard<Signer>,
     transaction_rx:
         OwnedMutexGuard<mpsc::UnboundedReceiver<TxPackage<Expiration>>>,
@@ -68,7 +106,7 @@ where
 {
     #[inline]
     pub const fn new(
-        client: node::BroadcastTx,
+        client: BroadcastTx,
         signer: OwnedMutexGuard<Signer>,
         transaction_rx: OwnedMutexGuard<
             mpsc::UnboundedReceiver<TxPackage<Expiration>>,
@@ -88,7 +126,7 @@ where
 
     async fn simulate_and_sign_tx(
         &mut self,
-        tx: &Body,
+        tx: &TxBody,
         source: &Arc<str>,
         hard_gas_limit: Gas,
         fallback_gas: Gas,
@@ -249,12 +287,7 @@ where
             },
         )
     }
-}
 
-impl<Expiration> Runnable for Broadcast<Expiration>
-where
-    Expiration: TxExpiration,
-{
     async fn run(mut self, _: RunnableState) -> Result<()> {
         loop {
             let tx_package = self
@@ -269,36 +302,5 @@ where
 
             sleep(self.delay_duration).await;
         }
-    }
-}
-
-impl<Expiration> BuiltIn for Broadcast<Expiration>
-where
-    Expiration: TxExpiration,
-{
-    type ServiceConfiguration = configuration::Service;
-}
-
-impl<Expiration> super::Broadcast for Broadcast<Expiration>
-where
-    Expiration: TxExpiration,
-{
-    type TxExpiration = Expiration;
-
-    #[inline]
-    fn new(
-        service_configuration: &Self::ServiceConfiguration,
-        transaction_rx: channel::unbounded::Receiver<
-            TxPackage<Self::TxExpiration>,
-        >,
-    ) -> Self {
-        Self::new(
-            service_configuration.node_client().clone().broadcast_tx(),
-            Arc::new(Mutex::new(service_configuration.signer().clone()))
-                .blocking_lock_owned(),
-            Arc::new(Mutex::new(transaction_rx)).blocking_lock_owned(),
-            service_configuration.broadcast_delay_duration(),
-            service_configuration.broadcast_retry_delay_duration(),
-        )
     }
 }

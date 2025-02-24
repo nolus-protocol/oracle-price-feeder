@@ -90,6 +90,7 @@ async fn protocol_package(
         )
 }
 
+#[must_use]
 pub struct UncheckedContract<Contract>
 where
     Contract: ?Sized,
@@ -130,14 +131,14 @@ where
                 let Self {
                     query_wasm,
                     address,
-                    _contract,
+                    _contract: PhantomData {},
                 } = self;
 
                 (
                     CheckedContract {
                         query_wasm,
                         address,
-                        _contract,
+                        _contract: PhantomData,
                     },
                     package_info.version,
                 )
@@ -153,6 +154,7 @@ impl UncheckedContract<Admin> {
     }
 }
 
+#[must_use]
 pub struct CheckedContract<Contract>
 where
     Contract: ?Sized,
@@ -177,6 +179,7 @@ where
     }
 
     #[inline]
+    #[must_use]
     pub fn address(&self) -> &str {
         &self.address.0
     }
@@ -446,6 +449,7 @@ pub struct Address(String);
 
 impl Address {
     #[inline]
+    #[must_use]
     pub const fn new(address: String) -> Self {
         Self(address)
     }

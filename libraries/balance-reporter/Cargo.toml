@@ -1,0 +1,16 @@
+[package]
+name = "balance-reporter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chain-ops.workspace = true
+task.workspace = true
+
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

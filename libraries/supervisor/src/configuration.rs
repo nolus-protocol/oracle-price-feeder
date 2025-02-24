@@ -10,33 +10,6 @@ use chain_ops::{
 use contract::{Address, Admin, CheckedContract, UncheckedContract};
 use environment::ReadFromVar as _;
 
-use crate::task::application_defined;
-
-#[must_use]
-pub struct Configuration<Id>
-where
-    Id: application_defined::Id,
-{
-    pub(super) service_configuration: Id::ServiceConfiguration,
-    pub(super) task_creation_context: Id::TaskCreationContext,
-}
-
-impl<Id> Configuration<Id>
-where
-    Id: application_defined::Id,
-{
-    #[inline]
-    pub fn new(
-        service_configuration: Id::ServiceConfiguration,
-        task_creation_context: Id::TaskCreationContext,
-    ) -> Self {
-        Self {
-            service_configuration,
-            task_creation_context,
-        }
-    }
-}
-
 #[must_use]
 pub struct Service {
     pub node_client: node::Client,

@@ -10,9 +10,8 @@ use std::{
 use anyhow::Result;
 use tracing::info;
 
-use service::task::{
-    application_defined, NoExpiration, Runnable, RunnableState, TxPackage,
-};
+use service::task::{application_defined, NoExpiration, Runnable, TxPackage};
+use task::RunnableState;
 
 use super::Context;
 

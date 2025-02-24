@@ -6,9 +6,10 @@ use contract::{GeneralizedProtocol, GeneralizedProtocolContracts, Platform};
 use service::{
     supervisor::configuration,
     task::{
-        application_defined, NoExpiration, Runnable, RunnableState, TxPackage,
+        application_defined, NoExpiration, Runnable, TxPackage,
     },
 };
+use task::RunnableState;
 
 use crate::ApplicationDefinedContext;
 

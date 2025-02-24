@@ -7,6 +7,7 @@ use contract::{CheckedContract, UncheckedContract};
 use dex::provider;
 use semver::SemVer;
 
+#[must_use]
 pub struct Oracle<Dex>
 where
     Dex: ?Sized,
@@ -43,6 +44,7 @@ impl<Dex> Oracle<Dex> {
     }
 
     #[inline]
+    #[must_use]
     pub fn address(&self) -> &str {
         self.contract.address()
     }

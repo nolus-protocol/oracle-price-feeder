@@ -1,3 +1,5 @@
+use std::{sync::Arc, time::Duration};
+
 use anyhow::{Context as _, Result};
 use cosmrs::{
     proto::{
@@ -9,7 +11,6 @@ use cosmrs::{
     Any, Gas,
 };
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
 use tokio::{
     sync::{mpsc, oneshot},
     time::sleep,
@@ -18,7 +19,8 @@ use tokio::{
 use chain_ops::{node, tx};
 use channel::unbounded;
 use contract::{CheckedContract, GeneralizedOracle};
-use service::task::{NoExpiration, Runnable, RunnableState, TxPackage};
+use service::task::{NoExpiration, Runnable, TxPackage};
+use task::RunnableState;
 
 macro_rules! log {
     ($macro:ident![$self:expr]($($body:tt)+)) => {
