@@ -126,6 +126,8 @@ fn error_handler(
                 );
             },
             Id::PriceFetcher { protocol: name } => {
+                tracing::info!(%name, "Restarting price fetcher");
+
                 state =
                     spawn_price_fetcher(task_set, state, name, &transaction_tx)
                         .await
@@ -237,6 +239,8 @@ async fn spawn_price_fetcher(
     name: Arc<str>,
     transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
 ) -> Result<State> {
+    tracing::info!(%name, "Price fetcher is starting...");
+
     let PriceFetcherState {
         mut admin_contract,
         dex_node_clients,

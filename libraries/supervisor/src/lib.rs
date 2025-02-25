@@ -83,7 +83,11 @@ where
 }
 
 fn log_errors(result: Result<Result<()>, JoinError>) -> Result<(), ()> {
-    result.map_err(drop).and_then(|result| result.map_err(drop))
+    result.map_err(drop).and_then(|result| {
+        result.map_err(|error| {
+            tracing::error!(?error, "Task joined with an error!");
+        })
+    })
 }
 
 async fn join_or_receive<Id, Receiver>(
