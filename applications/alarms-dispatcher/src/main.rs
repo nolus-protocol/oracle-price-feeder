@@ -17,9 +17,7 @@ use ::task::RunnableState;
 use task_set::TaskSet;
 use tx::{NoExpiration, TxPackage};
 
-use crate::task::alarms_generator::{
-    AlarmsGenerator, Configuration, PriceAlarms, TimeAlarms,
-};
+use self::task::{AlarmsGenerator, Configuration, PriceAlarms, TimeAlarms};
 
 mod task;
 
