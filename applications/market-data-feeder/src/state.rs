@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use anyhow::Result;
 use tokio::sync::Mutex;
 
 use channel::{bounded, unbounded};
@@ -21,22 +22,34 @@ impl State {
         service: Service,
         transaction_rx: unbounded::Receiver<TxPackage<TimeBasedExpiration>>,
         action_tx: bounded::Sender<Command>,
-    ) -> State {
+    ) -> Result<State> {
         let signer_address: Arc<str> = service.signer.address().into();
 
-        let balance_reporter = balance_reporter::State {
-            query_bank: service.node_client.clone().query_bank(),
-            address: signer_address.clone(),
-            denom: service.signer.fee_token().into(),
-            idle_duration: service.idle_duration,
+        let balance_reporter = {
+            let balance_reporter::Environment { idle_duration } =
+                balance_reporter::Environment::read_from_env()?;
+
+            balance_reporter::State {
+                query_bank: service.node_client.clone().query_bank(),
+                address: signer_address.clone(),
+                denom: service.signer.fee_token().into(),
+                idle_duration,
+            }
         };
 
-        let broadcaster = broadcaster::State {
-            broadcast_tx: service.node_client.clone().broadcast_tx(),
-            signer: Arc::new(Mutex::new(service.signer)),
-            transaction_rx: Arc::new(Mutex::new(transaction_rx)),
-            delay_duration: service.broadcast_delay_duration,
-            retry_delay_duration: service.broadcast_retry_delay_duration,
+        let broadcaster = {
+            let broadcaster::Environment {
+                delay_duration,
+                retry_delay_duration,
+            } = broadcaster::Environment::read_from_env()?;
+
+            broadcaster::State {
+                broadcast_tx: service.node_client.clone().broadcast_tx(),
+                signer: Arc::new(Mutex::new(service.signer)),
+                transaction_rx: Arc::new(Mutex::new(transaction_rx)),
+                delay_duration,
+                retry_delay_duration,
+            }
         };
 
         let protocol_watcher = protocol_watcher::State {
@@ -54,12 +67,12 @@ impl State {
             timeout_duration: service.idle_duration,
         };
 
-        State {
+        Ok(State {
             balance_reporter,
             broadcaster,
             protocol_watcher,
             price_fetcher,
-        }
+        })
     }
 
     #[inline]

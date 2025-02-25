@@ -1,16 +1,26 @@
 use std::{
     env::{self, VarError},
+    ffi::OsString,
     fs::{create_dir, File},
     io::{stdout, Write},
     path::Path,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context as _, Result};
 use chrono::{Datelike, Timelike, Utc};
+use environment::ReadFromVar;
 use tracing::Level;
 use tracing_subscriber::fmt::{fmt, writer::MakeWriterExt, MakeWriter};
 
-pub fn init<T>(logs_directory: T) -> Result<()>
+#[inline]
+pub fn init() -> Result<()> {
+    init_in(
+        OsString::read_from_var("LOGS_DIRECTORY")
+            .context("Failed to fetch log storing directory!")?,
+    )
+}
+
+pub fn init_in<T>(logs_directory: T) -> Result<()>
 where
     T: AsRef<Path>,
 {

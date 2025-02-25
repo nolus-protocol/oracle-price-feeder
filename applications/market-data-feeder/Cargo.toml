@@ -13,6 +13,7 @@ contract.workspace = true
 defer.workspace = true
 dex.workspace = true
 environment.workspace = true
+log.workspace = true
 protocol-watcher.workspace = true
 oracle.workspace = true
 service.workspace = true

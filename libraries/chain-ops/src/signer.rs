@@ -221,9 +221,10 @@ impl GasAndFeeConfiguration {
 }
 
 impl ReadFromVar for GasAndFeeConfiguration {
-    fn read_from_var<S: Borrow<str> + Into<String>>(
-        variable: S,
-    ) -> Result<Self> {
+    fn read_from_var<S>(variable: S) -> Result<Self>
+    where
+        S: Borrow<str> + Into<String>,
+    {
         let mut variable = variable.into();
 
         if !variable.is_empty() {

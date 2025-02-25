@@ -63,7 +63,9 @@ LABEL "profile"="${profile:?}"
 
 COPY --chown="0":"0" --chmod="0555" "." "/code/"
 
-RUN "cargo" \
+RUN --mount=type=cache,target="/usr/local/cargo/registry" \
+    --mount=type=cache,target="/build-output-cached/" \
+    "cargo" \
     "rustc" \
     "--bin" "${package:?}" \
     "--locked" \
@@ -71,9 +73,18 @@ RUN "cargo" \
     "--package" "${package:?}" \
     "--profile" "${profile:?}" \
     "--target" "x86_64-unknown-linux-gnu" \
-    "--target-dir" "/build-output/" \
+    "--target-dir" "/build-output-cached/" \
     "--" \
     "-C" "target-feature=+crt-static"
+
+RUN --mount=type=cache,target="/build-output-cached/" \
+    [ \
+      "cp", \
+        "-R", \
+        "/build-output-cached/", \
+        "/build-output/" \
+    ]
+
 
 FROM ${package}-base AS service
 

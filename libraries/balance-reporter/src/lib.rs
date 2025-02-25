@@ -1,10 +1,27 @@
 use std::{future::Future, sync::Arc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tokio::time::sleep;
 
 use chain_ops::node::QueryBank;
+use environment::ReadFromVar;
 use task::RunnableState;
+
+pub struct Environment {
+    pub idle_duration: Duration,
+}
+
+impl Environment {
+    pub fn read_from_env() -> Result<Self> {
+        u64::read_from_var("BALANCE_REPORTER_IDLE_DURATION_SECONDS").map(
+            |balance_reporter_idle_duration_seconds| Self {
+                idle_duration: Duration::from_secs(
+                    balance_reporter_idle_duration_seconds,
+                ),
+            },
+        )
+    }
+}
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -46,7 +63,8 @@ impl State {
             loop {
                 let amount = query_bank
                     .balance(address.to_string(), denom.to_string())
-                    .await?
+                    .await
+                    .context("Failed to run address balance query!")?
                     .to_string();
 
                 log_span!(info_span!("Balance Report") {

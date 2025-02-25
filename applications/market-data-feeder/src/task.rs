@@ -71,20 +71,25 @@ where
     P: Dex<ProviderTypeDescriptor: Display>,
 {
     pub async fn run(mut self, state: RunnableState) -> Result<()> {
-        let mut query_messages =
-            self.provider.price_query_messages_with_associated_data(
+        let mut query_messages = self
+            .provider
+            .price_query_messages_with_associated_data(
                 self.oracle.currency_pairs().iter().map(
                     |(pair, associated_data)| (pair.clone(), associated_data),
                 ),
                 self.oracle.currencies(),
-            )?;
+            )
+            .context("Failed to construct price query messages!")?;
 
         let mut queries_task_set = TaskSet::new();
 
         let mut price_collection_buffer =
             Vec::with_capacity(query_messages.len());
 
-        let mut dex_block_height = self.get_dex_block_height().await?;
+        let mut dex_block_height = self
+            .get_dex_block_height()
+            .await
+            .context("Failed to fetch DEX node's block height!")?;
 
         if matches!(state, RunnableState::New) {
             self.spawn_query_tasks(
@@ -95,7 +100,11 @@ where
             .await
             .context("Failed to spawn price querying tasks!")?;
 
-            self.initial_fetch_and_print(&mut queries_task_set).await?;
+            self.initial_fetch_and_print(&mut queries_task_set)
+                .await
+                .context(
+                    "Failed to fetch and print prices in initialization phase!",
+                )?;
         }
 
         let mut fetch_delivered_set =
@@ -123,14 +132,14 @@ where
 
                     if queries_task_set.is_empty()
                         && !price_collection_buffer.is_empty() {
-                        let _: AbortHandle = self.send_for_broadcast(
+                        let feedback_response_rx = self.send_for_broadcast(
                             &price_collection_buffer,
                             fallback_gas,
-                        )
-                        .map(|feedback_response_rx| {
-                            self.fetch_delivered(feedback_response_rx)
-                        })
-                        .map(|future| fetch_delivered_set.spawn(future))?;
+                        ).context("Failed to send prices for broadcast!")?;
+
+                        let _: AbortHandle = fetch_delivered_set.spawn(
+                            self.fetch_delivered(feedback_response_rx),
+                        );
 
                         price_collection_buffer.clear();
                     }
@@ -145,17 +154,19 @@ where
                     fallback_gas = self.handle_fetch_delivered_result(
                         fallback_gas,
                         result,
-                    )?;
+                    )
+                    .context("Failed to process delivered transaction result!")?;
                 },
                 _ = next_feed_interval.tick(),
                 if queries_task_set.is_empty() => {
-                    let new_block_height = self.get_dex_block_height().await?;
+                    let new_block_height = self.get_dex_block_height().await
+                    .context("Failed to fetch DEX node's block height")?;
 
                     if dex_block_height >= new_block_height {
                         log_with_context!(error![self.protocol, P](
                             last_recorded = dex_block_height,
                             latest_reported = new_block_height,
-                            "Dex node's latest block height didn't increment!",
+                            "DEX node's latest block height didn't increment!",
                         ));
 
                         continue;
@@ -179,11 +190,18 @@ where
         let mut query_tendermint =
             self.dex_node_client.clone().query_tendermint();
 
-        if query_tendermint.syncing().await? {
-            bail!("Dex node reported in with syncing status!");
+        if query_tendermint
+            .syncing()
+            .await
+            .context("Failed to fetch DEX node's syncing status!")?
+        {
+            bail!("DEX node reported in with syncing status!");
         }
 
-        query_tendermint.get_latest_block().await
+        query_tendermint
+            .get_latest_block()
+            .await
+            .context("Failed to fetch DEX node's block height!")
     }
 
     async fn initial_fetch_and_print(
@@ -473,7 +491,7 @@ where
                     fallback_gas = self.hard_gas_limit;
                 }
             },
-            Ok(None) => {},
+            Ok(None) => { /* TODO */ },
             Err(error) => {
                 log_with_context!(error![self.protocol, P](
                     ?error,
@@ -497,15 +515,17 @@ where
             .await
             .context("Failed to update currencies and currency pairs")?
         {
-            *query_messages =
-                self.provider.price_query_messages_with_associated_data(
+            *query_messages = self
+                .provider
+                .price_query_messages_with_associated_data(
                     self.oracle.currency_pairs().iter().map(
                         |(currency_pair, associated_data)| {
                             (currency_pair.clone(), associated_data)
                         },
                     ),
                     self.oracle.currencies(),
-                )?;
+                )
+                .context("Failed to construct price query messages!")?;
 
             let additional_capacity = query_messages
                 .len()

@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, env, num::NonZero};
+use std::{borrow::Borrow, env, ffi::OsString, num::NonZero};
 
 use anyhow::{Context as _, Result};
 
@@ -16,7 +16,20 @@ impl ReadFromVar for String {
         let variable = variable.borrow();
 
         env::var(variable).with_context(|| {
-            format!(r#"Failed to read environment variable "{variable}"!"#)
+            format!("Failed to read environment variable {variable:?}!")
+        })
+    }
+}
+
+impl ReadFromVar for OsString {
+    fn read_from_var<S>(variable: S) -> Result<Self>
+    where
+        S: Borrow<str> + Into<String>,
+    {
+        let variable = variable.borrow();
+
+        env::var_os(variable).with_context(|| {
+            format!("Failed to read environment variable {variable:?}!")
         })
     }
 }
@@ -42,9 +55,9 @@ macro_rules! impl_for_parseable {
                         value.parse()
                             .context(
                                 ::core::concat!(
-                                    r#"Failed to parse ""#,
+                                    "Failed to parse \"",
                                     ::core::stringify!($type),
-                                    r#""!"#,
+                                    "\"!",
                                 ),
                             )
                     })

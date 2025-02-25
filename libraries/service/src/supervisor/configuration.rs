@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{Context as _, Error, Result};
+use anyhow::{Context as _, Result};
 use zeroize::Zeroizing;
 
 use chain_ops::{
@@ -10,33 +10,6 @@ use chain_ops::{
 use contract::{Address, Admin, CheckedContract, UncheckedContract};
 use environment::ReadFromVar as _;
 
-use crate::task::application_defined;
-
-#[must_use]
-pub struct Configuration<Id>
-where
-    Id: application_defined::Id,
-{
-    pub(super) service_configuration: Id::ServiceConfiguration,
-    pub(super) task_creation_context: Id::TaskCreationContext,
-}
-
-impl<Id> Configuration<Id>
-where
-    Id: application_defined::Id,
-{
-    #[inline]
-    pub fn new(
-        service_configuration: Id::ServiceConfiguration,
-        task_creation_context: Id::TaskCreationContext,
-    ) -> Self {
-        Self {
-            service_configuration,
-            task_creation_context,
-        }
-    }
-}
-
 #[must_use]
 pub struct Service {
     pub node_client: node::Client,
@@ -44,9 +17,6 @@ pub struct Service {
     pub admin_contract: CheckedContract<Admin>,
     pub idle_duration: Duration,
     pub timeout_duration: Duration,
-    pub balance_reporter_idle_duration: Duration,
-    pub broadcast_delay_duration: Duration,
-    pub broadcast_retry_delay_duration: Duration,
 }
 
 impl Service {
@@ -68,19 +38,12 @@ impl Service {
             Address::new(Self::read_admin_contract_address()?),
         )
         .check()
-        .await?;
+        .await
+        .context("Failed to connect to admin contract!")?;
 
         let idle_duration = Self::read_idle_duration()?;
 
         let timeout_duration = Self::read_timeout_duration()?;
-
-        let balance_reporter_idle_duration =
-            Self::read_balance_reporter_idle_duration()?;
-
-        let broadcast_delay_duration = Self::read_broadcast_delay_duration()?;
-
-        let broadcast_retry_delay_duration =
-            Self::read_broadcast_retry_delay_duration()?;
 
         Ok(Self {
             node_client,
@@ -88,9 +51,6 @@ impl Service {
             admin_contract,
             idle_duration,
             timeout_duration,
-            balance_reporter_idle_duration,
-            broadcast_delay_duration,
-            broadcast_retry_delay_duration,
         })
     }
 
@@ -114,21 +74,6 @@ impl Service {
     #[must_use]
     pub fn timeout_duration(&self) -> Duration {
         self.timeout_duration
-    }
-
-    #[must_use]
-    pub fn balance_reporter_idle_duration(&self) -> Duration {
-        self.balance_reporter_idle_duration
-    }
-
-    #[must_use]
-    pub fn broadcast_delay_duration(&self) -> Duration {
-        self.broadcast_delay_duration
-    }
-
-    #[must_use]
-    pub fn broadcast_retry_delay_duration(&self) -> Duration {
-        self.broadcast_retry_delay_duration
     }
 
     fn read_node_grpc_uri() -> Result<String> {
@@ -172,23 +117,5 @@ impl Service {
         u64::read_from_var("TIMEOUT_DURATION_SECONDS")
             .map(Duration::from_secs)
             .context("Failed to read timeout period duration!")
-    }
-
-    fn read_balance_reporter_idle_duration() -> Result<Duration, Error> {
-        u64::read_from_var("BALANCE_REPORTER_IDLE_DURATION_SECONDS")
-            .map(Duration::from_secs)
-            .context("Failed to read between balance reporter idle delay period duration!")
-    }
-
-    fn read_broadcast_delay_duration() -> Result<Duration, Error> {
-        u64::read_from_var("BROADCAST_DELAY_DURATION_SECONDS")
-            .map(Duration::from_secs)
-            .context("Failed to read between broadcast delay period duration!")
-    }
-
-    fn read_broadcast_retry_delay_duration() -> Result<Duration, Error> {
-        u64::read_from_var("BROADCAST_RETRY_DELAY_DURATION_MILLISECONDS")
-            .map(Duration::from_millis)
-            .context("Failed to read between broadcast retries delay period duration!")
     }
 }

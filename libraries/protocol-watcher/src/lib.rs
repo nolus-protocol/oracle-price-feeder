@@ -1,6 +1,6 @@
 use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
 
-use anyhow::{Context as _, Result};
+use anyhow::{bail, Context as _, Result};
 use tokio::time::sleep;
 
 use channel::{bounded, Sender};
@@ -35,15 +35,54 @@ pub struct State {
 impl State {
     pub fn run(
         self,
-        runnable_state: RunnableState,
+        _: RunnableState,
     ) -> impl Future<Output = Result<()>> + Sized + use<> {
+        const IDLE_DURATION: Duration = Duration::from_secs(15);
+
         let Self {
-            admin_contract,
+            mut admin_contract,
             action_tx,
         } = self;
 
-        ProtocolWatcher::new(admin_contract, BTreeSet::new(), action_tx)
-            .run(runnable_state)
+        let mut protocol_tasks = BTreeSet::new();
+
+        async move {
+            loop {
+                let active_protocols = admin_contract
+                    .protocols()
+                    .await
+                    .context("Failed to fetch protocols!")?
+                    .into_vec()
+                    .into_iter()
+                    .collect();
+
+                for command in
+                    protocols_diff_commands(&protocol_tasks, &active_protocols)
+                {
+                    match &command {
+                        Command::ProtocolAdded(protocol) => {
+                            log!(info![protocol]("Protocol added."));
+
+                            if !protocol_tasks.insert(protocol.clone()) {
+                                bail!("Protocol already exists!");
+                            }
+                        },
+                        Command::ProtocolRemoved(protocol) => {
+                            log!(info![protocol]("Protocol removed."));
+
+                            _ = protocol_tasks.remove(protocol);
+                        },
+                    }
+
+                    action_tx
+                        .send(command)
+                        .await
+                        .context("Failed to send protocol change command!")?;
+                }
+
+                sleep(IDLE_DURATION).await;
+            }
+        }
     }
 }
 
@@ -80,68 +119,15 @@ where
 {
     async move |task_set, state, command| match command {
         Command::ProtocolAdded(protocol) => {
-            add_protocol(task_set, state, protocol, &tx).await
+            add_protocol(task_set, state, protocol, &tx)
+                .await
+                .context("Failed to add protocol task!")
         },
         Command::ProtocolRemoved(protocol) => {
-            remove_protocol(task_set, state, protocol).await
-        },
-    }
-}
-
-#[must_use]
-struct ProtocolWatcher {
-    admin_contract: CheckedContract<Admin>,
-    protocol_tasks: BTreeSet<Arc<str>>,
-    command_tx: bounded::Sender<Command>,
-}
-
-impl ProtocolWatcher {
-    const fn new(
-        admin_contract: CheckedContract<Admin>,
-        protocol_tasks: BTreeSet<Arc<str>>,
-        command_tx: bounded::Sender<Command>,
-    ) -> Self {
-        Self {
-            admin_contract,
-            protocol_tasks,
-            command_tx,
-        }
-    }
-
-    async fn run(mut self, _: RunnableState) -> Result<()> {
-        const IDLE_DURATION: Duration = Duration::from_secs(15);
-
-        loop {
-            let active_protocols = self
-                .admin_contract
-                .protocols()
+            remove_protocol(task_set, state, protocol)
                 .await
-                .context("Failed to fetch protocols!")?
-                .into_vec()
-                .into_iter()
-                .collect();
-
-            for command in
-                protocols_diff_commands(&self.protocol_tasks, &active_protocols)
-            {
-                match &command {
-                    Command::ProtocolAdded(protocol) => {
-                        log!(info![protocol]("Protocol added."));
-
-                        assert!(self.protocol_tasks.insert(protocol.clone()));
-                    },
-                    Command::ProtocolRemoved(protocol) => {
-                        log!(info![protocol]("Protocol removed."));
-
-                        _ = self.protocol_tasks.remove(protocol);
-                    },
-                }
-
-                self.command_tx.send(command).await?;
-            }
-
-            sleep(IDLE_DURATION).await;
-        }
+                .context("Failed to remove protocol task!")
+        },
     }
 }
 

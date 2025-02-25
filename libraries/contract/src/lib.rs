@@ -31,7 +31,12 @@ pub trait Contract {
             {
                 Compatibility::Compatible => Ok(()),
                 Compatibility::Incompatible => Err(anyhow!(
-                    "Oracle contract has an incompatible version!",
+                    "{contract:?} contract has an incompatible version! \
+                    Minimum compatible version: {compatible_version}. \
+                    Version: {version}.",
+                    contract = Self::NAME,
+                    compatible_version = Self::MINIMUM_COMPATIBLE_VERSION,
+                    version = package_info.version,
                 )),
             }
         } else {
@@ -71,7 +76,7 @@ async fn platform_package(
     address: String,
 ) -> Result<PackageInfo> {
     query_wasm
-        .smart(address, br#"{"platform_package_release"}"#.to_vec())
+        .smart(address, br#"{"platform_package_release":{}}"#.to_vec())
         .await
         .map(|PlatformVersion { code }| code)
 }
@@ -81,7 +86,7 @@ async fn protocol_package(
     address: String,
 ) -> Result<PackageInfo> {
     query_wasm
-        .smart(address, br#"{"protocol_package_release"}"#.to_vec())
+        .smart(address, br#"{"protocol_package_release":{}}"#.to_vec())
         .await
         .map(
             |ProtocolVersion {
@@ -126,23 +131,36 @@ where
             self.address.0.clone(),
         )
         .await
+        .with_context(|| {
+            format!(
+                "Failed to query {contract:?} contract's package information!",
+                contract = Contract::NAME,
+            )
+        })
         .and_then(|package_info| {
-            Contract::check_compatibility(&package_info).map(|()| {
-                let Self {
-                    query_wasm,
-                    address,
-                    _contract: PhantomData {},
-                } = self;
-
-                (
-                    CheckedContract {
+            Contract::check_compatibility(&package_info)
+                .map(|()| {
+                    let Self {
                         query_wasm,
                         address,
-                        _contract: PhantomData,
-                    },
-                    package_info.version,
-                )
-            })
+                        _contract: PhantomData {},
+                    } = self;
+
+                    (
+                        CheckedContract {
+                            query_wasm,
+                            address,
+                            _contract: PhantomData,
+                        },
+                        package_info.version,
+                    )
+                })
+                .with_context(|| {
+                    format!(
+                        "Version compatibility check failed for {contract:?} contract!",
+                        contract = Contract::NAME,
+                    )
+                })
         })
     }
 }
@@ -196,6 +214,12 @@ where
         )
         .await
         .map(|PackageInfo { version, .. }| version)
+        .with_context(|| {
+            format!(
+                "Failed to query {contract:?} contract's version!",
+                contract = Contract::NAME,
+            )
+        })
     }
 
     pub async fn recheck_version(&mut self) -> Result<()> {
@@ -204,7 +228,20 @@ where
             self.address.0.clone(),
         )
         .await
-        .and_then(|package_info| Contract::check_compatibility(&package_info))
+        .with_context(|| {
+            format!(
+                "Failed to query {contract:?} contract's package information!",
+                contract = Contract::NAME,
+            )
+        })
+        .and_then(|package_info| {
+            Contract::check_compatibility(&package_info).with_context(|| {
+                format!(
+                    "Version compatibility check failed for {contract:?} contract!",
+                    contract = Contract::NAME,
+                )
+            })
+        })
     }
 }
 
@@ -236,6 +273,7 @@ impl CheckedContract<Admin> {
         self.query_wasm
             .smart(self.address.0.clone(), QUERY_MSG.to_vec())
             .await
+            .context("Failed to fetch protocols' names!")
     }
 
     pub async fn generalized_protocol(
@@ -281,6 +319,7 @@ impl CheckedContract<Admin> {
                     network,
                 },
             )
+            .context("Failed to fetch protocol, in generalized form!")
     }
 
     pub async fn protocol(&mut self, name: &str) -> Result<Protocol> {
@@ -355,6 +394,7 @@ impl CheckedContract<Admin> {
                     },
                 },
             )
+            .context("Failed to fetch protocol, in specialized form!")
     }
 }
 
@@ -486,9 +526,9 @@ pub struct ProtocolProviderAndContracts<Dex> {
 pub enum Admin {}
 
 impl Contract for Admin {
-    const NAME: &'static str = "admin";
+    const NAME: &'static str = "admin_contract";
 
-    const MINIMUM_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 0, 0);
+    const MINIMUM_COMPATIBLE_VERSION: SemVer = SemVer::new(0, 6, 0);
 
     #[inline]
     fn query_package_info(

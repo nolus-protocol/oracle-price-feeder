@@ -37,7 +37,7 @@ where
     StartupTasksIter::IntoIter: Send,
     StartupTasksIter::Item: application_defined::Id<ServiceConfiguration=configuration::Service> + Unpin,
 {
-    log::init(logs_directory).context("Failed to initialize logging!")?;
+    log::init_in(logs_directory).context("Failed to initialize logging!")?;
 
     let service_configuration =
         configuration::Service::read_from_env()

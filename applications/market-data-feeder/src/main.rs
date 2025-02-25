@@ -4,7 +4,7 @@
 
 use std::{collections::btree_map::BTreeMap, sync::Arc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use tokio::sync::Mutex;
 
 use chain_ops::{
@@ -33,7 +33,11 @@ mod task;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let service = Service::read_from_env().await?;
+    log::init().context("Failed to initialize logging!")?;
+
+    let service = Service::read_from_env()
+        .await
+        .context("Failed to load service configuration!")?;
 
     let (tx, rx) = unbounded::Channel::new();
 
@@ -59,7 +63,7 @@ fn init_tasks(
     bounded::Sender<Command>,
 ) -> Result<State> {
     async move |task_set, action_tx| {
-        let state = State::new(service, transaction_rx, action_tx);
+        let state = State::new(service, transaction_rx, action_tx)?;
 
         task_set.add_handle(
             Id::BalanceReporter,
@@ -124,7 +128,8 @@ fn error_handler(
             Id::PriceFetcher { protocol: name } => {
                 state =
                     spawn_price_fetcher(task_set, state, name, &transaction_tx)
-                        .await?;
+                        .await
+                        .context("Failed to spawn price fetcher task!")?;
             },
         }
 
@@ -166,7 +171,8 @@ impl PriceFetcher {
                 let client = node::Client::connect(&dex_node_grpc_var(
                     provider_network.clone(),
                 ))
-                .await?;
+                .await
+                .context("Failed to connect to node's gRPC endpoint!")?;
 
                 self.dex_node_clients
                     .lock_owned()
@@ -177,7 +183,9 @@ impl PriceFetcher {
             }
         };
 
-        let oracle = ::oracle::Oracle::new(oracle).await?;
+        let oracle = ::oracle::Oracle::new(oracle)
+            .await
+            .context("Failed to connect to oracle contract!")?;
 
         let source = format!(
             "{dex}; Protocol: {name}",
@@ -199,12 +207,15 @@ impl PriceFetcher {
             idle_duration: self.idle_duration,
             timeout_duration: self.timeout_duration,
             hard_gas_limit: self.hard_gas_limit,
-            oracle: Oracle::new(oracle, Duration::from_secs(15)).await?,
+            oracle: Oracle::new(oracle, Duration::from_secs(15))
+                .await
+                .context("Failed to fetch oracle contract data!")?,
             provider,
             transaction_tx: self.transaction_tx,
         }
         .run(RunnableState::New)
         .await
+        .context("Price fetcher task errored!")
     }
 }
 

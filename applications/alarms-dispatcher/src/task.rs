@@ -16,7 +16,6 @@ use tokio::{sync::oneshot, time::sleep};
 use chain_ops::{node::QueryTx, tx};
 use channel::unbounded;
 use contract::{CheckedContract, GeneralizedOracle};
-use service::task::Runnable;
 use task::RunnableState;
 use ::tx::{NoExpiration, TxPackage};
 
@@ -167,7 +166,7 @@ where
         .map_err(Into::into)
     }
 
-    async fn dispatch_alarms(mut self) -> Result<()> {
+    pub async fn run(mut self, _: RunnableState) -> Result<()> {
         let hard_gas_limit = self
             .gas_per_alarm
             .checked_mul(self.alarms_per_message.into())
@@ -307,15 +306,6 @@ where
     }
 }
 
-impl<T> Runnable for AlarmsGenerator<T>
-where
-    T: Alarms,
-{
-    async fn run(self, _: RunnableState) -> Result<()> {
-        self.dispatch_alarms().await
-    }
-}
-
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[repr(transparent)]
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
@@ -346,6 +336,7 @@ pub struct TimeAlarms;
 
 impl Alarms for TimeAlarms {
     const TYPE: &'static str = "Time";
+
     type Contract = contract::TimeAlarms;
 }
 

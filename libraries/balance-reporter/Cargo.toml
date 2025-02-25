@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 chain-ops.workspace = true
+environment.workspace = true
 task.workspace = true
 
 anyhow.workspace = true

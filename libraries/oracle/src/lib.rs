@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use chain_ops::node::Reconnect;
 use contract::{CheckedContract, UncheckedContract};
@@ -26,6 +26,7 @@ where
         contract
             .check()
             .await
+            .context("Failed to check oracle contract's version!")
             .map(|(contract, version)| Self { contract, version })
     }
 }

@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use cosmrs::Gas;
@@ -11,7 +11,7 @@ use contract::{
 };
 use environment::ReadFromVar as _;
 use protocol_watcher::Command;
-use service::{supervisor::configuration::Service, task::Runnable as _};
+use service::supervisor::configuration::Service;
 use supervisor::supervisor;
 use ::task::RunnableState;
 use task_set::TaskSet;
@@ -23,7 +23,11 @@ mod task;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let service = Service::read_from_env().await?;
+    log::init().context("Failed to initialize logging!")?;
+
+    let service = Service::read_from_env()
+        .await
+        .context("Failed to load service configuration!")?;
 
     let (tx, rx) = unbounded::Channel::new();
 
@@ -101,7 +105,13 @@ async fn add_price_alarm_dispatcher(
     let GeneralizedProtocol {
         contracts: GeneralizedProtocolContracts { oracle },
         ..
-    } = state.admin_contract.generalized_protocol(&name).await?;
+    } = state
+        .admin_contract
+        .generalized_protocol(&name)
+        .await
+        .with_context(|| {
+            format!("Failed to fetch {name:?} protocol, in generalized form!")
+        })?;
 
     task_set.add_handle(
         Id::PriceAlarms {
@@ -110,9 +120,14 @@ async fn add_price_alarm_dispatcher(
         tokio::spawn(
             AlarmsGenerator::new_price_alarms(
                 state.price_alarms.clone(),
-                oracle.check().await?.0,
+                oracle
+                    .check()
+                    .await
+                    .context("Failed to connect to oracle contract!")?
+                    .0,
                 PriceAlarms { protocol: name },
-            )?
+            )
+            .context("Failed to construct price alarms generator!")?
             .run(RunnableState::New),
         ),
     );
@@ -135,7 +150,11 @@ fn error_handler(
     _: unbounded::Sender<TxPackage<NoExpiration>>,
 ) -> impl AsyncFnMut(&mut TaskSet<Id, Result<()>>, State, Id) -> Result<State> + use<>
 {
-    async move |_, state, _| Ok(state)
+    async move |_, state, id| {
+        tracing::info!("{id:?}");
+
+        Ok(state)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -169,29 +188,73 @@ impl State {
             price_alarms_per_message,
         }: ApplicationDefinedContext,
     ) -> Result<State> {
-        let balance_reporter = balance_reporter::State {
-            query_bank: service.node_client.clone().query_bank(),
-            address: service.signer.address().into(),
-            denom: service.signer.fee_token().into(),
-            idle_duration: Duration::default(),
-        };
+        let Platform { time_alarms } = service
+            .admin_contract
+            .platform()
+            .await
+            .context("Failed to fetch platform contracts!")?;
 
-        let broadcaster = broadcaster::State {
-            broadcast_tx: service.node_client.clone().broadcast_tx(),
-            signer: Arc::new(Mutex::new(service.signer)),
-            transaction_rx: Arc::new(Mutex::new(transaction_rx)),
-            delay_duration: service.broadcast_delay_duration,
-            retry_delay_duration: service.broadcast_retry_delay_duration,
-        };
-
-        let Platform { time_alarms } =
-            service.admin_contract.platform().await?;
-
-        let (time_alarms, _) = time_alarms.check().await?;
+        let (time_alarms, _) = time_alarms
+            .check()
+            .await
+            .context("Failed to connect to time alarms contract!")?;
 
         let protocol_watcher = protocol_watcher::State {
             admin_contract: service.admin_contract.clone(),
             action_tx,
+        };
+
+        let time_alarms = AlarmsGenerator::new_time_alarms(
+            Configuration {
+                transaction_tx: transaction_tx.clone(),
+                sender: service.signer().address().into(),
+                alarms_per_message: time_alarms_per_message,
+                gas_per_alarm: gas_per_time_alarm,
+                idle_duration: service.idle_duration,
+                query_tx: service.node_client.clone().query_tx(),
+                timeout_duration: service.timeout_duration,
+            }
+            .clone(),
+            time_alarms,
+            TimeAlarms {},
+        )
+        .context("Failed to construct time alarms generator!")?;
+
+        let price_alarms = Configuration {
+            transaction_tx,
+            sender: service.signer().address().into(),
+            alarms_per_message: price_alarms_per_message,
+            gas_per_alarm: gas_per_price_alarm,
+            idle_duration: service.idle_duration,
+            query_tx: service.node_client.clone().query_tx(),
+            timeout_duration: service.timeout_duration,
+        };
+
+        let balance_reporter = {
+            let balance_reporter::Environment { idle_duration } =
+                balance_reporter::Environment::read_from_env()?;
+
+            balance_reporter::State {
+                query_bank: service.node_client.clone().query_bank(),
+                address: service.signer.address().into(),
+                denom: service.signer.fee_token().into(),
+                idle_duration,
+            }
+        };
+
+        let broadcaster = {
+            let broadcaster::Environment {
+                delay_duration,
+                retry_delay_duration,
+            } = broadcaster::Environment::read_from_env()?;
+
+            broadcaster::State {
+                broadcast_tx: service.node_client.broadcast_tx(),
+                signer: Arc::new(Mutex::new(service.signer)),
+                transaction_rx: Arc::new(Mutex::new(transaction_rx)),
+                delay_duration,
+                retry_delay_duration,
+            }
         };
 
         Ok(State {
@@ -199,29 +262,8 @@ impl State {
             broadcaster,
             protocol_watcher,
             admin_contract: service.admin_contract,
-            time_alarms: AlarmsGenerator::new_time_alarms(
-                Configuration {
-                    transaction_tx: transaction_tx.clone(),
-                    sender: String::new(),
-                    alarms_per_message: time_alarms_per_message,
-                    gas_per_alarm: gas_per_time_alarm,
-                    idle_duration: service.idle_duration,
-                    query_tx: service.node_client.clone().query_tx(),
-                    timeout_duration: service.timeout_duration,
-                }
-                .clone(),
-                time_alarms,
-                TimeAlarms {},
-            )?,
-            price_alarms: Configuration {
-                transaction_tx,
-                sender: String::new(),
-                alarms_per_message: price_alarms_per_message,
-                gas_per_alarm: gas_per_price_alarm,
-                idle_duration: service.idle_duration,
-                query_tx: service.node_client.query_tx(),
-                timeout_duration: service.timeout_duration,
-            },
+            time_alarms,
+            price_alarms,
         })
     }
 }

@@ -7,7 +7,7 @@ use cosmrs::{
     tx::{Body as TxBody, Raw as RawTx},
 };
 use tokio::{
-    sync::{mpsc, Mutex, OwnedMutexGuard},
+    sync::{Mutex, OwnedMutexGuard},
     time::sleep,
 };
 
@@ -16,6 +16,7 @@ use chain_ops::{
     signer::{Gas, Signer},
 };
 use channel::unbounded;
+use environment::ReadFromVar;
 use task::RunnableState;
 use tx::{TxExpiration, TxPackage};
 
@@ -49,6 +50,26 @@ macro_rules! log_broadcast_with_source {
     };
 }
 
+pub struct Environment {
+    pub delay_duration: Duration,
+    pub retry_delay_duration: Duration,
+}
+
+impl Environment {
+    pub fn read_from_env() -> Result<Self> {
+        Ok(Self {
+            delay_duration: ReadFromVar::read_from_var(
+                "BROADCAST_DELAY_DURATION_SECONDS",
+            )
+            .map(Duration::from_secs)?,
+            retry_delay_duration: ReadFromVar::read_from_var(
+                "BROADCAST_RETRY_DELAY_DURATION_MILLISECONDS",
+            )
+            .map(Duration::from_secs)?,
+        })
+    }
+}
+
 #[derive(Clone)]
 #[must_use]
 pub struct State<TxExpiration>
@@ -69,7 +90,7 @@ where
 {
     pub fn run(
         self,
-        runnable_state: RunnableState,
+        _: RunnableState,
     ) -> impl Future<Output = Result<()>> + Sized + use<TxExpiration> {
         let Self {
             broadcast_tx,
@@ -80,52 +101,49 @@ where
         } = self;
 
         async move {
-            Broadcast::new(
+            let mut transaction_rx = transaction_rx.lock_owned().await;
+
+            let mut broadcast = Broadcast::new(
                 broadcast_tx,
                 signer.lock_owned().await,
-                transaction_rx.lock_owned().await,
-                delay_duration,
                 retry_delay_duration,
-            )
-            .run(runnable_state)
-            .await
+            );
+
+            loop {
+                let tx_package = transaction_rx
+                    .recv()
+                    .await
+                    .context("Transaction receiving channel closed!")?;
+
+                broadcast
+                    .broadcast_tx(tx_package)
+                    .await
+                    .context("Failed to broadcast transaction!")?;
+
+                sleep(delay_duration).await;
+            }
         }
     }
 }
 
 #[must_use]
-pub struct Broadcast<Expiration>
-where
-    Expiration: Send,
-{
+pub struct Broadcast {
     client: BroadcastTx,
     signer: OwnedMutexGuard<Signer>,
-    transaction_rx:
-        OwnedMutexGuard<mpsc::UnboundedReceiver<TxPackage<Expiration>>>,
-    delay_duration: Duration,
     retry_delay_duration: Duration,
     consecutive_errors: u8,
 }
 
-impl<Expiration> Broadcast<Expiration>
-where
-    Expiration: Send,
-{
+impl Broadcast {
     #[inline]
     pub const fn new(
         client: BroadcastTx,
         signer: OwnedMutexGuard<Signer>,
-        transaction_rx: OwnedMutexGuard<
-            mpsc::UnboundedReceiver<TxPackage<Expiration>>,
-        >,
-        delay_duration: Duration,
         retry_delay_duration: Duration,
     ) -> Self {
         Self {
             client,
             signer,
-            transaction_rx,
-            delay_duration,
             retry_delay_duration,
             consecutive_errors: 0,
         }
@@ -197,11 +215,8 @@ where
     }
 }
 
-impl<Expiration> Broadcast<Expiration>
-where
-    Expiration: TxExpiration,
-{
-    async fn broadcast_tx(
+impl Broadcast {
+    async fn broadcast_tx<Expiration>(
         &mut self,
         TxPackage {
             ref tx_body,
@@ -211,7 +226,10 @@ where
             feedback_sender,
             expiration,
         }: TxPackage<Expiration>,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        Expiration: TxExpiration,
+    {
         const SIGNATURE_VERIFICATION_ERROR_CODE: u32 = 32;
 
         'broadcast_loop: loop {
@@ -278,12 +296,15 @@ where
         }
     }
 
-    async fn broadcast_with_expiration(
+    async fn broadcast_with_expiration<Expiration>(
         &mut self,
         source: &Arc<str>,
         expiration: Expiration,
         raw_tx: RawTx,
-    ) -> Option<Result<TxResponse>> {
+    ) -> Option<Result<TxResponse>>
+    where
+        Expiration: TxExpiration,
+    {
         Some(
             match expiration.with_expiration(self.client.sync(raw_tx)).await {
                 Ok(result) => result,
@@ -298,21 +319,5 @@ where
                 },
             },
         )
-    }
-
-    async fn run(mut self, _: RunnableState) -> Result<()> {
-        loop {
-            let tx_package = self
-                .transaction_rx
-                .recv()
-                .await
-                .context("Transaction receiving channel closed!")?;
-
-            self.broadcast_tx(tx_package)
-                .await
-                .context("Failed to broadcast transaction!")?;
-
-            sleep(self.delay_duration).await;
-        }
     }
 }
