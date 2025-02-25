@@ -25,144 +25,11 @@ use ::task::RunnableState;
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
-use self::{oracle::Oracle, task::TaskWithProvider};
+use self::{oracle::Oracle, state::State, task::TaskWithProvider};
 
 pub mod oracle;
+mod state;
 pub mod task;
-
-fn init_tasks(
-    service: Service,
-    rx: unbounded::Receiver<TxPackage<TimeBasedExpiration>>,
-) -> impl for<'r> AsyncFnOnce(
-    &'r mut TaskSet<Id, Result<()>>,
-    bounded::Sender<Command>,
-) -> Result<State> {
-    async move |task_set, action_tx| {
-        let signer_address: Arc<str> = service.signer.address().into();
-
-        let balance_reporter = balance_reporter::State {
-            query_bank: service.node_client.clone().query_bank(),
-            address: signer_address.clone(),
-            denom: service.signer.fee_token().into(),
-            idle_duration: service.idle_duration,
-        };
-
-        let broadcaster = broadcaster::State {
-            broadcast_tx: service.node_client.clone().broadcast_tx(),
-            signer: Arc::new(Mutex::new(service.signer)),
-            transaction_rx: Arc::new(Mutex::new(rx)),
-            delay_duration: service.broadcast_delay_duration,
-            retry_delay_duration: service.broadcast_retry_delay_duration,
-        };
-
-        let protocol_watcher = protocol_watcher::State {
-            admin_contract: service.admin_contract.clone(),
-            action_tx,
-        };
-
-        let price_fetcher = PriceFetcherState {
-            admin_contract: service.admin_contract,
-            dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
-            idle_duration: service.idle_duration,
-            signer_address,
-            hard_gas_limit: 0,
-            query_tx: service.node_client.clone().query_tx(),
-            timeout_duration: service.idle_duration,
-        };
-
-        task_set.add_handle(
-            Id::BalanceReporter,
-            tokio::spawn(balance_reporter.clone().run(RunnableState::New)),
-        );
-
-        task_set.add_handle(
-            Id::Broadcaster,
-            tokio::spawn(broadcaster.clone().run(RunnableState::New)),
-        );
-
-        task_set.add_handle(
-            Id::ProtocolWatcher,
-            tokio::spawn(protocol_watcher.clone().run(RunnableState::New)),
-        );
-
-        Ok(State {
-            balance_reporter,
-            broadcaster,
-            protocol_watcher,
-            price_fetcher,
-        })
-    }
-}
-
-#[derive(Clone)]
-struct PriceFetcherState {
-    pub admin_contract: CheckedContract<Admin>,
-    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
-    pub idle_duration: Duration,
-    pub signer_address: Arc<str>,
-    pub hard_gas_limit: Gas,
-    pub query_tx: QueryTx,
-    pub timeout_duration: Duration,
-}
-
-async fn spawn_price_fetcher(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    state: State,
-    name: Arc<str>,
-    transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
-) -> Result<State> {
-    let PriceFetcherState {
-        mut admin_contract,
-        dex_node_clients,
-        idle_duration,
-        signer_address,
-        hard_gas_limit,
-        query_tx,
-        timeout_duration,
-    } = state.price_fetcher.clone();
-
-    let Protocol {
-        network,
-        provider_and_contracts,
-    } = admin_contract.protocol(&name).await?;
-
-    let price_fetcher = PriceFetcher {
-        name: name.clone(),
-        idle_duration,
-        transaction_tx: transaction_tx.clone(),
-        signer_address: signer_address.clone(),
-        hard_gas_limit,
-        query_tx,
-        dex_node_clients: dex_node_clients.clone(),
-        timeout_duration,
-    };
-
-    task_set.add_handle(
-        Id::PriceFetcher { protocol: name },
-        match provider_and_contracts {
-            ProtocolDex::Astroport(ProtocolProviderAndContracts {
-                provider,
-                oracle,
-            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
-            ProtocolDex::Osmosis(ProtocolProviderAndContracts {
-                provider,
-                oracle,
-            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
-        },
-    );
-
-    Ok(state)
-}
-
-async fn remove_price_fetcher(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    state: State,
-    protocol: Arc<str>,
-) -> Result<State> {
-    task_set.abort(&Id::PriceFetcher { protocol });
-
-    Ok(state)
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -172,60 +39,97 @@ async fn main() -> Result<()> {
 
     new_supervisor::<_, _, bounded::Channel<_>, _, _, _>(
         init_tasks(service, rx),
-        protocol_watcher::protocol_watcher_action_handler(
+        protocol_watcher::action_handler(
             tx.clone(),
             spawn_price_fetcher,
             remove_price_fetcher,
         ),
-        async move |task_set: &mut TaskSet<Id, Result<()>>,
-                    mut state: State,
-                    id: Id|
-                    -> Result<State> {
-            match id {
-                Id::BalanceReporter => {
-                    task_set.add_handle(
-                        id,
-                        tokio::spawn(
-                            state
-                                .balance_reporter
-                                .clone()
-                                .run(RunnableState::Restart),
-                        ),
-                    );
-                },
-                Id::Broadcaster => {
-                    task_set.add_handle(
-                        id,
-                        tokio::spawn(
-                            state
-                                .broadcaster
-                                .clone()
-                                .run(RunnableState::Restart),
-                        ),
-                    );
-                },
-                Id::ProtocolWatcher => {
-                    task_set.add_handle(
-                        id,
-                        tokio::spawn(
-                            state
-                                .protocol_watcher
-                                .clone()
-                                .run(RunnableState::Restart),
-                        ),
-                    );
-                },
-                Id::PriceFetcher { protocol: name } => {
-                    state =
-                        spawn_price_fetcher(task_set, state, name, &tx).await?;
-                },
-            }
-
-            Ok(state)
-        },
+        error_handler(tx),
     )
     .await
     .map(drop)
+}
+
+#[inline]
+fn init_tasks(
+    service: Service,
+    transaction_rx: unbounded::Receiver<TxPackage<TimeBasedExpiration>>,
+) -> impl for<'r> AsyncFnOnce(
+    &'r mut TaskSet<Id, Result<()>>,
+    bounded::Sender<Command>,
+) -> Result<State> {
+    async move |task_set, action_tx| {
+        let state = State::new(service, transaction_rx, action_tx);
+
+        task_set.add_handle(
+            Id::BalanceReporter,
+            tokio::spawn(
+                state.balance_reporter().clone().run(RunnableState::New),
+            ),
+        );
+
+        task_set.add_handle(
+            Id::Broadcaster,
+            tokio::spawn(state.broadcaster().clone().run(RunnableState::New)),
+        );
+
+        task_set.add_handle(
+            Id::ProtocolWatcher,
+            tokio::spawn(
+                state.protocol_watcher().clone().run(RunnableState::New),
+            ),
+        );
+
+        Ok(state)
+    }
+}
+
+#[inline]
+fn error_handler(
+    transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+) -> impl AsyncFnMut(&mut TaskSet<Id, Result<()>>, State, Id) -> Result<State> + use<>
+{
+    async move |task_set, mut state, id| -> Result<State> {
+        match id {
+            Id::BalanceReporter => {
+                task_set.add_handle(
+                    id,
+                    tokio::spawn(
+                        state
+                            .balance_reporter()
+                            .clone()
+                            .run(RunnableState::Restart),
+                    ),
+                );
+            },
+            Id::Broadcaster => {
+                task_set.add_handle(
+                    id,
+                    tokio::spawn(
+                        state.broadcaster().clone().run(RunnableState::Restart),
+                    ),
+                );
+            },
+            Id::ProtocolWatcher => {
+                task_set.add_handle(
+                    id,
+                    tokio::spawn(
+                        state
+                            .protocol_watcher()
+                            .clone()
+                            .run(RunnableState::Restart),
+                    ),
+                );
+            },
+            Id::PriceFetcher { protocol: name } => {
+                state =
+                    spawn_price_fetcher(task_set, state, name, &transaction_tx)
+                        .await?;
+            },
+        }
+
+        Ok(state)
+    }
 }
 
 pub(crate) struct PriceFetcher {
@@ -304,11 +208,75 @@ impl PriceFetcher {
     }
 }
 
-struct State {
-    balance_reporter: balance_reporter::State,
-    broadcaster: broadcaster::State,
-    protocol_watcher: protocol_watcher::State,
-    price_fetcher: PriceFetcherState,
+#[derive(Clone)]
+#[must_use]
+struct PriceFetcherState {
+    pub admin_contract: CheckedContract<Admin>,
+    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+    pub idle_duration: Duration,
+    pub signer_address: Arc<str>,
+    pub hard_gas_limit: Gas,
+    pub query_tx: QueryTx,
+    pub timeout_duration: Duration,
+}
+
+async fn spawn_price_fetcher(
+    task_set: &mut TaskSet<Id, Result<()>>,
+    state: State,
+    name: Arc<str>,
+    transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+) -> Result<State> {
+    let PriceFetcherState {
+        mut admin_contract,
+        dex_node_clients,
+        idle_duration,
+        signer_address,
+        hard_gas_limit,
+        query_tx,
+        timeout_duration,
+    } = state.price_fetcher().clone();
+
+    let Protocol {
+        network,
+        provider_and_contracts,
+    } = admin_contract.protocol(&name).await?;
+
+    let price_fetcher = PriceFetcher {
+        name: name.clone(),
+        idle_duration,
+        transaction_tx: transaction_tx.clone(),
+        signer_address: signer_address.clone(),
+        hard_gas_limit,
+        query_tx,
+        dex_node_clients: dex_node_clients.clone(),
+        timeout_duration,
+    };
+
+    task_set.add_handle(
+        Id::PriceFetcher { protocol: name },
+        match provider_and_contracts {
+            ProtocolDex::Astroport(ProtocolProviderAndContracts {
+                provider,
+                oracle,
+            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
+            ProtocolDex::Osmosis(ProtocolProviderAndContracts {
+                provider,
+                oracle,
+            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
+        },
+    );
+
+    Ok(state)
+}
+
+async fn remove_price_fetcher(
+    task_set: &mut TaskSet<Id, Result<()>>,
+    state: State,
+    protocol: Arc<str>,
+) -> Result<State> {
+    task_set.abort(&Id::PriceFetcher { protocol });
+
+    Ok(state)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

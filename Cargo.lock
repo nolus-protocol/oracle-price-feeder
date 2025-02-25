@@ -22,17 +22,24 @@ name = "alarms-dispatcher"
 version = "0.66.0"
 dependencies = [
  "anyhow",
+ "balance-reporter",
+ "broadcaster",
  "chain-ops",
  "channel",
  "contract",
  "cosmrs",
+ "defer",
+ "dex",
  "environment",
- "semver",
+ "protocol-watcher",
  "serde",
  "service",
+ "supervisor",
  "task",
+ "task_set",
  "tokio",
  "tracing",
+ "tx",
 ]
 
 [[package]]

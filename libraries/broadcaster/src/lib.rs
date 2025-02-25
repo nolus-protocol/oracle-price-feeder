@@ -17,7 +17,7 @@ use chain_ops::{
 };
 use channel::unbounded;
 use task::RunnableState;
-use tx::{TimeBasedExpiration, TxExpiration, TxPackage};
+use tx::{TxExpiration, TxPackage};
 
 macro_rules! log_simulation {
     ($macro:ident![$source:expr]($($body:tt)+)) => {
@@ -50,20 +50,27 @@ macro_rules! log_broadcast_with_source {
 }
 
 #[derive(Clone)]
-pub struct State {
+#[must_use]
+pub struct State<TxExpiration>
+where
+    TxExpiration: Send,
+{
     pub broadcast_tx: BroadcastTx,
     pub signer: Arc<Mutex<Signer>>,
     pub transaction_rx:
-        Arc<Mutex<unbounded::Receiver<TxPackage<TimeBasedExpiration>>>>,
+        Arc<Mutex<unbounded::Receiver<TxPackage<TxExpiration>>>>,
     pub delay_duration: Duration,
     pub retry_delay_duration: Duration,
 }
 
-impl State {
+impl<TxExpiration> State<TxExpiration>
+where
+    TxExpiration: self::TxExpiration,
+{
     pub fn run(
         self,
         runnable_state: RunnableState,
-    ) -> impl Future<Output = Result<()>> + Sized + use<> {
+    ) -> impl Future<Output = Result<()>> + Sized + use<TxExpiration> {
         let Self {
             broadcast_tx,
             signer,
@@ -89,7 +96,7 @@ impl State {
 #[must_use]
 pub struct Broadcast<Expiration>
 where
-    Expiration: TxExpiration,
+    Expiration: Send,
 {
     client: BroadcastTx,
     signer: OwnedMutexGuard<Signer>,
@@ -102,7 +109,7 @@ where
 
 impl<Expiration> Broadcast<Expiration>
 where
-    Expiration: TxExpiration,
+    Expiration: Send,
 {
     #[inline]
     pub const fn new(
@@ -188,7 +195,12 @@ where
             ));
         })
     }
+}
 
+impl<Expiration> Broadcast<Expiration>
+where
+    Expiration: TxExpiration,
+{
     async fn broadcast_tx(
         &mut self,
         TxPackage {

@@ -26,6 +26,7 @@ pub enum Command {
 }
 
 #[derive(Clone)]
+#[must_use]
 pub struct State {
     pub admin_contract: CheckedContract<Admin>,
     pub action_tx: bounded::Sender<Command>,
@@ -46,7 +47,8 @@ impl State {
     }
 }
 
-pub fn protocol_watcher_action_handler<
+#[inline]
+pub fn action_handler<
     Id,
     State,
     TxSender,

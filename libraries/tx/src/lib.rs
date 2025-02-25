@@ -11,10 +11,7 @@ use tokio::{
 
 use chain_ops::signer::Gas;
 
-pub struct TxPackage<Expiration>
-where
-    Expiration: TxExpiration,
-{
+pub struct TxPackage<Expiration> {
     pub tx_body: TxBody,
     pub source: Arc<str>,
     pub hard_gas_limit: Gas,

@@ -11,16 +11,14 @@ use cosmrs::{
     Any, Gas,
 };
 use serde::{Deserialize, Serialize};
-use tokio::{
-    sync::{mpsc, oneshot},
-    time::sleep,
-};
+use tokio::{sync::oneshot, time::sleep};
 
-use chain_ops::{node, tx};
+use chain_ops::{node::QueryTx, tx};
 use channel::unbounded;
 use contract::{CheckedContract, GeneralizedOracle};
-use service::task::{NoExpiration, Runnable, TxPackage};
+use service::task::Runnable;
 use task::RunnableState;
+use ::tx::{NoExpiration, TxPackage};
 
 macro_rules! log {
     ($macro:ident![$self:expr]($($body:tt)+)) => {
@@ -41,13 +39,14 @@ macro_rules! log_with_hash {
     };
 }
 
+#[derive(Clone)]
 pub struct Configuration {
     pub transaction_tx: unbounded::Sender<TxPackage<NoExpiration>>,
     pub sender: String,
     pub alarms_per_message: u32,
     pub gas_per_alarm: Gas,
     pub idle_duration: Duration,
-    pub query_tx: node::QueryTx,
+    pub query_tx: QueryTx,
     pub timeout_duration: Duration,
 }
 
@@ -57,14 +56,13 @@ pub trait Alarms: Send + Sized + 'static {
     type Contract: Send + ?Sized;
 }
 
-#[derive(Clone)]
 pub struct AlarmsGenerator<T>
 where
     T: Alarms,
 {
     contract: CheckedContract<T::Contract>,
-    query_tx: node::QueryTx,
-    transaction_tx: mpsc::UnboundedSender<TxPackage<NoExpiration>>,
+    query_tx: QueryTx,
+    transaction_tx: unbounded::Sender<TxPackage<NoExpiration>>,
     alarms_per_message: u32,
     gas_per_alarm: Gas,
     idle_duration: Duration,
@@ -72,6 +70,26 @@ where
     tx_body: Arc<TxBody>,
     source: Arc<str>,
     alarms: T,
+}
+
+impl<T> Clone for AlarmsGenerator<T>
+where
+    T: Alarms + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            contract: self.contract.clone(),
+            query_tx: self.query_tx.clone(),
+            transaction_tx: self.transaction_tx.clone(),
+            alarms_per_message: self.alarms_per_message,
+            gas_per_alarm: self.gas_per_alarm,
+            idle_duration: self.idle_duration,
+            timeout_duration: self.timeout_duration,
+            tx_body: self.tx_body.clone(),
+            source: self.source.clone(),
+            alarms: self.alarms.clone(),
+        }
+    }
 }
 
 impl AlarmsGenerator<PriceAlarms> {
@@ -147,11 +165,6 @@ where
             alarms,
         })
         .map_err(Into::into)
-    }
-
-    #[inline]
-    pub(super) const fn alarms(&self) -> &T {
-        &self.alarms
     }
 
     async fn dispatch_alarms(mut self) -> Result<()> {
@@ -313,15 +326,10 @@ pub(crate) struct AlarmsStatusResponse {
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct PriceAlarms {
-    protocol: Arc<str>,
+    pub protocol: Arc<str>,
 }
 
 impl PriceAlarms {
-    #[inline]
-    pub const fn new(protocol: Arc<str>) -> Self {
-        Self { protocol }
-    }
-
     #[inline]
     pub const fn protocol(&self) -> &Arc<str> {
         &self.protocol

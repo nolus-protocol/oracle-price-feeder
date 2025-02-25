@@ -8,13 +8,20 @@ rust-version.workspace = true
 workspace = true
 
 [dependencies]
+balance-reporter.workspace = true
+broadcaster.workspace = true
 chain-ops.workspace = true
 channel.workspace = true
 contract.workspace = true
+defer.workspace = true
+dex.workspace = true
 environment.workspace = true
-semver.workspace = true
+protocol-watcher.workspace = true
 service.workspace = true
+supervisor.workspace = true
 task.workspace = true
+task_set.workspace = true
+tx.workspace = true
 
 anyhow.workspace = true
 cosmrs.workspace = true

@@ -22,6 +22,7 @@ macro_rules! log_span {
 }
 
 #[derive(Clone)]
+#[must_use]
 pub struct State {
     pub query_bank: QueryBank,
     pub address: Arc<str>,
