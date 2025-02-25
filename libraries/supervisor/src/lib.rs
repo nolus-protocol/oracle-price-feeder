@@ -5,20 +5,12 @@ use std::{
 };
 
 use anyhow::Result;
-use tokio::task::{JoinError, JoinHandle};
+use tokio::task::JoinError;
 
 use channel::{Channel, Closed};
 use task_set::TaskSet;
 
-pub struct TaskSetSpawnWrapper<'r, Id>(&'r mut TaskSet<Id, Result<()>>);
-
-impl<Id> TaskSetSpawnWrapper<'_, Id> {
-    pub fn spawn(&mut self, id: Id, handle: JoinHandle<Result<()>>) {
-        self.0.add_handle(id, handle);
-    }
-}
-
-pub async fn new_supervisor<
+pub async fn supervisor<
     Id,
     State,
     ActionsChannel,

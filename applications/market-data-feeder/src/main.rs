@@ -20,16 +20,16 @@ use contract::{
 use dex::{provider, providers::ProviderType};
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
-use supervisor::new_supervisor;
+use supervisor::supervisor;
 use ::task::RunnableState;
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
 use self::{oracle::Oracle, state::State, task::TaskWithProvider};
 
-pub mod oracle;
+mod oracle;
 mod state;
-pub mod task;
+mod task;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
 
     let (tx, rx) = unbounded::Channel::new();
 
-    new_supervisor::<_, _, bounded::Channel<_>, _, _, _>(
+    supervisor::<_, _, bounded::Channel<_>, _, _, _>(
         init_tasks(service, rx),
         protocol_watcher::action_handler(
             tx.clone(),

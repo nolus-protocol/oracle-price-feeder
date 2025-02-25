@@ -12,7 +12,7 @@ use contract::{
 use environment::ReadFromVar as _;
 use protocol_watcher::Command;
 use service::{supervisor::configuration::Service, task::Runnable as _};
-use supervisor::new_supervisor;
+use supervisor::supervisor;
 use ::task::RunnableState;
 use task_set::TaskSet;
 use tx::{NoExpiration, TxPackage};
@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
 
     let (tx, rx) = unbounded::Channel::new();
 
-    new_supervisor::<_, _, bounded::Channel<_>, _, _, _>(
+    supervisor::<_, _, bounded::Channel<_>, _, _, _>(
         init_tasks(
             service,
             tx.clone(),
