@@ -18,6 +18,7 @@ use contract::{
     ProtocolProviderAndContracts, UncheckedContract,
 };
 use dex::{provider, providers::ProviderType};
+use environment::ReadFromVar as _;
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
 use supervisor::supervisor;
@@ -170,9 +171,9 @@ impl PriceFetcher {
             if let Some(client) = client {
                 client
             } else {
-                let client = node::Client::connect(&dex_node_grpc_var(
-                    provider_network.clone(),
-                ))
+                let client = node::Client::connect(&*String::read_from_var(
+                    &dex_node_grpc_var(provider_network.clone()),
+                )?)
                 .await
                 .context("Failed to connect to node's gRPC endpoint!")?;
 
