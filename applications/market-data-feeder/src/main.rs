@@ -171,8 +171,8 @@ impl PriceFetcher {
             if let Some(client) = client {
                 client
             } else {
-                let client = node::Client::connect(&*String::read_from_var(
-                    &dex_node_grpc_var(provider_network.clone()),
+                let client = node::Client::connect(&String::read_from_var(
+                    dex_node_grpc_var(provider_network.clone()),
                 )?)
                 .await
                 .context("Failed to connect to node's gRPC endpoint!")?;
