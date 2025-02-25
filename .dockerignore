@@ -1,6 +1,7 @@
-**/
+**
 
-!.cargo/
-!crates/
+!.cargo/**
+!applications/**
+!libraries/**
 !Cargo.toml
 !Cargo.lock

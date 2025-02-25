@@ -13,7 +13,7 @@ pub struct Oracle<Dex>
 where
     Dex: provider::Dex + ?Sized,
 {
-    oracle: oracle::Oracle<Dex>,
+    inner: oracle::Oracle<Dex>,
     last_update: Instant,
     update_interval: Duration,
     currencies: Currencies,
@@ -43,7 +43,7 @@ where
             .context("Failed to query currency pairs!")?;
 
         Ok(Self {
-            oracle,
+            inner: oracle,
             last_update,
             update_interval,
             currencies,
@@ -69,7 +69,7 @@ where
 
         if update_interval_elapsed {
             let currencies = self
-                .oracle
+                .inner
                 .contract_mut()
                 .query_currencies()
                 .await
@@ -78,7 +78,7 @@ where
             let last_update = Instant::now();
 
             let currency_pairs = self
-                .oracle
+                .inner
                 .contract_mut()
                 .query_currency_pairs()
                 .await
@@ -101,8 +101,6 @@ where
 {
     #[inline]
     fn reconnect(&self) -> impl Future<Output = Result<()>> + Send + '_ {
-        self.oracle.reconnect()
+        self.inner.reconnect()
     }
 }
-
-pub type PoolId = u64;
