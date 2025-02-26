@@ -7,6 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result};
 use tokio::sync::Mutex;
 
+use ::task::{spawn_new, spawn_restarting, Run, RunnableState, Task};
 use chain_ops::{
     node,
     signer::{Gas, Signer},
@@ -20,7 +21,6 @@ use environment::ReadFromVar as _;
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
 use supervisor::supervisor;
-use ::task::{spawn_new, spawn_restarting, Run, RunnableState, Task};
 use task_set::TaskSet;
 use tx::{NoExpiration, TxPackage};
 

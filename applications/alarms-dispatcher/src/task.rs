@@ -13,11 +13,11 @@ use cosmrs::{
 use serde::{Deserialize, Serialize};
 use tokio::{sync::oneshot, time::sleep};
 
+use ::tx::{NoExpiration, TxPackage};
 use chain_ops::{node::QueryTx, signer::Gas, tx};
 use channel::unbounded;
 use contract::{CheckedContract, GeneralizedOracle};
 use task::{Run, RunnableState};
-use ::tx::{NoExpiration, TxPackage};
 
 macro_rules! log {
     ($macro:ident![$self:expr]($($body:tt)+)) => {

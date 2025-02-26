@@ -1,11 +1,11 @@
-use contract::{Admin, CheckedContract};
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use std::collections::BTreeMap;
 use chain_ops::node;
-use std::time::Duration;
-use cosmrs::Gas;
 use chain_ops::node::QueryTx;
+use contract::{Admin, CheckedContract};
+use cosmrs::Gas;
+use std::collections::BTreeMap;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
 
 #[derive(Clone)]
 #[must_use]

@@ -15,6 +15,7 @@ use tokio::{
     time::{sleep, Instant},
 };
 
+use ::task::{spawn_new, spawn_restarting, RunnableState, Task};
 use chain_ops::{
     node::{self, QueryTx},
     signer::Gas,
@@ -29,7 +30,6 @@ use environment::ReadFromVar as _;
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
 use supervisor::supervisor;
-use ::task::{spawn_new, spawn_restarting, RunnableState, Task};
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
