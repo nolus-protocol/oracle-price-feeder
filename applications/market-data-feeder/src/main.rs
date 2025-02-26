@@ -140,17 +140,23 @@ fn error_handler(
 
                         let now = Instant::now();
 
-                        if now.duration_since(replace(instant, now))
+                        *retries = if now.duration_since(replace(instant, now))
                             < Duration::from_secs(5)
                         {
-                            *retries = retries.saturating_sub(1);
-                        }
+                            retries.saturating_sub(1)
+                        } else {
+                            2
+                        };
 
                         *retries == 0
                     },
                 };
 
-                tracing::info!(%name, "Restarting price fetcher");
+                tracing::info!(
+                    protocol = %name,
+                    "Restarting price fetcher{}.",
+                    if delayed { " with delay" } else { "" },
+                );
 
                 state = spawn_price_fetcher(
                     task_set,
@@ -161,6 +167,10 @@ fn error_handler(
                 )
                 .await
                 .context("Failed to spawn price fetcher task!")?;
+
+                task_states.retain(|_, (instant, _)| {
+                    instant.elapsed() < Duration::from_secs(5)
+                });
             },
         }
 
