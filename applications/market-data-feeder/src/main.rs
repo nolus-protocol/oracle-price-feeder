@@ -14,8 +14,7 @@ use chain_ops::{
 };
 use channel::{bounded, unbounded, Channel};
 use contract::{
-    Admin, CheckedContract, Protocol, ProtocolDex,
-    ProtocolProviderAndContracts, UncheckedContract,
+    Protocol, ProtocolDex, ProtocolProviderAndContracts, UncheckedContract,
 };
 use dex::{provider, providers::ProviderType};
 use environment::ReadFromVar as _;
@@ -26,7 +25,11 @@ use ::task::{spawn_new, spawn_restarting, RunnableState, Task};
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
-use self::{oracle::Oracle, state::State, task::TaskWithProvider};
+use self::{
+    oracle::Oracle,
+    state::{price_fetcher, State},
+    task::TaskWithProvider,
+};
 
 mod oracle;
 mod state;
@@ -172,7 +175,7 @@ impl PriceFetcher {
         let source = format!(
             "{dex}; Protocol: {name}",
             dex = Dex::PROVIDER_TYPE,
-            name = self.name
+            name = self.name,
         )
         .into();
 
@@ -201,18 +204,6 @@ impl PriceFetcher {
     }
 }
 
-#[derive(Clone)]
-#[must_use]
-struct PriceFetcherState {
-    pub admin_contract: CheckedContract<Admin>,
-    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
-    pub idle_duration: Duration,
-    pub signer_address: Arc<str>,
-    pub hard_gas_limit: Gas,
-    pub query_tx: QueryTx,
-    pub timeout_duration: Duration,
-}
-
 async fn spawn_price_fetcher(
     task_set: &mut TaskSet<Id, Result<()>>,
     state: State,
@@ -221,7 +212,7 @@ async fn spawn_price_fetcher(
 ) -> Result<State> {
     tracing::info!(%name, "Price fetcher is starting...");
 
-    let PriceFetcherState {
+    let price_fetcher::State {
         mut admin_contract,
         dex_node_clients,
         idle_duration,

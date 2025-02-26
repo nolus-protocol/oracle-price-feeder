@@ -8,13 +8,13 @@ use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
 use tx::{TimeBasedExpiration, TxPackage};
 
-use crate::PriceFetcherState;
+pub mod price_fetcher;
 
-pub(crate) struct State {
+pub struct State {
     balance_reporter: balance_reporter::State,
     broadcaster: broadcaster::State<TimeBasedExpiration>,
     protocol_watcher: protocol_watcher::State,
-    price_fetcher: PriceFetcherState,
+    price_fetcher: price_fetcher::State,
 }
 
 impl State {
@@ -57,7 +57,7 @@ impl State {
             action_tx,
         };
 
-        let price_fetcher = PriceFetcherState {
+        let price_fetcher = price_fetcher::State {
             admin_contract: service.admin_contract,
             dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
             idle_duration: service.idle_duration,
@@ -93,7 +93,7 @@ impl State {
     }
 
     #[inline]
-    pub const fn price_fetcher(&self) -> &PriceFetcherState {
+    pub const fn price_fetcher(&self) -> &price_fetcher::State {
         &self.price_fetcher
     }
 }
