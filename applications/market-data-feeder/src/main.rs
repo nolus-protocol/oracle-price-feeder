@@ -266,12 +266,12 @@ async fn spawn_price_fetcher(
         delayed: bool,
     }
 
-    impl<'r> TaskSpawner<'r> {
+    impl TaskSpawner<'_> {
         fn spawn_with<Dex>(
             self,
             ProtocolProviderAndContracts { provider, oracle }: ProtocolProviderAndContracts<Dex>,
         ) where
-            Dex: provider::Dex,
+            Dex: provider::Dex<ProviderTypeDescriptor = ProviderType>,
         {
             let Self {
                 task_set,
