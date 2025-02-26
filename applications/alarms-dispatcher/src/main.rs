@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use cosmrs::Gas;
 use tokio::sync::Mutex;
 
+use chain_ops::signer::Gas;
 use channel::{bounded, unbounded, Channel as _};
 use contract::{
     Admin, CheckedContract, GeneralizedProtocol, GeneralizedProtocolContracts,

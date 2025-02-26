@@ -8,12 +8,12 @@ use cosmrs::{
     },
     tendermint::{abci::Code as TxCode, block::Height},
     tx::Body as TxBody,
-    Any, Gas,
+    Any as ProtocolAny,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{sync::oneshot, time::sleep};
 
-use chain_ops::{node::QueryTx, tx};
+use chain_ops::{node::QueryTx, signer::Gas, tx};
 use channel::unbounded;
 use contract::{CheckedContract, GeneralizedOracle};
 use task::RunnableState;
@@ -136,7 +136,7 @@ where
         contract: CheckedContract<T::Contract>,
         alarms: T,
     ) -> Result<Self> {
-        Any::from_msg(&MsgExecuteContract {
+        ProtocolAny::from_msg(&MsgExecuteContract {
             sender,
             contract: contract.address().to_string(),
             msg: format!(
