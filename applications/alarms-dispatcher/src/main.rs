@@ -1,3 +1,7 @@
+#![forbid(unsafe_code)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::missing_errors_doc)]
+
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
@@ -66,34 +70,32 @@ fn init_tasks(
     &'r mut TaskSet<Id, Result<()>>,
     bounded::Sender<Command>,
 ) -> Result<State> {
+    macro_rules! add_handles {
+        ($task_set:ident.add_handle({
+            $($id:ident => $state:expr),+ $(,)?
+        })) => {
+            $($task_set.add_handle(
+                Id::$id,
+                tokio::spawn(
+                    $state.clone().run(RunnableState::New),
+                ),
+            );)+
+        };
+    }
+
     async move |task_set, action_tx| {
         let state =
             State::new(service, transaction_tx, transaction_rx, action_tx, a)
                 .await?;
 
-        task_set.add_handle(
-            Id::BalanceReporter,
-            tokio::spawn(
-                state.balance_reporter.clone().run(RunnableState::New),
-            ),
-        );
-
-        task_set.add_handle(
-            Id::Broadcaster,
-            tokio::spawn(state.broadcaster.clone().run(RunnableState::New)),
-        );
-
-        task_set.add_handle(
-            Id::ProtocolWatcher,
-            tokio::spawn(
-                state.protocol_watcher.clone().run(RunnableState::New),
-            ),
-        );
-
-        task_set.add_handle(
-            Id::TimeAlarms,
-            tokio::spawn(state.time_alarms.clone().run(RunnableState::New)),
-        );
+        add_handles! {
+            task_set.add_handle({
+                BalanceReporter => state.balance_reporter,
+                Broadcaster => state.broadcaster,
+                ProtocolWatcher => state.protocol_watcher,
+                TimeAlarms => state.time_alarms,
+            })
+        }
 
         Ok(state)
     }
@@ -212,13 +214,15 @@ enum Id {
     PriceAlarms { protocol: Arc<str> },
 }
 
-struct PriceAlarmsState {
+#[must_use]
+pub struct PriceAlarmsState {
     configuration: Configuration,
     gas_per_alarm: Gas,
     alarms_per_message: u32,
 }
 
-struct State {
+#[must_use]
+pub struct State {
     balance_reporter: balance_reporter::State,
     broadcaster: broadcaster::State<NoExpiration>,
     protocol_watcher: protocol_watcher::State,
@@ -289,6 +293,36 @@ impl State {
                 alarms_per_message: price_alarms_per_message,
             },
         })
+    }
+
+    #[inline]
+    pub const fn balance_reporter(&self) -> &balance_reporter::State {
+        &self.balance_reporter
+    }
+
+    #[inline]
+    pub const fn broadcaster(&self) -> &broadcaster::State<NoExpiration> {
+        &self.broadcaster
+    }
+
+    #[inline]
+    pub const fn protocol_watcher(&self) -> &protocol_watcher::State {
+        &self.protocol_watcher
+    }
+
+    #[inline]
+    pub const fn admin_contract(&self) -> &CheckedContract<Admin> {
+        &self.admin_contract
+    }
+
+    #[inline]
+    pub const fn time_alarms(&self) -> &AlarmsGenerator<TimeAlarms> {
+        &self.time_alarms
+    }
+
+    #[inline]
+    pub const fn price_alarms(&self) -> &PriceAlarmsState {
+        &self.price_alarms
     }
 }
 

@@ -53,6 +53,7 @@ pub trait Alarms: Send + Sized + 'static {
     type Contract: Send + ?Sized;
 }
 
+#[must_use]
 pub struct AlarmsGenerator<T>
 where
     T: Alarms,
