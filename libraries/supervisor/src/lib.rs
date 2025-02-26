@@ -1,11 +1,12 @@
 use std::{
     future::{poll_fn, Future},
     pin::pin,
+    pin::Pin,
     task::Poll,
 };
 
 use anyhow::Result;
-use tokio::task::JoinError;
+use tokio::{io, signal::ctrl_c, task::JoinError};
 
 use channel::{Channel, Closed};
 use task_set::TaskSet;
@@ -46,57 +47,107 @@ where
 
     let mut state = init(&mut tasks, tx).await?;
 
-    loop {
-        state = match join_or_receive(&mut tasks, &mut rx).await {
-            JoinOrReceive::Received(action_result) => {
-                action_handler(&mut tasks, state, action_result).await?
-            },
-            JoinOrReceive::ReceiverClosed => {
-                break;
-            },
-            JoinOrReceive::Joined(id, result) => {
-                let Err(()) = log_errors(result) else {
-                    continue;
+    let mut terminate_signal = pin!(ctrl_c());
+
+    let terminate_signal_handler = {
+        let mut polled = false;
+
+        poll_fn(|ctx| {
+            if polled {
+                Poll::Ready(Ok(true))
+            } else {
+                polled = true;
+
+                terminate_signal
+                    .as_mut()
+                    .poll(ctx)
+                    .map(|result| result.map(|()| false))
+            }
+        })
+        .await?
+    };
+
+    if terminate_signal_handler {
+        loop {
+            state = match join_or_receive_or_terminate(
+                &mut tasks,
+                &mut rx,
+                terminate_signal.as_mut(),
+            )
+            .await
+            {
+                JoinOrReceiveOrTerminate::Received(action_result) => {
+                    action_handler(&mut tasks, state, action_result).await?
+                },
+                JoinOrReceiveOrTerminate::ReceiverClosed => {
+                    break;
+                },
+                JoinOrReceiveOrTerminate::Joined(id, result) => {
+                    let Err(()) = log_errors(result) else {
+                        continue;
+                    };
+
+                    on_error_exit(&mut tasks, state, id).await?
+                },
+                JoinOrReceiveOrTerminate::JoinSetEmpty => {
+                    return Ok(state);
+                },
+                JoinOrReceiveOrTerminate::Shutdown(result) => {
+                    return result.map(|()| state);
+                },
+            };
+        }
+
+        drop(rx);
+
+        drop(action_handler);
+
+        loop {
+            state =
+                match join_or_terminate(&mut tasks, terminate_signal.as_mut())
+                    .await
+                {
+                    JoinOrTerminate::Joined(id, result) => {
+                        let Err(()) = log_errors(result) else {
+                            continue;
+                        };
+
+                        on_error_exit(&mut tasks, state, id).await?
+                    },
+                    JoinOrTerminate::JoinSetEmpty => {
+                        return Ok(state);
+                    },
+                    JoinOrTerminate::Shutdown(result) => {
+                        return result.map(|()| state);
+                    },
                 };
-
-                on_error_exit(&mut tasks, state, id).await?
-            },
-            JoinOrReceive::JoinSetEmpty => {
-                return Ok(state);
-            },
-        };
-    }
-
-    drop(rx);
-
-    drop(action_handler);
-
-    while let Some((id, result)) = tasks.join_next().await {
-        let Err(()) = log_errors(result) else {
-            continue;
-        };
-
-        state = on_error_exit(&mut tasks, state, id).await?;
+        }
     }
 
     Ok(state)
 }
 
 fn log_errors(result: Result<Result<()>, JoinError>) -> Result<(), ()> {
-    result.map_err(drop).and_then(|result| {
-        result.map_err(|error| {
+    result
+        .map_err(|error| {
             tracing::error!(?error, "Task joined with an error!");
         })
-    })
+        .and_then(|result| {
+            result.map_err(|error| {
+                tracing::error!(?error, "Task joined with an error!");
+            })
+        })
 }
 
-async fn join_or_receive<Id, Receiver>(
+async fn join_or_receive_or_terminate<Id, Receiver, TerminateSignal>(
     tasks: &mut TaskSet<Id, Result<()>>,
     rx: &mut Receiver,
-) -> JoinOrReceive<Receiver::Value, Id>
+    mut terminate_signal: Pin<&mut TerminateSignal>,
+) -> JoinOrReceiveOrTerminate<Receiver::Value, Id>
 where
     Id: Unpin,
     Receiver: channel::Receiver,
+    TerminateSignal: Future<Output = Result<(), io::Error>>,
 {
     let mut join_next_task = pin!(tasks.join_next());
 
@@ -108,25 +159,70 @@ where
                 receive_action.as_mut().poll(ctx)
             {
                 Poll::Ready(match receive_result {
-                    Ok(received) => JoinOrReceive::Received(received),
-                    Err(Closed {}) => JoinOrReceive::ReceiverClosed,
+                    Ok(received) => {
+                        JoinOrReceiveOrTerminate::Received(received)
+                    },
+                    Err(Closed {}) => JoinOrReceiveOrTerminate::ReceiverClosed,
                 })
+            } else if let Poll::Ready(join_result) =
+                join_next_task.as_mut().poll(ctx)
+            {
+                Poll::Ready(join_result.map_or(
+                    const { JoinOrReceiveOrTerminate::JoinSetEmpty },
+                    |(id, result)| JoinOrReceiveOrTerminate::Joined(id, result),
+                ))
             } else {
-                join_next_task.as_mut().poll(ctx).map(|join_result| {
-                    join_result.map_or(
-                        const { JoinOrReceive::JoinSetEmpty },
-                        |(id, result)| JoinOrReceive::Joined(id, result),
-                    )
-                })
+                terminate_signal
+                    .as_mut()
+                    .poll(ctx)
+                    .map_err(Into::into)
+                    .map(JoinOrReceiveOrTerminate::Shutdown)
             }
         }
     })
     .await
 }
 
-enum JoinOrReceive<Value, Id> {
+async fn join_or_terminate<Id, TerminateSignal>(
+    tasks: &mut TaskSet<Id, Result<()>>,
+    mut terminate_signal: Pin<&mut TerminateSignal>,
+) -> JoinOrTerminate<Id>
+where
+    Id: Unpin,
+    TerminateSignal: Future<Output = Result<(), io::Error>>,
+{
+    let mut join_next_task = pin!(tasks.join_next());
+
+    poll_fn({
+        move |ctx| {
+            if let Poll::Ready(join_result) = join_next_task.as_mut().poll(ctx)
+            {
+                Poll::Ready(join_result.map_or(
+                    const { JoinOrTerminate::JoinSetEmpty },
+                    |(id, result)| JoinOrTerminate::Joined(id, result),
+                ))
+            } else {
+                terminate_signal
+                    .as_mut()
+                    .poll(ctx)
+                    .map_err(Into::into)
+                    .map(JoinOrTerminate::Shutdown)
+            }
+        }
+    })
+    .await
+}
+
+enum JoinOrReceiveOrTerminate<Value, Id> {
     Received(Value),
     ReceiverClosed,
     Joined(Id, Result<Result<()>, JoinError>),
     JoinSetEmpty,
+    Shutdown(Result<()>),
+}
+
+enum JoinOrTerminate<Id> {
+    Joined(Id, Result<Result<()>, JoinError>),
+    JoinSetEmpty,
+    Shutdown(Result<()>),
 }
