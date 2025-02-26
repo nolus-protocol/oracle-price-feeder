@@ -36,13 +36,13 @@ async fn main() -> Result<()> {
         .await
         .context("Failed to load service configuration!")?;
 
-    let (tx, rx) = unbounded::Channel::new();
+    let (transaction_tx, transaction_rx) = unbounded::Channel::new();
 
     supervisor::<_, _, bounded::Channel<_>, _, _, _>(
         init_tasks(
             service,
-            tx.clone(),
-            rx,
+            transaction_tx.clone(),
+            transaction_rx,
             ApplicationDefinedContext {
                 gas_per_time_alarm: read_gas_per_time_alarm()?,
                 time_alarms_per_message: read_time_alarms_per_message()?,
@@ -51,11 +51,11 @@ async fn main() -> Result<()> {
             },
         ),
         protocol_watcher::action_handler(
-            tx.clone(),
+            transaction_tx.clone(),
             add_price_alarm_dispatcher,
             remove_price_alarm_dispatcher,
         ),
-        error_handler(tx),
+        error_handler(transaction_tx),
     )
     .await
     .map(drop)

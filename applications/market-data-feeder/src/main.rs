@@ -40,16 +40,16 @@ async fn main() -> Result<()> {
         .await
         .context("Failed to load service configuration!")?;
 
-    let (tx, rx) = unbounded::Channel::new();
+    let (transaction_tx, transaction_rx) = unbounded::Channel::new();
 
     supervisor::<_, _, bounded::Channel<_>, _, _, _>(
-        init_tasks(service, rx),
+        init_tasks(service, transaction_rx),
         protocol_watcher::action_handler(
-            tx.clone(),
+            transaction_tx.clone(),
             spawn_price_fetcher,
             remove_price_fetcher,
         ),
-        error_handler(tx),
+        error_handler(transaction_tx),
     )
     .await
     .map(drop)
