@@ -49,82 +49,81 @@ where
 
     let mut terminate_signal = pin!(ctrl_c());
 
-    let terminate_signal_handler = {
+    let terminate_signal_sent = {
         let mut polled = false;
 
         poll_fn(|ctx| {
             if polled {
-                Poll::Ready(Ok(true))
+                Poll::Ready(Ok(false))
             } else {
                 polled = true;
 
                 terminate_signal
                     .as_mut()
                     .poll(ctx)
-                    .map(|result| result.map(|()| false))
+                    .map(|result| result.map(|()| true))
             }
         })
         .await?
     };
 
-    if terminate_signal_handler {
-        loop {
-            state = match join_or_receive_or_terminate(
-                &mut tasks,
-                &mut rx,
-                terminate_signal.as_mut(),
-            )
-            .await
-            {
-                JoinOrReceiveOrTerminate::Received(action_result) => {
-                    action_handler(&mut tasks, state, action_result).await?
-                },
-                JoinOrReceiveOrTerminate::ReceiverClosed => {
-                    break;
-                },
-                JoinOrReceiveOrTerminate::Joined(id, result) => {
-                    let Err(()) = log_errors(result) else {
-                        continue;
-                    };
-
-                    on_error_exit(&mut tasks, state, id).await?
-                },
-                JoinOrReceiveOrTerminate::JoinSetEmpty => {
-                    return Ok(state);
-                },
-                JoinOrReceiveOrTerminate::Shutdown(result) => {
-                    return result.map(|()| state);
-                },
-            };
-        }
-
-        drop(rx);
-
-        drop(action_handler);
-
-        loop {
-            state =
-                match join_or_terminate(&mut tasks, terminate_signal.as_mut())
-                    .await
-                {
-                    JoinOrTerminate::Joined(id, result) => {
-                        let Err(()) = log_errors(result) else {
-                            continue;
-                        };
-
-                        on_error_exit(&mut tasks, state, id).await?
-                    },
-                    JoinOrTerminate::JoinSetEmpty => {
-                        return Ok(state);
-                    },
-                    JoinOrTerminate::Shutdown(result) => {
-                        return result.map(|()| state);
-                    },
-                };
-        }
+    if terminate_signal_sent {
+        return Ok(state);
     }
 
-    Ok(state)
+    loop {
+        state = match join_or_receive_or_terminate(
+            &mut tasks,
+            &mut rx,
+            terminate_signal.as_mut(),
+        )
+        .await
+        {
+            JoinOrReceiveOrTerminate::Received(action_result) => {
+                action_handler(&mut tasks, state, action_result).await?
+            },
+            JoinOrReceiveOrTerminate::ReceiverClosed => {
+                break;
+            },
+            JoinOrReceiveOrTerminate::Joined(id, result) => {
+                let Err(()) = log_errors(result) else {
+                    continue;
+                };
+
+                on_error_exit(&mut tasks, state, id).await?
+            },
+            JoinOrReceiveOrTerminate::JoinSetEmpty => {
+                return Ok(state);
+            },
+            JoinOrReceiveOrTerminate::Shutdown(result) => {
+                return result.map(|()| state);
+            },
+        };
+    }
+
+    drop(rx);
+
+    drop(action_handler);
+
+    loop {
+        state = match join_or_terminate(&mut tasks, terminate_signal.as_mut())
+            .await
+        {
+            JoinOrTerminate::Joined(id, result) => {
+                let Err(()) = log_errors(result) else {
+                    continue;
+                };
+
+                on_error_exit(&mut tasks, state, id).await?
+            },
+            JoinOrTerminate::JoinSetEmpty => {
+                break Ok(state);
+            },
+            JoinOrTerminate::Shutdown(result) => {
+                break result.map(|()| state);
+            },
+        };
+    }
 }
 
 fn log_errors(result: Result<Result<()>, JoinError>) -> Result<(), ()> {
