@@ -18,6 +18,7 @@ dex.workspace = true
 environment.workspace = true
 log.workspace = true
 protocol-watcher.workspace = true
+serde-json-wasm.workspace = true
 service.workspace = true
 supervisor.workspace = true
 task.workspace = true

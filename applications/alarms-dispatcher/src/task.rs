@@ -42,8 +42,6 @@ macro_rules! log_with_hash {
 pub struct Configuration {
     pub transaction_tx: unbounded::Sender<TxPackage<NoExpiration>>,
     pub sender: String,
-    pub alarms_per_message: u32,
-    pub gas_per_alarm: Gas,
     pub idle_duration: Duration,
     pub query_tx: QueryTx,
     pub timeout_duration: Duration,
@@ -96,12 +94,16 @@ impl AlarmsGenerator<PriceAlarms> {
     pub fn new_price_alarms(
         configuration: Configuration,
         contract: CheckedContract<<PriceAlarms as Alarms>::Contract>,
+        gas_per_alarm: Gas,
+        alarms_per_message: u32,
         alarms: PriceAlarms,
     ) -> Result<Self> {
         Self::with_source(
             configuration,
             format!("Price Alarms; Protocol={}", alarms.protocol()).into(),
             contract,
+            gas_per_alarm,
+            alarms_per_message,
             alarms,
         )
     }
@@ -112,9 +114,17 @@ impl AlarmsGenerator<TimeAlarms> {
     pub fn new_time_alarms(
         configuration: Configuration,
         contract: CheckedContract<<TimeAlarms as Alarms>::Contract>,
-        alarms: TimeAlarms,
+        gas_per_alarm: Gas,
+        alarms_per_message: u32,
     ) -> Result<Self> {
-        Self::with_source(configuration, "Time Alarms".into(), contract, alarms)
+        Self::with_source(
+            configuration,
+            "Time Alarms".into(),
+            contract,
+            gas_per_alarm,
+            alarms_per_message,
+            TimeAlarms {},
+        )
     }
 }
 
@@ -126,23 +136,28 @@ where
         Configuration {
             transaction_tx,
             sender,
-            alarms_per_message,
-            gas_per_alarm,
             idle_duration,
             query_tx,
             timeout_duration,
         }: Configuration,
         source: Arc<str>,
         contract: CheckedContract<T::Contract>,
+        gas_per_alarm: Gas,
+        alarms_per_message: u32,
         alarms: T,
     ) -> Result<Self> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "snake_case")]
+        enum ExecuteMessage {
+            DispatchAlarms { max_count: u32 },
+        }
+
         ProtocolAny::from_msg(&MsgExecuteContract {
             sender,
             contract: contract.address().to_string(),
-            msg: format!(
-                r#"{{"dispatch_alarms":{{"max_count":{alarms_per_message}}}}}"#,
-            )
-            .into_bytes(),
+            msg: serde_json_wasm::to_vec(&ExecuteMessage::DispatchAlarms {
+                max_count: alarms_per_message,
+            })?,
             funds: vec![],
         })
         .map(|message| Self {
