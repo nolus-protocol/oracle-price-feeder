@@ -1865,6 +1865,11 @@ checksum = "0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263"
 [[package]]
 name = "task"
 version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "task_set",
+ "tokio",
+]
 
 [[package]]
 name = "task_set"

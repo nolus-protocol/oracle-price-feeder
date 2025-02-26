@@ -1,11 +1,11 @@
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use tokio::time::sleep;
 
 use chain_ops::node::QueryBank;
 use environment::ReadFromVar;
-use task::RunnableState;
+use task::{Run, RunnableState};
 
 pub struct Environment {
     pub idle_duration: Duration,
@@ -47,11 +47,8 @@ pub struct State {
     pub idle_duration: Duration,
 }
 
-impl State {
-    pub fn run(
-        self,
-        _: RunnableState,
-    ) -> impl Future<Output = Result<()>> + Sized + use<> {
+impl Run for State {
+    async fn run(self, _: RunnableState) -> Result<()> {
         let Self {
             mut query_bank,
             address,
@@ -59,29 +56,27 @@ impl State {
             idle_duration,
         } = self;
 
-        async move {
-            loop {
-                let amount = query_bank
-                    .balance(address.to_string(), denom.to_string())
-                    .await
-                    .context("Failed to run address balance query!")?
-                    .to_string();
+        loop {
+            let amount = query_bank
+                .balance(address.to_string(), denom.to_string())
+                .await
+                .context("Failed to run address balance query!")?
+                .to_string();
 
-                log_span!(info_span!("Balance Report") {
-                    log!(info!(""));
+            log_span!(info_span!("Balance Report") {
+                log!(info!(""));
 
-                    log!(info!("Account address: {address}"));
+                log!(info!("Account address: {address}"));
 
-                    log!(info!(
-                        "Amount available: {amount} {denom}",
-                        amount = format_amount(amount),
-                    ));
+                log!(info!(
+                    "Amount available: {amount} {denom}",
+                    amount = format_amount(amount),
+                ));
 
-                    log!(info!(""));
-                });
+                log!(info!(""));
+            });
 
-                sleep(idle_duration).await;
-            }
+            sleep(idle_duration).await;
         }
     }
 }

@@ -20,7 +20,7 @@ use environment::ReadFromVar as _;
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
 use supervisor::supervisor;
-use ::task::RunnableState;
+use ::task::{spawn_new, spawn_restarting, Run, RunnableState, Task};
 use task_set::TaskSet;
 use tx::{NoExpiration, TxPackage};
 
@@ -70,32 +70,18 @@ fn init_tasks(
     &'r mut TaskSet<Id, Result<()>>,
     bounded::Sender<Command>,
 ) -> Result<State> {
-    macro_rules! add_handles {
-        ($task_set:ident.add_handle({
-            $($id:ident => $state:expr),+ $(,)?
-        })) => {
-            $($task_set.add_handle(
-                Id::$id,
-                tokio::spawn(
-                    $state.clone().run(RunnableState::New),
-                ),
-            );)+
-        };
-    }
-
     async move |task_set, action_tx| {
         let state =
             State::new(service, transaction_tx, transaction_rx, action_tx, a)
                 .await?;
 
-        add_handles! {
-            task_set.add_handle({
-                BalanceReporter => state.balance_reporter,
-                Broadcaster => state.broadcaster,
-                ProtocolWatcher => state.protocol_watcher,
-                TimeAlarms => state.time_alarms,
-            })
-        }
+        spawn_new(task_set, state.balance_reporter.clone());
+
+        spawn_new(task_set, state.broadcaster.clone());
+
+        spawn_new(task_set, state.protocol_watcher.clone());
+
+        spawn_new(task_set, state.time_alarms.clone());
 
         Ok(state)
     }
@@ -157,48 +143,29 @@ fn error_handler(
     transaction_tx: unbounded::Sender<TxPackage<NoExpiration>>,
 ) -> impl AsyncFnMut(&mut TaskSet<Id, Result<()>>, State, Id) -> Result<State> + use<>
 {
-    macro_rules! match_id {
-        ([$task_set:ident]
-        match $id:ident {
-            [$($variant_id:ident => $variant_state:expr),+ $(,)?],
-            $price_alarms_id:pat => $price_alarms_state:expr,
-        }) => {
-            match $id {
-                $(Id::$variant_id {} => {
-                    $task_set.add_handle(
-                        $id,
-                        tokio::spawn(
-                            $variant_state
-                                .clone()
-                                .run(RunnableState::Restart),
-                        ),
-                    );
-                },)+
-                $price_alarms_id => $price_alarms_state,
-            }
-        };
-    }
-
     async move |task_set: &mut TaskSet<Id, Result<()>>, mut state: State, id| {
-        match_id! {
-            [task_set]
-            match id {
-                [
-                    BalanceReporter => &state.balance_reporter,
-                    Broadcaster => &state.broadcaster,
-                    ProtocolWatcher => &state.protocol_watcher,
-                    TimeAlarms => &state.time_alarms,
-                ],
-                Id::PriceAlarms { protocol: name } => {
-                    state = add_price_alarm_dispatcher(
-                        task_set,
-                        state,
-                        name,
-                        &transaction_tx,
-                    )
-                    .await?;
-                },
-            }
+        match id {
+            Id::BalanceReporter {} => {
+                spawn_restarting(task_set, state.balance_reporter.clone());
+            },
+            Id::Broadcaster {} => {
+                spawn_restarting(task_set, state.broadcaster.clone());
+            },
+            Id::ProtocolWatcher {} => {
+                spawn_restarting(task_set, state.protocol_watcher.clone());
+            },
+            Id::TimeAlarms {} => {
+                spawn_restarting(task_set, state.time_alarms.clone());
+            },
+            Id::PriceAlarms { protocol: name } => {
+                state = add_price_alarm_dispatcher(
+                    task_set,
+                    state,
+                    name,
+                    &transaction_tx,
+                )
+                .await?;
+            },
         }
 
         Ok(state)
@@ -212,6 +179,22 @@ enum Id {
     ProtocolWatcher,
     TimeAlarms,
     PriceAlarms { protocol: Arc<str> },
+}
+
+impl Task<Id> for balance_reporter::State {
+    const ID: Id = Id::BalanceReporter;
+}
+
+impl Task<Id> for broadcaster::State<NoExpiration> {
+    const ID: Id = Id::Broadcaster;
+}
+
+impl Task<Id> for protocol_watcher::State {
+    const ID: Id = Id::ProtocolWatcher;
+}
+
+impl Task<Id> for AlarmsGenerator<TimeAlarms> {
+    const ID: Id = Id::TimeAlarms;
 }
 
 #[must_use]

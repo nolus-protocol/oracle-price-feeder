@@ -1,11 +1,11 @@
-use std::{collections::BTreeSet, future::Future, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use anyhow::{bail, Context as _, Result};
 use tokio::time::sleep;
 
 use channel::{bounded, Sender};
 use contract::{Admin, CheckedContract};
-use task::RunnableState;
+use task::{Run, RunnableState};
 use task_set::TaskSet;
 use tx::{TxExpiration, TxPackage};
 
@@ -32,11 +32,8 @@ pub struct State {
     pub action_tx: bounded::Sender<Command>,
 }
 
-impl State {
-    pub fn run(
-        self,
-        _: RunnableState,
-    ) -> impl Future<Output = Result<()>> + Sized + use<> {
+impl Run for State {
+    async fn run(self, _: RunnableState) -> Result<()> {
         const IDLE_DURATION: Duration = Duration::from_secs(15);
 
         let Self {
@@ -46,42 +43,40 @@ impl State {
 
         let mut protocol_tasks = BTreeSet::new();
 
-        async move {
-            loop {
-                let active_protocols = admin_contract
-                    .protocols()
-                    .await
-                    .context("Failed to fetch protocols!")?
-                    .into_vec()
-                    .into_iter()
-                    .collect();
+        loop {
+            let active_protocols = admin_contract
+                .protocols()
+                .await
+                .context("Failed to fetch protocols!")?
+                .into_vec()
+                .into_iter()
+                .collect();
 
-                for command in
-                    protocols_diff_commands(&protocol_tasks, &active_protocols)
-                {
-                    match &command {
-                        Command::ProtocolAdded(protocol) => {
-                            log!(info![protocol]("Protocol added."));
+            for command in
+                protocols_diff_commands(&protocol_tasks, &active_protocols)
+            {
+                match &command {
+                    Command::ProtocolAdded(protocol) => {
+                        log!(info![protocol]("Protocol added."));
 
-                            if !protocol_tasks.insert(protocol.clone()) {
-                                bail!("Protocol already exists!");
-                            }
-                        },
-                        Command::ProtocolRemoved(protocol) => {
-                            log!(info![protocol]("Protocol removed."));
+                        if !protocol_tasks.insert(protocol.clone()) {
+                            bail!("Protocol already exists!");
+                        }
+                    },
+                    Command::ProtocolRemoved(protocol) => {
+                        log!(info![protocol]("Protocol removed."));
 
-                            _ = protocol_tasks.remove(protocol);
-                        },
-                    }
-
-                    action_tx
-                        .send(command)
-                        .await
-                        .context("Failed to send protocol change command!")?;
+                        _ = protocol_tasks.remove(protocol);
+                    },
                 }
 
-                sleep(IDLE_DURATION).await;
+                action_tx
+                    .send(command)
+                    .await
+                    .context("Failed to send protocol change command!")?;
             }
+
+            sleep(IDLE_DURATION).await;
         }
     }
 }

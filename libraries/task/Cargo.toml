@@ -5,6 +5,10 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+task_set.workspace = true
+
+anyhow.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

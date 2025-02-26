@@ -16,7 +16,7 @@ use tokio::{sync::oneshot, time::sleep};
 use chain_ops::{node::QueryTx, signer::Gas, tx};
 use channel::unbounded;
 use contract::{CheckedContract, GeneralizedOracle};
-use task::RunnableState;
+use task::{Run, RunnableState};
 use ::tx::{NoExpiration, TxPackage};
 
 macro_rules! log {
@@ -182,25 +182,6 @@ where
         .map_err(Into::into)
     }
 
-    pub async fn run(mut self, _: RunnableState) -> Result<()> {
-        let hard_gas_limit = self
-            .gas_per_alarm
-            .checked_mul(self.alarms_per_message.into())
-            .context("Failed to calculate hard gas limit for transaction")?;
-
-        let mut fallback_gas = 0;
-
-        loop {
-            if self.alarms_status().await?.remaining_alarms {
-                fallback_gas = self
-                    .dispatch_alarms_streak(hard_gas_limit, fallback_gas)
-                    .await?;
-            }
-
-            sleep(self.idle_duration).await;
-        }
-    }
-
     async fn alarms_status(&mut self) -> Result<AlarmsStatusResponse> {
         const QUERY_MSG: &[u8; 20] = br#"{"alarms_status":{}}"#;
 
@@ -319,6 +300,30 @@ where
             })
             .map(|()| response_receiver)
             .context("Failed to send transaction for broadcasting!")
+    }
+}
+
+impl<T> Run for AlarmsGenerator<T>
+where
+    T: Alarms,
+{
+    async fn run(mut self, _: RunnableState) -> Result<()> {
+        let hard_gas_limit = self
+            .gas_per_alarm
+            .checked_mul(self.alarms_per_message.into())
+            .context("Failed to calculate hard gas limit for transaction")?;
+
+        let mut fallback_gas = 0;
+
+        loop {
+            if self.alarms_status().await?.remaining_alarms {
+                fallback_gas = self
+                    .dispatch_alarms_streak(hard_gas_limit, fallback_gas)
+                    .await?;
+            }
+
+            sleep(self.idle_duration).await;
+        }
     }
 }
 

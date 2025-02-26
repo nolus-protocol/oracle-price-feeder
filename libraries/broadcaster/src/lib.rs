@@ -1,4 +1,4 @@
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, Result};
 use cosmrs::{
@@ -17,7 +17,7 @@ use chain_ops::{
 };
 use channel::unbounded;
 use environment::ReadFromVar;
-use task::RunnableState;
+use task::{Run, RunnableState};
 use tx::{TxExpiration, TxPackage};
 
 macro_rules! log_simulation {
@@ -84,14 +84,11 @@ where
     pub retry_delay_duration: Duration,
 }
 
-impl<TxExpiration> State<TxExpiration>
+impl<TxExpiration> Run for State<TxExpiration>
 where
     TxExpiration: self::TxExpiration,
 {
-    pub fn run(
-        self,
-        _: RunnableState,
-    ) -> impl Future<Output = Result<()>> + Sized + use<TxExpiration> {
+    async fn run(self, _: RunnableState) -> Result<()> {
         let Self {
             broadcast_tx,
             signer,
@@ -100,28 +97,26 @@ where
             retry_delay_duration,
         } = self;
 
-        async move {
-            let mut transaction_rx = transaction_rx.lock_owned().await;
+        let mut transaction_rx = transaction_rx.lock_owned().await;
 
-            let mut broadcast = Broadcast::new(
-                broadcast_tx,
-                signer.lock_owned().await,
-                retry_delay_duration,
-            );
+        let mut broadcast = Broadcast::new(
+            broadcast_tx,
+            signer.lock_owned().await,
+            retry_delay_duration,
+        );
 
-            loop {
-                let tx_package = transaction_rx
-                    .recv()
-                    .await
-                    .context("Transaction receiving channel closed!")?;
+        loop {
+            let tx_package = transaction_rx
+                .recv()
+                .await
+                .context("Transaction receiving channel closed!")?;
 
-                broadcast
-                    .broadcast_tx(tx_package)
-                    .await
-                    .context("Failed to broadcast transaction!")?;
+            broadcast
+                .broadcast_tx(tx_package)
+                .await
+                .context("Failed to broadcast transaction!")?;
 
-                sleep(delay_duration).await;
-            }
+            sleep(delay_duration).await;
         }
     }
 }
