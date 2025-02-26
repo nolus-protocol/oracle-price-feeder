@@ -142,6 +142,7 @@ fn error_handler(
     }
 }
 
+#[must_use]
 pub(crate) struct PriceFetcher {
     pub name: Arc<str>,
     pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
