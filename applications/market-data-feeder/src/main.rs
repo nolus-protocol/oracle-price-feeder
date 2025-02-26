@@ -2,10 +2,18 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-use std::{collections::btree_map::BTreeMap, sync::Arc, time::Duration};
+use std::{
+    collections::btree_map::{self, BTreeMap},
+    mem::replace,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::{Context as _, Result};
-use tokio::sync::Mutex;
+use tokio::{
+    sync::Mutex,
+    time::{sleep, Instant},
+};
 
 use chain_ops::{
     node::{self, QueryTx},
@@ -49,7 +57,16 @@ async fn main() -> Result<()> {
         init_tasks(service, transaction_rx),
         protocol_watcher::action_handler(
             transaction_tx.clone(),
-            spawn_price_fetcher,
+            async move |task_set, state, name, transaction_tx| {
+                spawn_price_fetcher(
+                    task_set,
+                    state,
+                    name,
+                    transaction_tx,
+                    false,
+                )
+                .await
+            },
             remove_price_fetcher,
         ),
         error_handler(transaction_tx),
@@ -96,6 +113,8 @@ fn error_handler(
     transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
 ) -> impl AsyncFnMut(&mut TaskSet<Id, Result<()>>, State, Id) -> Result<State> + use<>
 {
+    let mut task_states = BTreeMap::new();
+
     async move |task_set, mut state, id| -> Result<State> {
         match id {
             Id::BalanceReporter {} => {
@@ -108,12 +127,40 @@ fn error_handler(
                 spawn_restarting(task_set, state.protocol_watcher().clone());
             },
             Id::PriceFetcher { protocol: name } => {
+                let mut entry = task_states.entry(name.clone());
+
+                let delayed = match entry {
+                    btree_map::Entry::Vacant(entry) => {
+                        entry.insert((Instant::now(), 2_u8));
+
+                        false
+                    },
+                    btree_map::Entry::Occupied(ref mut entry) => {
+                        let (instant, retries) = entry.get_mut();
+
+                        let now = Instant::now();
+
+                        if now.duration_since(replace(instant, now))
+                            < Duration::from_secs(5)
+                        {
+                            *retries = retries.saturating_sub(1);
+                        }
+
+                        *retries == 0
+                    },
+                };
+
                 tracing::info!(%name, "Restarting price fetcher");
 
-                state =
-                    spawn_price_fetcher(task_set, state, name, &transaction_tx)
-                        .await
-                        .context("Failed to spawn price fetcher task!")?;
+                state = spawn_price_fetcher(
+                    task_set,
+                    state,
+                    name,
+                    &transaction_tx,
+                    delayed,
+                )
+                .await
+                .context("Failed to spawn price fetcher task!")?;
             },
         }
 
@@ -209,7 +256,46 @@ async fn spawn_price_fetcher(
     state: State,
     name: Arc<str>,
     transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+    delayed: bool,
 ) -> Result<State> {
+    struct TaskSpawner<'r> {
+        task_set: &'r mut TaskSet<Id, Result<()>>,
+        id: Id,
+        price_fetcher: PriceFetcher,
+        network: String,
+        delayed: bool,
+    }
+
+    impl<'r> TaskSpawner<'r> {
+        fn spawn_with<Dex>(
+            self,
+            ProtocolProviderAndContracts { provider, oracle }: ProtocolProviderAndContracts<Dex>,
+        ) where
+            Dex: provider::Dex,
+        {
+            let Self {
+                task_set,
+                id,
+                price_fetcher,
+                network,
+                delayed,
+            } = self;
+
+            task_set.add_handle(
+                id,
+                if delayed {
+                    tokio::spawn(async move {
+                        sleep(Duration::from_secs(15)).await;
+
+                        price_fetcher.run(oracle, network, provider).await
+                    })
+                } else {
+                    tokio::spawn(price_fetcher.run(oracle, network, provider))
+                },
+            );
+        }
+    }
+
     tracing::info!(%name, "Price fetcher is starting...");
 
     let price_fetcher::State {
@@ -227,30 +313,33 @@ async fn spawn_price_fetcher(
         provider_and_contracts,
     } = admin_contract.protocol(&name).await?;
 
-    let price_fetcher = PriceFetcher {
-        name: name.clone(),
-        idle_duration,
-        transaction_tx: transaction_tx.clone(),
-        signer_address: signer_address.clone(),
-        hard_gas_limit,
-        query_tx,
-        dex_node_clients: dex_node_clients.clone(),
-        timeout_duration,
+    let task = TaskSpawner {
+        task_set,
+        id: Id::PriceFetcher {
+            protocol: name.clone(),
+        },
+        price_fetcher: PriceFetcher {
+            name,
+            idle_duration,
+            transaction_tx: transaction_tx.clone(),
+            signer_address: signer_address.clone(),
+            hard_gas_limit,
+            query_tx,
+            dex_node_clients: dex_node_clients.clone(),
+            timeout_duration,
+        },
+        network,
+        delayed,
     };
 
-    task_set.add_handle(
-        Id::PriceFetcher { protocol: name },
-        match provider_and_contracts {
-            ProtocolDex::Astroport(ProtocolProviderAndContracts {
-                provider,
-                oracle,
-            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
-            ProtocolDex::Osmosis(ProtocolProviderAndContracts {
-                provider,
-                oracle,
-            }) => tokio::spawn(price_fetcher.run(oracle, network, provider)),
+    match provider_and_contracts {
+        ProtocolDex::Astroport(provider_and_contracts) => {
+            task.spawn_with(provider_and_contracts);
         },
-    );
+        ProtocolDex::Osmosis(provider_and_contracts) => {
+            task.spawn_with(provider_and_contracts);
+        },
+    }
 
     Ok(state)
 }

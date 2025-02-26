@@ -10,7 +10,7 @@ use chain_ops::node;
 
 use crate::Currencies;
 
-pub trait Dex: Send + Sized {
+pub trait Dex: Send + Sync + Sized + 'static {
     type ProviderTypeDescriptor;
 
     type AssociatedPairData: for<'r> Deserialize<'r> + Send + Sync + 'static;
