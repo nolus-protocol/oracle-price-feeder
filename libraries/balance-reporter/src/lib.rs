@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use tokio::time::sleep;
 
 use chain_ops::node::QueryBank;

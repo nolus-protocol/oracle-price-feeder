@@ -1,4 +1,4 @@
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 use anyhow::Result;
 use tokio::time::sleep;

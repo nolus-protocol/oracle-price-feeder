@@ -1,12 +1,12 @@
-use std::{borrow::Borrow, collections::BTreeMap, future::Future};
+use std::{borrow::Borrow, collections::BTreeMap};
 
 use anyhow::{Context as _, Result};
 
 use chain_ops::node;
 
 use crate::{
-    provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote},
-    Currencies,
+    Currencies, CurrencyPair, Dex,
+    amount::{Amount, Base, Decimal, Quote},
 };
 
 use super::{

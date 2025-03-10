@@ -245,7 +245,7 @@ impl State {
 
         let configuration = Configuration {
             transaction_tx: transaction_tx.clone(),
-            sender: service.signer().address().into(),
+            sender: service.signer.address().into(),
             idle_duration: service.idle_duration,
             query_tx: service.node_client.clone().query_tx(),
             timeout_duration: service.timeout_duration,

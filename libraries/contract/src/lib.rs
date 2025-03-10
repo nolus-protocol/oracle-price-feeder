@@ -1,15 +1,12 @@
-use std::{
-    convert::Infallible, future::Future, marker::PhantomData, sync::Arc,
-};
+use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context as _, Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 use chain_ops::node::{QueryWasm, Reconnect};
 use dex::{
-    provider::{self, CurrencyPair},
+    Currencies, CurrencyPair, CurrencyPairs, Dex,
     providers::{astroport::Astroport, osmosis::Osmosis},
-    Currencies, CurrencyPairs,
 };
 use semver::{Compatibility, SemVer};
 
@@ -400,7 +397,7 @@ impl CheckedContract<Admin> {
 
 impl<Dex> CheckedContract<Oracle<Dex>>
 where
-    Dex: provider::Dex + ?Sized,
+    Dex: self::Dex + ?Sized,
 {
     pub async fn query_currencies(&mut self) -> Result<Currencies> {
         #[derive(Deserialize)]

@@ -1,7 +1,6 @@
 use std::{
-    future::{poll_fn, Future},
-    pin::pin,
-    pin::Pin,
+    future::poll_fn,
+    pin::{Pin, pin},
     task::Poll,
 };
 

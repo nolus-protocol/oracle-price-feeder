@@ -1,6 +1,5 @@
 use std::{
     borrow::Borrow,
-    future::Future,
     pin::Pin,
     task::{Context, Poll},
 };

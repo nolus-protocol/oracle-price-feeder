@@ -1,17 +1,14 @@
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 use anyhow::{Context as _, Result};
 use tokio::time::Instant;
 
 use chain_ops::node::Reconnect;
-use dex::{
-    provider::{self},
-    Currencies, CurrencyPairs,
-};
+use dex::{Currencies, CurrencyPairs, Dex};
 
 pub struct Oracle<Dex>
 where
-    Dex: provider::Dex + ?Sized,
+    Dex: self::Dex + ?Sized,
 {
     inner: oracle::Oracle<Dex>,
     last_update: Instant,
@@ -22,7 +19,7 @@ where
 
 impl<Dex> Oracle<Dex>
 where
-    Dex: provider::Dex + ?Sized,
+    Dex: self::Dex + ?Sized,
 {
     pub async fn new(
         mut oracle: oracle::Oracle<Dex>,
@@ -97,7 +94,7 @@ where
 
 impl<Dex> Reconnect for Oracle<Dex>
 where
-    Dex: provider::Dex,
+    Dex: self::Dex,
 {
     #[inline]
     fn reconnect(&self) -> impl Future<Output = Result<()>> + Send + '_ {

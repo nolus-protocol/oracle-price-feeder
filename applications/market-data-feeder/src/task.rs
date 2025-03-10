@@ -1,51 +1,37 @@
 use std::{
-    collections::BTreeMap, convert::identity, fmt::Display, future::Future,
-    sync::Arc, time::Duration,
+    collections::BTreeMap, convert::identity, fmt::Display, future::poll_fn,
+    pin::pin, sync::Arc, task::Poll, time::Duration,
 };
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use cosmrs::{
     proto::cosmos::base::abci::v1beta1::TxResponse,
-    tendermint::abci::Code as TxCode, Gas,
+    tendermint::abci::Code as TxCode,
 };
 use serde::Serialize;
 use tokio::{
-    select, spawn,
+    spawn,
     sync::oneshot,
     task::{AbortHandle, JoinSet},
-    time::{interval, sleep, timeout, Instant, MissedTickBehavior},
+    time::{Instant, Interval, MissedTickBehavior, interval, sleep, timeout},
 };
 
 use ::tx::{TimeBasedExpiration, TxPackage};
 use chain_ops::{
     node,
+    signer::Gas,
     tx::{self, ExecuteTemplate},
 };
 use channel::unbounded;
 use defer::Defer;
-use dex::provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote};
+use dex::{
+    CurrencyPair, Dex,
+    amount::{Amount, Base, Decimal, Quote},
+};
 use task::RunnableState;
 use task_set::TaskSet;
 
 use crate::oracle::Oracle;
-
-pub struct TaskWithProvider<Dex>
-where
-    Dex: dex::provider::Dex,
-{
-    pub protocol: Arc<str>,
-    pub source: Arc<str>,
-    pub query_tx: node::QueryTx,
-    pub dex_node_client: node::Client,
-    pub duration_before_start: Duration,
-    pub execute_template: ExecuteTemplate,
-    pub idle_duration: Duration,
-    pub timeout_duration: Duration,
-    pub hard_gas_limit: Gas,
-    pub oracle: Oracle<Dex>,
-    pub provider: Dex,
-    pub transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
-}
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -66,45 +52,44 @@ macro_rules! log_with_context {
     };
 }
 
+pub struct TaskWithProvider<Dex>
+where
+    Dex: self::Dex,
+{
+    pub protocol: Arc<str>,
+    pub source: Arc<str>,
+    pub query_tx: node::QueryTx,
+    pub dex_node_client: node::Client,
+    pub duration_before_start: Duration,
+    pub execute_template: ExecuteTemplate,
+    pub idle_duration: Duration,
+    pub timeout_duration: Duration,
+    pub hard_gas_limit: Gas,
+    pub oracle: Oracle<Dex>,
+    pub provider: Dex,
+    pub transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+}
+
 impl<P> TaskWithProvider<P>
 where
     P: Dex<ProviderTypeDescriptor: Display>,
 {
     pub async fn run(mut self, state: RunnableState) -> Result<()> {
-        let mut query_messages = self
-            .provider
-            .price_query_messages_with_associated_data(
-                self.oracle.currency_pairs().iter().map(
-                    |(pair, associated_data)| (pair.clone(), associated_data),
-                ),
-                self.oracle.currencies(),
-            )
-            .context("Failed to construct price query messages!")?;
-
-        let mut queries_task_set = TaskSet::new();
-
-        let mut price_collection_buffer =
-            Vec::with_capacity(query_messages.len());
-
-        let mut dex_block_height = self
-            .get_dex_block_height()
-            .await
-            .context("Failed to fetch DEX node's block height!")?;
+        let mut price_fetcher_context = self.price_fetcher_context().await?;
 
         if matches!(state, RunnableState::New) {
-            self.spawn_query_tasks(
-                &mut query_messages,
-                &mut queries_task_set,
-                &mut price_collection_buffer,
+            price_fetcher_context = self
+                .spawn_query_tasks(price_fetcher_context)
+                .await
+                .context("Failed to spawn price querying tasks!")?;
+
+            self.initial_fetch_and_print(
+                &mut price_fetcher_context.queries_task_set,
             )
             .await
-            .context("Failed to spawn price querying tasks!")?;
-
-            self.initial_fetch_and_print(&mut queries_task_set)
-                .await
-                .context(
-                    "Failed to fetch and print prices in initialization phase!",
-                )?;
+            .context(
+                "Failed to fetch and print prices in initialization phase!",
+            )?;
         }
 
         let mut fetch_delivered_set =
@@ -119,71 +104,272 @@ where
         let mut fallback_gas = 0;
 
         loop {
-            select! {
-                biased;
-                Some((currency_pair, result)) = queries_task_set.join_next(),
-                if !queries_task_set.is_empty() => {
-                    self.handle_price_query_result(
-                        &mut price_collection_buffer,
-                        currency_pair,
-                        result
-                            .context("Failed to join back price query task!")?,
-                    );
-
-                    if queries_task_set.is_empty()
-                        && !price_collection_buffer.is_empty() {
-                        let feedback_response_rx = self.send_for_broadcast(
-                            &price_collection_buffer,
+            match (
+                price_fetcher_context.queries_task_set.is_empty(),
+                fetch_delivered_set.is_empty(),
+            ) {
+                (false, false) => {
+                    (price_fetcher_context, fallback_gas) = self
+                        .join_query_or_delivered(
+                            price_fetcher_context,
+                            fetch_delivered_set,
                             fallback_gas,
-                        ).context("Failed to send prices for broadcast!")?;
-
-                        let _: AbortHandle = fetch_delivered_set.spawn(
-                            self.fetch_delivered(feedback_response_rx),
-                        );
-
-                        price_collection_buffer.clear();
-                    }
+                        )
+                        .await?;
                 },
-                Some(result) = fetch_delivered_set.join_next(),
-                if !fetch_delivered_set.is_empty() => {
-                    let result = result.context(
-                        "Failed to join back delivered transaction fetching \
-                        task!",
-                    )?;
+                (false, true) => {
+                    let (currency_pair, result) = price_fetcher_context
+                        .queries_task_set
+                        .join_next()
+                        .await
+                        .unwrap_or_else(unreachable);
 
-                    fallback_gas = self.handle_fetch_delivered_result(
-                        fallback_gas,
-                        result,
-                    )
-                    .context("Failed to process delivered transaction result!")?;
+                    price_fetcher_context = self
+                        .handle_query_task_join_result(
+                            price_fetcher_context,
+                            fetch_delivered_set,
+                            fallback_gas,
+                            currency_pair,
+                            result,
+                        )?;
                 },
-                _ = next_feed_interval.tick(),
-                if queries_task_set.is_empty() => {
-                    let new_block_height = self.get_dex_block_height().await
-                    .context("Failed to fetch DEX node's block height")?;
+                (true, false) => {
+                    (price_fetcher_context, fallback_gas) = self
+                        .join_delivered_or_feed_interval_tick(
+                            price_fetcher_context,
+                            fetch_delivered_set,
+                            &mut next_feed_interval,
+                            fallback_gas,
+                        )
+                        .await?;
+                },
+                (true, true) => {
+                    next_feed_interval.tick().await;
 
-                    if dex_block_height >= new_block_height {
-                        log_with_context!(error![self.protocol, P](
-                            last_recorded = dex_block_height,
-                            latest_reported = new_block_height,
-                            "DEX node's latest block height didn't increment!",
-                        ));
-
-                        continue;
-                    }
-
-                    dex_block_height = new_block_height;
-
-                    self.spawn_query_tasks(
-                        &mut query_messages,
-                        &mut queries_task_set,
-                        &mut price_collection_buffer,
-                    )
-                    .await
-                    .context("Failed to spawn price querying tasks!")?;
+                    price_fetcher_context =
+                        self.tick_finished(price_fetcher_context).await?;
                 },
             }
         }
+    }
+
+    async fn price_fetcher_context(
+        &self,
+    ) -> Result<PriceFetcherContext<<P as Dex>::PriceQueryMessage>> {
+        let query_messages = self
+            .query_messages()
+            .context("Failed to construct price query messages!")?;
+
+        let dex_block_height = self
+            .get_dex_block_height()
+            .await
+            .context("Failed to fetch DEX node's block height!")?;
+
+        let mut price_collection_buffer = vec![];
+
+        price_collection_buffer.reserve_exact(query_messages.len());
+
+        Ok(PriceFetcherContext {
+            query_messages,
+            queries_task_set: TaskSet::new(),
+            price_collection_buffer,
+            dex_block_height,
+        })
+    }
+
+    async fn join_query_or_delivered(
+        &mut self,
+        mut price_fetcher_context: PriceFetcherContext<
+            <P as Dex>::PriceQueryMessage,
+        >,
+        fetch_delivered_set: &mut JoinSet<Result<Option<TxResponse>>>,
+        fallback_gas: Gas,
+    ) -> Result<(PriceFetcherContext<P::PriceQueryMessage>, Gas)> {
+        enum QueryOrDelivered<Query, Delivered> {
+            Query(Query),
+            Delivered(Delivered),
+        }
+
+        let query_or_delivered = {
+            let mut join_query =
+                pin!(price_fetcher_context.queries_task_set.join_next());
+
+            let mut join_delivered = pin!(fetch_delivered_set.join_next());
+
+            poll_fn(move |ctx| {
+                if let Poll::Ready(result) =
+                    join_query.as_mut().poll(ctx).map(|result| {
+                        QueryOrDelivered::Query(
+                            result.unwrap_or_else(unreachable),
+                        )
+                    })
+                {
+                    Poll::Ready(result)
+                } else {
+                    join_delivered.as_mut().poll(ctx).map(|result| {
+                        QueryOrDelivered::Delivered(
+                            result.unwrap_or_else(unreachable),
+                        )
+                    })
+                }
+            })
+            .await
+        };
+
+        match query_or_delivered {
+            QueryOrDelivered::Query((currency_pair, result)) => self
+                .handle_query_task_join_result(
+                    price_fetcher_context,
+                    fetch_delivered_set,
+                    fallback_gas,
+                    currency_pair,
+                    result,
+                )
+                .map(|price_fetcher_context| {
+                    (price_fetcher_context, fallback_gas)
+                }),
+            QueryOrDelivered::Delivered(result) => self
+                .handle_delivered_task_join_result(fallback_gas, result)
+                .map(|fallback_gas| (price_fetcher_context, fallback_gas)),
+        }
+    }
+
+    async fn join_delivered_or_feed_interval_tick(
+        &mut self,
+        price_fetcher_context: PriceFetcherContext<
+            <P as Dex>::PriceQueryMessage,
+        >,
+        fetch_delivered_set: &mut JoinSet<Result<Option<TxResponse>>>,
+        next_feed_interval: &mut Interval,
+        fallback_gas: Gas,
+    ) -> Result<(PriceFetcherContext<<P as Dex>::PriceQueryMessage>, Gas)> {
+        enum DeliveredOrTick<Delivered> {
+            Delivered(Delivered),
+            Tick,
+        }
+
+        let delivered_or_tick = {
+            let mut join_delivered = pin!(fetch_delivered_set.join_next());
+
+            let mut tick = pin!(next_feed_interval.tick());
+
+            poll_fn(move |ctx| {
+                if let Poll::Ready(result) =
+                    join_delivered.as_mut().poll(ctx).map(|result| {
+                        DeliveredOrTick::Delivered(
+                            result.unwrap_or_else(unreachable),
+                        )
+                    })
+                {
+                    Poll::Ready(result)
+                } else {
+                    tick.as_mut()
+                        .poll(ctx)
+                        .map(|_: Instant| DeliveredOrTick::Tick)
+                }
+            })
+            .await
+        };
+
+        if let DeliveredOrTick::Delivered(result) = delivered_or_tick {
+            self.handle_delivered_task_join_result(fallback_gas, result)
+                .map(|fallback_gas| (price_fetcher_context, fallback_gas))
+        } else {
+            self.tick_finished(price_fetcher_context).await.map(
+                |price_fetcher_context| (price_fetcher_context, fallback_gas),
+            )
+        }
+    }
+
+    fn handle_delivered_task_join_result(
+        &self,
+        fallback_gas: Gas,
+        result: Result<Result<Option<TxResponse>>, tokio::task::JoinError>,
+    ) -> Result<Gas> {
+        self.handle_fetch_delivered_result(
+            fallback_gas,
+            result.context(
+                "Failed to join back delivered transaction fetching \
+                            task!",
+            )?,
+        )
+        .context("Failed to process delivered transaction result!")
+    }
+
+    fn handle_query_task_join_result(
+        &mut self,
+        mut price_fetcher_context: PriceFetcherContext<
+            <P as Dex>::PriceQueryMessage,
+        >,
+        fetch_delivered_set: &mut JoinSet<Result<Option<TxResponse>>>,
+        fallback_gas: Gas,
+        currency_pair: CurrencyPair,
+        result: Result<
+            Result<(Amount<Base>, Amount<Quote>)>,
+            tokio::task::JoinError,
+        >,
+    ) -> Result<PriceFetcherContext<<P as Dex>::PriceQueryMessage>> {
+        self.handle_price_query_result(
+            &mut price_fetcher_context.price_collection_buffer,
+            currency_pair,
+            result.context("Failed to join back price query task!")?,
+        );
+
+        if price_fetcher_context.queries_task_set.is_empty()
+            && !price_fetcher_context.price_collection_buffer.is_empty()
+        {
+            let feedback_response_rx = self
+                .send_for_broadcast(
+                    &price_fetcher_context.price_collection_buffer,
+                    fallback_gas,
+                )
+                .context("Failed to send prices for broadcast!")?;
+
+            let _abort_handle: AbortHandle = fetch_delivered_set
+                .spawn(self.fetch_delivered(feedback_response_rx));
+
+            price_fetcher_context.price_collection_buffer.clear();
+        }
+
+        Ok(price_fetcher_context)
+    }
+
+    async fn tick_finished(
+        &mut self,
+        mut price_fetcher_context: PriceFetcherContext<P::PriceQueryMessage>,
+    ) -> Result<PriceFetcherContext<P::PriceQueryMessage>> {
+        let new_block_height = self
+            .get_dex_block_height()
+            .await
+            .context("Failed to fetch DEX node's block height")?;
+
+        if price_fetcher_context.dex_block_height < new_block_height {
+            price_fetcher_context.dex_block_height = new_block_height;
+
+            self.spawn_query_tasks(price_fetcher_context)
+                .await
+                .context("Failed to spawn price querying tasks!")
+        } else {
+            log_with_context!(error![self.protocol, P](
+                last_recorded = price_fetcher_context.dex_block_height,
+                latest_reported = new_block_height,
+                "DEX node's latest block height didn't increment!",
+            ));
+
+            Ok(price_fetcher_context)
+        }
+    }
+
+    fn query_messages(
+        &self,
+    ) -> Result<BTreeMap<CurrencyPair, <P as Dex>::PriceQueryMessage>> {
+        self.provider.price_query_messages_with_associated_data(
+            self.oracle
+                .currency_pairs()
+                .iter()
+                .map(|(pair, associated_data)| (pair.clone(), associated_data)),
+            self.oracle.currencies(),
+        )
     }
 
     async fn get_dex_block_height(&self) -> Result<u64> {
@@ -505,17 +691,15 @@ where
 
     async fn spawn_query_tasks(
         &mut self,
-        query_messages: &mut BTreeMap<CurrencyPair, P::PriceQueryMessage>,
-        task_set: &mut QueryTasksSet,
-        replacement_buffer: &mut Vec<Price>,
-    ) -> Result<()> {
+        mut price_fetcher_context: PriceFetcherContext<P::PriceQueryMessage>,
+    ) -> Result<PriceFetcherContext<P::PriceQueryMessage>> {
         if self
             .oracle
             .update_currencies_and_pairs()
             .await
             .context("Failed to update currencies and currency pairs")?
         {
-            *query_messages = self
+            price_fetcher_context.query_messages = self
                 .provider
                 .price_query_messages_with_associated_data(
                     self.oracle.currency_pairs().iter().map(
@@ -527,18 +711,21 @@ where
                 )
                 .context("Failed to construct price query messages!")?;
 
-            let additional_capacity = query_messages
-                .len()
-                .saturating_sub(replacement_buffer.len());
+            let additional_capacity =
+                price_fetcher_context.query_messages.len().saturating_sub(
+                    price_fetcher_context.price_collection_buffer.len(),
+                );
 
-            replacement_buffer.reserve_exact(additional_capacity);
+            price_fetcher_context
+                .price_collection_buffer
+                .reserve_exact(additional_capacity);
         }
 
-        query_messages
-            .iter()
-            .for_each(self.spawn_query_task(task_set));
+        price_fetcher_context.query_messages.iter().for_each(
+            self.spawn_query_task(&mut price_fetcher_context.queries_task_set),
+        );
 
-        Ok(())
+        Ok(price_fetcher_context)
     }
 
     pub(crate) fn spawn_query_task<'r>(
@@ -567,6 +754,19 @@ where
             );
         }
     }
+}
+
+#[cold]
+#[inline]
+fn unreachable<T>() -> T {
+    unreachable!();
+}
+
+struct PriceFetcherContext<QueryMessage> {
+    query_messages: BTreeMap<CurrencyPair, QueryMessage>,
+    queries_task_set: QueryTasksSet,
+    price_collection_buffer: Vec<Price>,
+    dex_block_height: u64,
 }
 
 type QueryTasksSet =
@@ -638,8 +838,8 @@ fn test_pretty_price_formatting() {
             _: &node::Client,
             _: &Self::PriceQueryMessage,
         ) -> impl Future<Output = Result<(Amount<Base>, Amount<Quote>)>>
-               + Send
-               + 'static {
+        + Send
+        + 'static {
             async move {
                 unreachable!();
             }

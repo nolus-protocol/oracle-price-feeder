@@ -3,7 +3,7 @@ use proptest::{
     prop_assert, prop_assert_eq, prop_assert_ne, test_runner::TestCaseError,
 };
 
-use crate::provider::Decimal;
+use crate::amount::Decimal;
 
 use super::{greater_than_max_quote_value, Osmosis, MAX_QUOTE_VALUE};
 

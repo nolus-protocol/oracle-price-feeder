@@ -1,5 +1,3 @@
-use std::future::Future;
-
 use thiserror::Error;
 
 pub mod bounded;

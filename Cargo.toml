@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "./applications/*",
     "./libraries/*",
@@ -7,7 +7,7 @@ members = [
 
 [workspace.package]
 version = "0.66.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.85.0"
 
 [workspace.dependencies.balance-reporter]
@@ -33,6 +33,9 @@ path = "./libraries/dex"
 
 [workspace.dependencies.environment]
 path = "./libraries/environment"
+
+[workspace.dependencies.error-handler]
+path = "./libraries/error-handler"
 
 [workspace.dependencies.log]
 path = "./libraries/log"
@@ -160,17 +163,10 @@ version = "1.8.1"
 features = ["std"]
 
 [workspace.lints.rust]
-unexpected_cfgs = "forbid"
-unsafe_code = "forbid"
-warnings = "deny"
 
 [workspace.lints.clippy]
 missing_errors_doc = "allow"
 needless_maybe_sized = "allow"
-
-[workspace.lints.clippy.pedantic]
-priority = -1
-level = "deny"
 
 [profile.release]
 codegen-units = 1

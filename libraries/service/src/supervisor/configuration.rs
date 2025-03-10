@@ -54,28 +54,6 @@ impl Service {
         })
     }
 
-    pub const fn node_client(&self) -> &node::Client {
-        &self.node_client
-    }
-
-    pub const fn signer(&self) -> &Signer {
-        &self.signer
-    }
-
-    pub fn admin_contract(&self) -> &CheckedContract<Admin> {
-        &self.admin_contract
-    }
-
-    #[must_use]
-    pub fn idle_duration(&self) -> Duration {
-        self.idle_duration
-    }
-
-    #[must_use]
-    pub fn timeout_duration(&self) -> Duration {
-        self.timeout_duration
-    }
-
     fn read_node_grpc_uri() -> Result<String> {
         String::read_from_var("NODE_GRPC_URI")
             .context("Failed to read node's gRPC URI!")

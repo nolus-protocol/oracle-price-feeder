@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use cosmrs::{
     proto::cosmos::base::abci::v1beta1::TxResponse,
     tendermint::abci::Code as TxCode,

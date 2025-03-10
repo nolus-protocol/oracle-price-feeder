@@ -597,6 +597,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "error-handler"
+version = "0.66.0"
+dependencies = [
+ "anyhow",
+ "environment",
+]
+
+[[package]]
 name = "eyre"
 version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1035,6 +1043,7 @@ dependencies = [
  "defer",
  "dex",
  "environment",
+ "error-handler",
  "log 0.66.0",
  "oracle",
  "protocol-watcher",

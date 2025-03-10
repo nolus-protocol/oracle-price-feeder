@@ -15,7 +15,7 @@ use tokio::{
     time::{sleep, Instant},
 };
 
-use ::task::{spawn_new, spawn_restarting, RunnableState, Task};
+use ::task::{spawn_new, spawn_restarting, RunnableState};
 use chain_ops::{
     node::{self, QueryTx},
     signer::Gas,
@@ -25,7 +25,7 @@ use channel::{bounded, unbounded, Channel};
 use contract::{
     Protocol, ProtocolDex, ProtocolProviderAndContracts, UncheckedContract,
 };
-use dex::{provider, providers::ProviderType};
+use dex::{Dex, providers::ProviderType};
 use environment::ReadFromVar as _;
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
@@ -33,8 +33,13 @@ use supervisor::supervisor;
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
-use self::{oracle::Oracle, state::State, task::TaskWithProvider};
+use self::{
+    dex_node_grpc_var::dex_node_grpc_var, id::Id, oracle::Oracle, state::State,
+    task::TaskWithProvider,
+};
 
+mod dex_node_grpc_var;
+mod id;
 mod oracle;
 mod state;
 mod task;
@@ -69,18 +74,6 @@ async fn main() -> Result<()> {
     )
     .await
     .map(drop)
-}
-
-impl Task<Id> for balance_reporter::State {
-    const ID: Id = Id::BalanceReporter;
-}
-
-impl Task<Id> for broadcaster::State<TimeBasedExpiration> {
-    const ID: Id = Id::Broadcaster;
-}
-
-impl Task<Id> for protocol_watcher::State {
-    const ID: Id = Id::ProtocolWatcher;
 }
 
 #[inline]
@@ -123,11 +116,17 @@ fn error_handler(
                 spawn_restarting(task_set, state.protocol_watcher().clone());
             },
             Id::PriceFetcher { protocol: name } => {
-                let mut entry = task_states.entry(name.clone());
+                let &error_handler::State {
+                    non_delayed_task_retries_count,
+                    failed_retry_margin,
+                } = state.error_handler();
 
-                let delayed = match entry {
+                let delayed = match task_states.entry(name.clone()) {
                     btree_map::Entry::Vacant(entry) => {
-                        entry.insert((Instant::now(), 2_u8));
+                        entry.insert((
+                            Instant::now(),
+                            non_delayed_task_retries_count,
+                        ));
 
                         false
                     },
@@ -137,11 +136,11 @@ fn error_handler(
                         let now = Instant::now();
 
                         *retries = if now.duration_since(replace(instant, now))
-                            < Duration::from_secs(5)
+                            < failed_retry_margin
                         {
                             retries.saturating_sub(1)
                         } else {
-                            2
+                            non_delayed_task_retries_count
                         };
 
                         *retries == 0
@@ -165,7 +164,7 @@ fn error_handler(
                 .context("Failed to spawn price fetcher task!")?;
 
                 task_states.retain(|_, (instant, _)| {
-                    instant.elapsed() < Duration::from_secs(5)
+                    instant.elapsed() < failed_retry_margin
                 });
             },
         }
@@ -194,7 +193,7 @@ impl PriceFetcher {
         provider: Dex,
     ) -> Result<()>
     where
-        Dex: provider::Dex<ProviderTypeDescriptor = ProviderType>,
+        Dex: self::Dex<ProviderTypeDescriptor = ProviderType>,
     {
         let dex_node_client = {
             let client = {
@@ -277,7 +276,7 @@ async fn spawn_price_fetcher(
             self,
             ProtocolProviderAndContracts { provider, oracle }: ProtocolProviderAndContracts<Dex>,
         ) where
-            Dex: provider::Dex<ProviderTypeDescriptor = ProviderType>,
+            Dex: self::Dex<ProviderTypeDescriptor = ProviderType>,
         {
             let Self {
                 task_set,
@@ -358,125 +357,4 @@ async fn remove_price_fetcher(
     task_set.abort(&Id::PriceFetcher { protocol });
 
     Ok(state)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Id {
-    BalanceReporter,
-    Broadcaster,
-    ProtocolWatcher,
-    PriceFetcher { protocol: Arc<str> },
-}
-
-const SEPARATOR_CHAR: char = '_';
-
-const SEPARATOR_STR: &str = {
-    const BYTES: [u8; SEPARATOR_CHAR.len_utf8()] = {
-        let mut bytes = [0; SEPARATOR_CHAR.len_utf8()];
-
-        SEPARATOR_CHAR.encode_utf8(&mut bytes);
-
-        bytes
-    };
-
-    if let Ok(s) = core::str::from_utf8(&BYTES) {
-        s
-    } else {
-        panic!("Separator should be valid UTF-8!")
-    }
-};
-
-const VAR_SUFFIX: &str = {
-    const SEGMENTS: &[&str] = &["NODE", "GRPC"];
-
-    const LENGTH: usize = {
-        let mut sum = (SEGMENTS.len() + 1) * SEPARATOR_STR.len();
-
-        let mut index = 0;
-
-        while index < SEGMENTS.len() {
-            sum += SEGMENTS[index].len();
-
-            index += 1;
-        }
-
-        sum
-    };
-
-    const BYTES: [u8; LENGTH] = {
-        const fn write_bytes(
-            destination: &mut [u8; LENGTH],
-            mut destination_index: usize,
-            source: &[u8],
-        ) -> usize {
-            let mut source_index = 0;
-
-            while source_index < source.len() {
-                destination[destination_index] = source[source_index];
-
-                destination_index += 1;
-
-                source_index += 1;
-            }
-
-            destination_index
-        }
-
-        #[inline]
-        const fn write_separator(
-            destination: &mut [u8; LENGTH],
-            index: usize,
-        ) -> usize {
-            write_bytes(destination, index, SEPARATOR_STR.as_bytes())
-        }
-
-        let mut bytes = [0; LENGTH];
-
-        let mut byte_index = write_separator(&mut bytes, 0);
-
-        let mut index = 0;
-
-        while index < SEGMENTS.len() {
-            byte_index = write_separator(&mut bytes, byte_index);
-
-            byte_index =
-                write_bytes(&mut bytes, byte_index, SEGMENTS[index].as_bytes());
-
-            index += 1;
-        }
-
-        bytes
-    };
-
-    if let Ok(s) = core::str::from_utf8(&BYTES) {
-        s
-    } else {
-        panic!("Environment variable name suffix should be valid UTF-8!")
-    }
-};
-
-fn dex_node_grpc_var(mut network: String) -> String {
-    network.make_ascii_uppercase();
-
-    if const { SEPARATOR_CHAR != '-' } {
-        while let Some(index) = network.find('-') {
-            network.replace_range(index..=index, SEPARATOR_STR);
-        }
-    }
-
-    network.reserve_exact(VAR_SUFFIX.len());
-
-    network.push_str(VAR_SUFFIX);
-
-    network
-}
-
-#[test]
-fn test_f() {
-    assert_eq!(VAR_SUFFIX, "__NODE_GRPC");
-
-    assert_eq!(
-        dex_node_grpc_var("AbBCD_e-Fg-H-i".into()),
-        "ABBCD_E_FG_H_I__NODE_GRPC"
-    );
 }

@@ -1,4 +1,4 @@
-use std::{convert::Infallible, error::Error, future::Future, sync::Arc};
+use std::{convert::Infallible, error::Error, sync::Arc};
 
 use anyhow::Result;
 use cosmrs::{
@@ -6,7 +6,7 @@ use cosmrs::{
 };
 use tokio::{
     sync::oneshot,
-    time::{error::Elapsed, timeout_at, Instant},
+    time::{Instant, error::Elapsed, timeout_at},
 };
 
 use chain_ops::signer::Gas;

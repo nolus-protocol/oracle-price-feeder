@@ -1,9 +1,6 @@
-use std::{
-    future::Future,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 use anyhow::{Context as _, Result};
@@ -21,9 +18,9 @@ use cosmrs::proto::{
 };
 use tokio::sync::RwLock;
 use tonic::{
+    Code as TonicCode,
     client::Grpc as GrpcClient,
     transport::{Channel as GrpcChannel, ClientTlsConfig, Endpoint, Uri},
-    Code as TonicCode,
 };
 
 mod broadcast_tx;

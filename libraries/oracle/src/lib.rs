@@ -1,10 +1,8 @@
-use std::future::Future;
-
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 
 use chain_ops::node::Reconnect;
 use contract::{CheckedContract, UncheckedContract};
-use dex::provider;
+use dex::Dex;
 use semver::SemVer;
 
 #[must_use]
@@ -18,7 +16,7 @@ where
 
 impl<Dex> Oracle<Dex>
 where
-    Dex: provider::Dex + ?Sized,
+    Dex: self::Dex + ?Sized,
 {
     pub async fn new(
         contract: UncheckedContract<contract::Oracle<Dex>>,

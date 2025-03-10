@@ -1,13 +1,13 @@
-use std::{borrow::Borrow, cmp, collections::BTreeMap, future::Future};
+use std::{borrow::Borrow, cmp, collections::BTreeMap};
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use tracing::debug;
 
 use chain_ops::node;
 
 use crate::{
-    provider::{Amount, Base, CurrencyPair, Decimal, Dex, Quote},
-    Currencies,
+    Currencies, CurrencyPair, Dex,
+    amount::{Amount, Base, Decimal, Quote},
 };
 
 use super::{
