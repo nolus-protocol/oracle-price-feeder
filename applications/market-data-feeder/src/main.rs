@@ -33,11 +33,7 @@ use supervisor::supervisor;
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
-use self::{
-    oracle::Oracle,
-    state::{price_fetcher, State},
-    task::TaskWithProvider,
-};
+use self::{oracle::Oracle, state::State, task::TaskWithProvider};
 
 mod oracle;
 mod state;
@@ -308,7 +304,7 @@ async fn spawn_price_fetcher(
 
     tracing::info!(%name, "Price fetcher is starting...");
 
-    let price_fetcher::State {
+    let state::PriceFetcher {
         mut admin_contract,
         dex_node_clients,
         idle_duration,

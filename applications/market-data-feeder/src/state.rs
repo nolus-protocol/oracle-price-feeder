@@ -1,20 +1,23 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use tokio::sync::Mutex;
 
+use chain_ops::{
+    node::{self, QueryTx},
+    signer::Gas,
+};
 use channel::{bounded, unbounded};
+use contract::{Admin, CheckedContract};
 use protocol_watcher::Command;
 use service::supervisor::configuration::Service;
 use tx::{TimeBasedExpiration, TxPackage};
-
-pub mod price_fetcher;
 
 pub struct State {
     balance_reporter: balance_reporter::State,
     broadcaster: broadcaster::State<TimeBasedExpiration>,
     protocol_watcher: protocol_watcher::State,
-    price_fetcher: price_fetcher::State,
+    price_fetcher: PriceFetcher,
 }
 
 impl State {
@@ -57,7 +60,7 @@ impl State {
             action_tx,
         };
 
-        let price_fetcher = price_fetcher::State {
+        let price_fetcher = PriceFetcher {
             admin_contract: service.admin_contract,
             dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
             idle_duration: service.idle_duration,
@@ -93,7 +96,19 @@ impl State {
     }
 
     #[inline]
-    pub const fn price_fetcher(&self) -> &price_fetcher::State {
+    pub const fn price_fetcher(&self) -> &PriceFetcher {
         &self.price_fetcher
     }
+}
+
+#[derive(Clone)]
+#[must_use]
+pub struct PriceFetcher {
+    pub admin_contract: CheckedContract<Admin>,
+    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+    pub idle_duration: Duration,
+    pub signer_address: Arc<str>,
+    pub hard_gas_limit: Gas,
+    pub query_tx: QueryTx,
+    pub timeout_duration: Duration,
 }
