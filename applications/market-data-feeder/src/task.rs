@@ -8,30 +8,41 @@ use cosmrs::{
     proto::cosmos::base::abci::v1beta1::TxResponse,
     tendermint::abci::Code as TxCode,
 };
+use environment::ReadFromVar;
 use serde::Serialize;
 use tokio::{
     spawn,
-    sync::oneshot,
+    sync::{Mutex, oneshot},
     task::{AbortHandle, JoinSet},
     time::{Instant, Interval, MissedTickBehavior, interval, sleep, timeout},
 };
 
 use ::tx::{TimeBasedExpiration, TxPackage};
 use chain_ops::{
-    node,
+    node::{self, QueryTx},
     signer::Gas,
     tx::{self, ExecuteTemplate},
 };
 use channel::unbounded;
+use contract::{Protocol, ProtocolDex, ProtocolProviderAndContracts};
 use defer::Defer;
 use dex::{
     CurrencyPair, Dex,
     amount::{Amount, Base, Decimal, Quote},
+    providers::ProviderType,
 };
-use task::{Run, RunnableState, Task};
+use task::{
+    Run, RunnableState, Task, spawn_new, spawn_restarting,
+    spawn_restarting_delayed,
+};
 use task_set::TaskSet;
 
-use crate::{id::Id, oracle::Oracle};
+use crate::{
+    dex_node_grpc_var::dex_node_grpc_var,
+    id::Id,
+    oracle::Oracle,
+    state::{self, State},
+};
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -50,6 +61,174 @@ macro_rules! log_with_context {
             $($body)+
         ))
     };
+}
+
+pub enum PriceFetcherRunnableState {
+    New,
+    ImmediateRestart,
+    DelayedRestart(Duration),
+}
+
+pub async fn spawn_price_fetcher(
+    task_set: &mut TaskSet<Id, Result<()>>,
+    state: State,
+    protocol: Arc<str>,
+    transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+    runnable_state: PriceFetcherRunnableState,
+) -> Result<State> {
+    tracing::info!(%protocol, "Price fetcher is starting...");
+
+    let state::PriceFetcher {
+        mut admin_contract,
+        dex_node_clients,
+        idle_duration,
+        signer_address,
+        hard_gas_limit,
+        query_tx,
+        timeout_duration,
+    } = state.price_fetcher().clone();
+
+    let Protocol {
+        network,
+        provider_and_contracts,
+    } = admin_contract.protocol(&protocol).await?;
+
+    let task = TaskSpawner {
+        task_set,
+        name: protocol,
+        idle_duration,
+        transaction_tx: transaction_tx.clone(),
+        signer_address: signer_address.clone(),
+        hard_gas_limit,
+        query_tx,
+        dex_node_clients: dex_node_clients.clone(),
+        timeout_duration,
+        network,
+        runnable_state,
+    };
+
+    match provider_and_contracts {
+        ProtocolDex::Astroport(provider_and_contracts) => {
+            task.spawn_with(provider_and_contracts).await
+        },
+        ProtocolDex::Osmosis(provider_and_contracts) => {
+            task.spawn_with(provider_and_contracts).await
+        },
+    }
+    .map(|()| state)
+}
+
+struct TaskSpawner<'r> {
+    task_set: &'r mut TaskSet<Id, Result<()>>,
+    name: Arc<str>,
+    dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+    idle_duration: Duration,
+    signer_address: Arc<str>,
+    hard_gas_limit: Gas,
+    transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+    query_tx: QueryTx,
+    timeout_duration: Duration,
+    network: String,
+    runnable_state: PriceFetcherRunnableState,
+}
+
+impl TaskSpawner<'_> {
+    async fn spawn_with<Dex>(
+        self,
+        ProtocolProviderAndContracts { provider, oracle }: ProtocolProviderAndContracts<Dex>,
+    ) -> Result<()>
+    where
+        Dex: self::Dex<ProviderTypeDescriptor = ProviderType>,
+    {
+        let Self {
+            task_set,
+            name,
+            dex_node_clients,
+            idle_duration,
+            signer_address,
+            hard_gas_limit,
+            transaction_tx,
+            query_tx,
+            timeout_duration,
+            network,
+            runnable_state,
+        } = self;
+
+        let oracle = ::oracle::Oracle::new(oracle)
+            .await
+            .context("Failed to connect to oracle contract!")?;
+
+        let source =
+            format!("{dex}; Protocol: {name}", dex = Dex::PROVIDER_TYPE,)
+                .into();
+
+        let dex_node_client =
+            get_or_connect_dex_client(network, dex_node_clients).await?;
+
+        let execute_template = ExecuteTemplate::new(
+            (&*signer_address).into(),
+            oracle.address().into(),
+        );
+
+        let oracle = Oracle::new(oracle, Duration::from_secs(15))
+            .await
+            .context("Failed to fetch oracle contract data!")?;
+
+        let task = TaskWithProvider {
+            protocol: name,
+            source,
+            query_tx,
+            dex_node_client,
+            duration_before_start: Duration::default(),
+            execute_template,
+            idle_duration,
+            timeout_duration,
+            hard_gas_limit,
+            oracle,
+            provider,
+            transaction_tx,
+        };
+
+        match runnable_state {
+            PriceFetcherRunnableState::New => spawn_new(task_set, task),
+            PriceFetcherRunnableState::ImmediateRestart => {
+                spawn_restarting(task_set, task)
+            },
+            PriceFetcherRunnableState::DelayedRestart(delay) => {
+                spawn_restarting_delayed(task_set, task, delay)
+            },
+        }
+
+        Ok(())
+    }
+}
+
+async fn get_or_connect_dex_client(
+    provider_network: String,
+    dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+) -> Result<node::Client, anyhow::Error> {
+    let client = {
+        let guard = dex_node_clients.clone().lock_owned().await;
+
+        guard.get(&*provider_network).cloned()
+    };
+
+    Ok(if let Some(client) = client {
+        client
+    } else {
+        let client = node::Client::connect(&String::read_from_var(
+            dex_node_grpc_var(provider_network.clone()),
+        )?)
+        .await
+        .context("Failed to connect to node's gRPC endpoint!")?;
+
+        dex_node_clients
+            .lock_owned()
+            .await
+            .entry(provider_network.into_boxed_str())
+            .or_insert(client)
+            .clone()
+    })
 }
 
 pub struct TaskWithProvider<Dex>
@@ -96,6 +275,149 @@ where
             price_collection_buffer,
             dex_block_height,
         })
+    }
+
+    async fn initial_fetch_and_print(
+        &mut self,
+        queries_task_set: &mut QueryTasksSet,
+    ) -> Result<()> {
+        let mut prices = vec![];
+
+        let mut fetch_errors = vec![];
+
+        while let Some((currency_pair, result)) =
+            queries_task_set.join_next().await
+        {
+            let result =
+                result.context("Failed to join back price query task!")?;
+
+            match result {
+                Ok(price) => {
+                    prices.push((currency_pair, price));
+                },
+                Err(error) => {
+                    fetch_errors.push((currency_pair, error));
+                },
+            }
+        }
+
+        self.log_prices_and_errors(prices, fetch_errors);
+
+        sleep(self.duration_before_start).await;
+
+        Ok(())
+    }
+
+    fn log_prices_and_errors(
+        &self,
+        prices: Vec<QueryTaskResponse>,
+        fetch_errors: Vec<(CurrencyPair, anyhow::Error)>,
+    ) {
+        log!(info_span!("pre-feeding-check")).in_scope(|| {
+            if !prices.is_empty() {
+                self.log_prices(prices);
+            }
+
+            if !fetch_errors.is_empty() {
+                self.log_errors(fetch_errors);
+            }
+        });
+    }
+
+    fn log_prices(&self, prices: Vec<QueryTaskResponse>) {
+        log_with_context!(info![self.protocol, P]("Collected prices:"));
+
+        for (CurrencyPair { base, quote }, (base_amount, quote_amount)) in
+            prices
+        {
+            log!(debug!("{base_amount:?} / {quote_amount:?}"));
+
+            log!(info!(
+                "{}",
+                Self::pretty_formatted_price(
+                    &base,
+                    &base_amount,
+                    &quote,
+                    &quote_amount
+                )
+            ));
+
+            log!(info!(
+                "\t{{{base_amount} ~ {quote_amount}}}",
+                base_amount = base_amount.as_inner().amount(),
+                quote_amount = quote_amount.as_inner().amount(),
+            ));
+        }
+
+        log!(info!(""));
+    }
+
+    fn log_errors(&self, fetch_errors: Vec<(CurrencyPair, anyhow::Error)>) {
+        log_with_context!(error![self.protocol, P](
+            "Errors which occurred while collecting prices:"
+        ));
+
+        for (CurrencyPair { base, quote }, error) in fetch_errors {
+            log!(error!(
+                %base,
+                %quote,
+                ?error,
+                "Failed to fetch price!",
+            ));
+        }
+
+        log!(error!(""));
+    }
+
+    fn pretty_formatted_price(
+        base_ticker: &str,
+        base_amount: &Amount<Base>,
+        quote_ticker: &str,
+        quote_amount: &Amount<Quote>,
+    ) -> String {
+        struct ProcessedAmount<'r> {
+            whole: &'r str,
+            zeroes_after_point: usize,
+            fraction: &'r str,
+        }
+
+        fn process(amount: &Decimal) -> ProcessedAmount {
+            let decimal_digits = amount.decimal_places().into();
+
+            let amount = amount.amount();
+
+            let amount_length = amount.len();
+
+            let (whole, fraction) =
+                amount.split_at(amount_length.saturating_sub(decimal_digits));
+
+            let zeroes_after_point =
+                decimal_digits.saturating_sub(amount_length);
+
+            ProcessedAmount {
+                whole,
+                zeroes_after_point,
+                fraction: fraction.trim_end_matches('0'),
+            }
+        }
+
+        let base_amount = process(base_amount.as_inner());
+
+        let quote_amount = process(quote_amount.as_inner());
+
+        format!(
+            "{base_whole:0>1}.{empty:0<base_zeroes$}{base_fraction:0<1} \
+            {base_ticker} ~ \
+            {quote_whole:0>1}.{empty:0<quote_zeroes$}{quote_fraction:0<1} \
+            {quote_ticker}",
+            empty = "",
+            base_whole = base_amount.whole,
+            base_zeroes = base_amount.zeroes_after_point,
+            base_fraction = base_amount.fraction,
+            quote_whole = quote_amount.whole,
+            quote_zeroes = quote_amount.zeroes_after_point,
+            quote_fraction = quote_amount.fraction,
+        )
     }
 
     async fn join_query_or_delivered(
@@ -308,149 +630,6 @@ where
             .get_latest_block()
             .await
             .context("Failed to fetch DEX node's block height!")
-    }
-
-    async fn initial_fetch_and_print(
-        &mut self,
-        queries_task_set: &mut QueryTasksSet,
-    ) -> Result<()> {
-        let mut prices = vec![];
-
-        let mut fetch_errors = vec![];
-
-        while let Some((currency_pair, result)) =
-            queries_task_set.join_next().await
-        {
-            let result =
-                result.context("Failed to join back price query task!")?;
-
-            match result {
-                Ok(price) => {
-                    prices.push((currency_pair, price));
-                },
-                Err(error) => {
-                    fetch_errors.push((currency_pair, error));
-                },
-            }
-        }
-
-        self.log_prices_and_errors(prices, fetch_errors);
-
-        sleep(self.duration_before_start).await;
-
-        Ok(())
-    }
-
-    fn log_prices_and_errors(
-        &self,
-        prices: Vec<QueryTaskResponse>,
-        fetch_errors: Vec<(CurrencyPair, anyhow::Error)>,
-    ) {
-        log!(info_span!("pre-feeding-check")).in_scope(|| {
-            if !prices.is_empty() {
-                self.log_prices(prices);
-            }
-
-            if !fetch_errors.is_empty() {
-                self.log_errors(fetch_errors);
-            }
-        });
-    }
-
-    fn log_prices(&self, prices: Vec<QueryTaskResponse>) {
-        log_with_context!(info![self.protocol, P]("Collected prices:"));
-
-        for (CurrencyPair { base, quote }, (base_amount, quote_amount)) in
-            prices
-        {
-            log!(debug!("{base_amount:?} / {quote_amount:?}"));
-
-            log!(info!(
-                "{}",
-                Self::pretty_formatted_price(
-                    &base,
-                    &base_amount,
-                    &quote,
-                    &quote_amount
-                )
-            ));
-
-            log!(info!(
-                "\t{{{base_amount} ~ {quote_amount}}}",
-                base_amount = base_amount.as_inner().amount(),
-                quote_amount = quote_amount.as_inner().amount(),
-            ));
-        }
-
-        log!(info!(""));
-    }
-
-    fn log_errors(&self, fetch_errors: Vec<(CurrencyPair, anyhow::Error)>) {
-        log_with_context!(error![self.protocol, P](
-            "Errors which occurred while collecting prices:"
-        ));
-
-        for (CurrencyPair { base, quote }, error) in fetch_errors {
-            log!(error!(
-                %base,
-                %quote,
-                ?error,
-                "Failed to fetch price!",
-            ));
-        }
-
-        log!(error!(""));
-    }
-
-    fn pretty_formatted_price(
-        base_ticker: &str,
-        base_amount: &Amount<Base>,
-        quote_ticker: &str,
-        quote_amount: &Amount<Quote>,
-    ) -> String {
-        struct ProcessedAmount<'r> {
-            whole: &'r str,
-            zeroes_after_point: usize,
-            fraction: &'r str,
-        }
-
-        fn process(amount: &Decimal) -> ProcessedAmount {
-            let decimal_digits = amount.decimal_places().into();
-
-            let amount = amount.amount();
-
-            let amount_length = amount.len();
-
-            let (whole, fraction) =
-                amount.split_at(amount_length.saturating_sub(decimal_digits));
-
-            let zeroes_after_point =
-                decimal_digits.saturating_sub(amount_length);
-
-            ProcessedAmount {
-                whole,
-                zeroes_after_point,
-                fraction: fraction.trim_end_matches('0'),
-            }
-        }
-
-        let base_amount = process(base_amount.as_inner());
-
-        let quote_amount = process(quote_amount.as_inner());
-
-        format!(
-            "{base_whole:0>1}.{empty:0<base_zeroes$}{base_fraction:0<1} \
-            {base_ticker} ~ \
-            {quote_whole:0>1}.{empty:0<quote_zeroes$}{quote_fraction:0<1} \
-            {quote_ticker}",
-            empty = "",
-            base_whole = base_amount.whole,
-            base_zeroes = base_amount.zeroes_after_point,
-            base_fraction = base_amount.fraction,
-            quote_whole = quote_amount.whole,
-            quote_zeroes = quote_amount.zeroes_after_point,
-            quote_fraction = quote_amount.fraction,
-        )
     }
 
     fn handle_price_query_result(

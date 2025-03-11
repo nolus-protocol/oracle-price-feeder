@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Context as _, Result};
 
 use channel::unbounded;
@@ -6,7 +8,7 @@ use task::spawn_restarting;
 use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
-use crate::{id::Id, state::State};
+use crate::{id::Id, state::State, task::PriceFetcherRunnableState};
 
 #[inline]
 pub fn error_handler(
@@ -43,8 +45,13 @@ pub fn error_handler(
                     state,
                     name,
                     &transaction_tx,
-                    task::RunnableState::Restart,
-                    matches!(restart_strategy, RestartStrategy::Delayed),
+                    if matches!(restart_strategy, RestartStrategy::Immediate) {
+                        PriceFetcherRunnableState::ImmediateRestart
+                    } else {
+                        PriceFetcherRunnableState::DelayedRestart(
+                            Duration::from_secs(15),
+                        )
+                    },
                 )
                 .await
                 .context("Failed to spawn price fetcher task!")?;
