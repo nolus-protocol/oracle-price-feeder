@@ -8,7 +8,6 @@ use cosmrs::{
     proto::cosmos::base::abci::v1beta1::TxResponse,
     tendermint::abci::Code as TxCode,
 };
-use environment::ReadFromVar;
 use serde::Serialize;
 use tokio::{
     spawn,
@@ -31,6 +30,7 @@ use dex::{
     amount::{Amount, Base, Decimal, Quote},
     providers::ProviderType,
 };
+use environment::ReadFromVar as _;
 use task::{
     Run, RunnableState, Task, spawn_new, spawn_restarting,
     spawn_restarting_delayed,
