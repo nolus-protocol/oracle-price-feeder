@@ -2,26 +2,20 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
-use std::{
-    collections::btree_map::{self, BTreeMap},
-    mem::replace,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::btree_map::BTreeMap, sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
-use tokio::{
-    sync::Mutex,
-    time::{sleep, Instant},
-};
+use tokio::sync::Mutex;
 
-use ::task::{spawn_new, spawn_restarting, RunnableState};
+use ::task::{
+    RunnableState, spawn_new, spawn_restarting, spawn_restarting_delayed,
+};
 use chain_ops::{
     node::{self, QueryTx},
     signer::Gas,
     tx::ExecuteTemplate,
 };
-use channel::{bounded, unbounded, Channel};
+use channel::{Channel, bounded, unbounded};
 use contract::{
     Protocol, ProtocolDex, ProtocolProviderAndContracts, UncheckedContract,
 };
@@ -34,11 +28,12 @@ use task_set::TaskSet;
 use tx::{TimeBasedExpiration, TxPackage};
 
 use self::{
-    dex_node_grpc_var::dex_node_grpc_var, id::Id, oracle::Oracle, state::State,
-    task::TaskWithProvider,
+    dex_node_grpc_var::dex_node_grpc_var, error_handler::error_handler, id::Id,
+    oracle::Oracle, state::State, task::TaskWithProvider,
 };
 
 mod dex_node_grpc_var;
+mod error_handler;
 mod id;
 mod oracle;
 mod state;
@@ -64,11 +59,16 @@ async fn main() -> Result<()> {
                     state,
                     name,
                     transaction_tx,
+                    RunnableState::New,
                     false,
                 )
                 .await
             },
-            remove_price_fetcher,
+            async move |task_set, state, protocol| {
+                task_set.abort(&Id::PriceFetcher { protocol });
+
+                Ok(state)
+            },
         ),
         error_handler(transaction_tx),
     )
@@ -80,10 +80,11 @@ async fn main() -> Result<()> {
 fn init_tasks(
     service: Service,
     transaction_rx: unbounded::Receiver<TxPackage<TimeBasedExpiration>>,
-) -> impl for<'r> AsyncFnOnce(
-    &'r mut TaskSet<Id, Result<()>>,
+) -> impl for<'task_set> AsyncFnOnce(
+    &'task_set mut TaskSet<Id, Result<()>>,
     bounded::Sender<Command>,
-) -> Result<State> {
+) -> Result<State>
++ use<> {
     async move |task_set, action_tx| {
         let state = State::new(service, transaction_rx, action_tx)?;
 
@@ -92,82 +93,6 @@ fn init_tasks(
         spawn_new(task_set, state.broadcaster().clone());
 
         spawn_new(task_set, state.protocol_watcher().clone());
-
-        Ok(state)
-    }
-}
-
-#[inline]
-fn error_handler(
-    transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
-) -> impl AsyncFnMut(&mut TaskSet<Id, Result<()>>, State, Id) -> Result<State> + use<>
-{
-    let mut task_states = BTreeMap::new();
-
-    async move |task_set, mut state, id| -> Result<State> {
-        match id {
-            Id::BalanceReporter {} => {
-                spawn_restarting(task_set, state.balance_reporter().clone());
-            },
-            Id::Broadcaster {} => {
-                spawn_restarting(task_set, state.broadcaster().clone());
-            },
-            Id::ProtocolWatcher {} => {
-                spawn_restarting(task_set, state.protocol_watcher().clone());
-            },
-            Id::PriceFetcher { protocol: name } => {
-                let &error_handler::State {
-                    non_delayed_task_retries_count,
-                    failed_retry_margin,
-                } = state.error_handler();
-
-                let delayed = match task_states.entry(name.clone()) {
-                    btree_map::Entry::Vacant(entry) => {
-                        entry.insert((
-                            Instant::now(),
-                            non_delayed_task_retries_count,
-                        ));
-
-                        false
-                    },
-                    btree_map::Entry::Occupied(ref mut entry) => {
-                        let (instant, retries) = entry.get_mut();
-
-                        let now = Instant::now();
-
-                        *retries = if now.duration_since(replace(instant, now))
-                            < failed_retry_margin
-                        {
-                            retries.saturating_sub(1)
-                        } else {
-                            non_delayed_task_retries_count
-                        };
-
-                        *retries == 0
-                    },
-                };
-
-                tracing::info!(
-                    protocol = %name,
-                    "Restarting price fetcher{}.",
-                    if delayed { " with delay" } else { "" },
-                );
-
-                state = spawn_price_fetcher(
-                    task_set,
-                    state,
-                    name,
-                    &transaction_tx,
-                    delayed,
-                )
-                .await
-                .context("Failed to spawn price fetcher task!")?;
-
-                task_states.retain(|_, (instant, _)| {
-                    instant.elapsed() < failed_retry_margin
-                });
-            },
-        }
 
         Ok(state)
     }
@@ -191,7 +116,7 @@ impl PriceFetcher {
         oracle: UncheckedContract<contract::Oracle<Dex>>,
         provider_network: String,
         provider: Dex,
-    ) -> Result<()>
+    ) -> Result<TaskWithProvider<Dex>>
     where
         Dex: self::Dex<ProviderTypeDescriptor = ProviderType>,
     {
@@ -231,7 +156,7 @@ impl PriceFetcher {
         )
         .into();
 
-        TaskWithProvider {
+        Ok(TaskWithProvider {
             protocol: self.name,
             source,
             query_tx: self.query_tx,
@@ -249,10 +174,7 @@ impl PriceFetcher {
                 .context("Failed to fetch oracle contract data!")?,
             provider,
             transaction_tx: self.transaction_tx,
-        }
-        .run(RunnableState::New)
-        .await
-        .context("Price fetcher task errored!")
+        })
     }
 }
 
@@ -261,43 +183,50 @@ async fn spawn_price_fetcher(
     state: State,
     name: Arc<str>,
     transaction_tx: &unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+    runnable_state: RunnableState,
     delayed: bool,
 ) -> Result<State> {
     struct TaskSpawner<'r> {
         task_set: &'r mut TaskSet<Id, Result<()>>,
-        id: Id,
         price_fetcher: PriceFetcher,
         network: String,
+        runnable_state: RunnableState,
         delayed: bool,
     }
 
     impl TaskSpawner<'_> {
-        fn spawn_with<Dex>(
+        async fn spawn_with<Dex>(
             self,
             ProtocolProviderAndContracts { provider, oracle }: ProtocolProviderAndContracts<Dex>,
-        ) where
+        ) -> Result<()>
+        where
             Dex: self::Dex<ProviderTypeDescriptor = ProviderType>,
         {
             let Self {
                 task_set,
-                id,
                 price_fetcher,
                 network,
+                runnable_state,
                 delayed,
             } = self;
 
-            task_set.add_handle(
-                id,
-                if delayed {
-                    tokio::spawn(async move {
-                        sleep(Duration::from_secs(15)).await;
+            let task = price_fetcher.run(oracle, network, provider).await?;
 
-                        price_fetcher.run(oracle, network, provider).await
-                    })
+            if matches!(runnable_state, RunnableState::New) {
+                spawn_new(task_set, task);
+            } else {
+                if delayed {
+                    spawn_restarting_delayed(
+                        task_set,
+                        task,
+                        Duration::from_secs(15),
+                    );
                 } else {
-                    tokio::spawn(price_fetcher.run(oracle, network, provider))
-                },
-            );
+                    spawn_restarting(task_set, task);
+                }
+            }
+
+            Ok(())
         }
     }
 
@@ -320,9 +249,6 @@ async fn spawn_price_fetcher(
 
     let task = TaskSpawner {
         task_set,
-        id: Id::PriceFetcher {
-            protocol: name.clone(),
-        },
         price_fetcher: PriceFetcher {
             name,
             idle_duration,
@@ -334,27 +260,17 @@ async fn spawn_price_fetcher(
             timeout_duration,
         },
         network,
+        runnable_state,
         delayed,
     };
 
     match provider_and_contracts {
         ProtocolDex::Astroport(provider_and_contracts) => {
-            task.spawn_with(provider_and_contracts);
+            task.spawn_with(provider_and_contracts).await
         },
         ProtocolDex::Osmosis(provider_and_contracts) => {
-            task.spawn_with(provider_and_contracts);
+            task.spawn_with(provider_and_contracts).await
         },
     }
-
-    Ok(state)
-}
-
-async fn remove_price_fetcher(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    state: State,
-    protocol: Arc<str>,
-) -> Result<State> {
-    task_set.abort(&Id::PriceFetcher { protocol });
-
-    Ok(state)
+    .map(|()| state)
 }

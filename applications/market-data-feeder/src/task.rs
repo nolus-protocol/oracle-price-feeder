@@ -28,10 +28,10 @@ use dex::{
     CurrencyPair, Dex,
     amount::{Amount, Base, Decimal, Quote},
 };
-use task::RunnableState;
+use task::{Run, RunnableState, Task};
 use task_set::TaskSet;
 
-use crate::oracle::Oracle;
+use crate::{id::Id, oracle::Oracle};
 
 macro_rules! log {
     ($macro:ident!($($body:tt)+)) => {
@@ -74,85 +74,6 @@ impl<P> TaskWithProvider<P>
 where
     P: Dex<ProviderTypeDescriptor: Display>,
 {
-    pub async fn run(mut self, state: RunnableState) -> Result<()> {
-        let mut price_fetcher_context = self.price_fetcher_context().await?;
-
-        if matches!(state, RunnableState::New) {
-            price_fetcher_context = self
-                .spawn_query_tasks(price_fetcher_context)
-                .await
-                .context("Failed to spawn price querying tasks!")?;
-
-            self.initial_fetch_and_print(
-                &mut price_fetcher_context.queries_task_set,
-            )
-            .await
-            .context(
-                "Failed to fetch and print prices in initialization phase!",
-            )?;
-        }
-
-        let mut fetch_delivered_set =
-            Defer::new(JoinSet::new(), JoinSet::abort_all);
-
-        let fetch_delivered_set = fetch_delivered_set.as_mut();
-
-        let mut next_feed_interval = interval(self.idle_duration);
-
-        next_feed_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-        let mut fallback_gas = 0;
-
-        loop {
-            match (
-                price_fetcher_context.queries_task_set.is_empty(),
-                fetch_delivered_set.is_empty(),
-            ) {
-                (false, false) => {
-                    (price_fetcher_context, fallback_gas) = self
-                        .join_query_or_delivered(
-                            price_fetcher_context,
-                            fetch_delivered_set,
-                            fallback_gas,
-                        )
-                        .await?;
-                },
-                (false, true) => {
-                    let (currency_pair, result) = price_fetcher_context
-                        .queries_task_set
-                        .join_next()
-                        .await
-                        .unwrap_or_else(unreachable);
-
-                    price_fetcher_context = self
-                        .handle_query_task_join_result(
-                            price_fetcher_context,
-                            fetch_delivered_set,
-                            fallback_gas,
-                            currency_pair,
-                            result,
-                        )?;
-                },
-                (true, false) => {
-                    (price_fetcher_context, fallback_gas) = self
-                        .join_delivered_or_feed_interval_tick(
-                            price_fetcher_context,
-                            fetch_delivered_set,
-                            &mut next_feed_interval,
-                            fallback_gas,
-                        )
-                        .await?;
-                },
-                (true, true) => {
-                    next_feed_interval.tick().await;
-
-                    price_fetcher_context =
-                        self.tick_finished(price_fetcher_context).await?;
-                },
-            }
-        }
-    }
-
     async fn price_fetcher_context(
         &self,
     ) -> Result<PriceFetcherContext<<P as Dex>::PriceQueryMessage>> {
@@ -281,21 +202,6 @@ where
         }
     }
 
-    fn handle_delivered_task_join_result(
-        &self,
-        fallback_gas: Gas,
-        result: Result<Result<Option<TxResponse>>, tokio::task::JoinError>,
-    ) -> Result<Gas> {
-        self.handle_fetch_delivered_result(
-            fallback_gas,
-            result.context(
-                "Failed to join back delivered transaction fetching \
-                            task!",
-            )?,
-        )
-        .context("Failed to process delivered transaction result!")
-    }
-
     fn handle_query_task_join_result(
         &mut self,
         mut price_fetcher_context: PriceFetcherContext<
@@ -332,6 +238,20 @@ where
         }
 
         Ok(price_fetcher_context)
+    }
+
+    fn handle_delivered_task_join_result(
+        &self,
+        fallback_gas: Gas,
+        result: Result<Result<Option<TxResponse>>, tokio::task::JoinError>,
+    ) -> Result<Gas> {
+        self.handle_fetch_delivered_result(
+            fallback_gas,
+            result.context(
+                "Failed to join back delivered transaction fetching task!",
+            )?,
+        )
+        .context("Failed to process delivered transaction result!")
     }
 
     async fn tick_finished(
@@ -752,6 +672,102 @@ where
                     }
                 }),
             );
+        }
+    }
+}
+
+impl<P> Run for TaskWithProvider<P>
+where
+    P: Dex<ProviderTypeDescriptor: Display>,
+{
+    async fn run(mut self, state: RunnableState) -> Result<()> {
+        let mut price_fetcher_context = self.price_fetcher_context().await?;
+
+        if matches!(state, RunnableState::New) {
+            price_fetcher_context = self
+                .spawn_query_tasks(price_fetcher_context)
+                .await
+                .context("Failed to spawn price querying tasks!")?;
+
+            self.initial_fetch_and_print(
+                &mut price_fetcher_context.queries_task_set,
+            )
+            .await
+            .context(
+                "Failed to fetch and print prices in initialization phase!",
+            )?;
+        }
+
+        let mut fetch_delivered_set =
+            Defer::new(JoinSet::new(), JoinSet::abort_all);
+
+        let fetch_delivered_set = fetch_delivered_set.as_mut();
+
+        let mut next_feed_interval = interval(self.idle_duration);
+
+        next_feed_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+
+        let mut fallback_gas = 0;
+
+        loop {
+            match (
+                price_fetcher_context.queries_task_set.is_empty(),
+                fetch_delivered_set.is_empty(),
+            ) {
+                (false, false) => {
+                    (price_fetcher_context, fallback_gas) = self
+                        .join_query_or_delivered(
+                            price_fetcher_context,
+                            fetch_delivered_set,
+                            fallback_gas,
+                        )
+                        .await?;
+                },
+                (false, true) => {
+                    let (currency_pair, result) = price_fetcher_context
+                        .queries_task_set
+                        .join_next()
+                        .await
+                        .unwrap_or_else(unreachable);
+
+                    price_fetcher_context = self
+                        .handle_query_task_join_result(
+                            price_fetcher_context,
+                            fetch_delivered_set,
+                            fallback_gas,
+                            currency_pair,
+                            result,
+                        )?;
+                },
+                (true, false) => {
+                    (price_fetcher_context, fallback_gas) = self
+                        .join_delivered_or_feed_interval_tick(
+                            price_fetcher_context,
+                            fetch_delivered_set,
+                            &mut next_feed_interval,
+                            fallback_gas,
+                        )
+                        .await?;
+                },
+                (true, true) => {
+                    next_feed_interval.tick().await;
+
+                    price_fetcher_context =
+                        self.tick_finished(price_fetcher_context).await?;
+                },
+            }
+        }
+    }
+}
+
+impl<P> Task<Id> for TaskWithProvider<P>
+where
+    P: Dex<ProviderTypeDescriptor: Display>,
+{
+    #[inline]
+    fn id(&self) -> Id {
+        Id::PriceFetcher {
+            protocol: self.protocol.clone(),
         }
     }
 }

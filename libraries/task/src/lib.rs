@@ -18,30 +18,7 @@ pub trait Run {
 }
 
 pub trait Task<Id>: Run {
-    const ID: Id;
-}
-
-#[inline]
-pub fn spawn<Id, T>(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    task: T,
-    runnable_state: RunnableState,
-) where
-    T: Task<Id>,
-{
-    spawn_with_id(task_set, T::ID, task, runnable_state);
-}
-
-#[inline]
-pub fn spawn_with_id<Id, T>(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    id: Id,
-    task: T,
-    runnable_state: RunnableState,
-) where
-    T: Task<Id>,
-{
-    spawn_future(task_set, id, task.run(runnable_state));
+    fn id(&self) -> Id;
 }
 
 #[inline]
@@ -49,18 +26,7 @@ pub fn spawn_new<Id, T>(task_set: &mut TaskSet<Id, Result<()>>, task: T)
 where
     T: Task<Id>,
 {
-    spawn_new_with_id(task_set, T::ID, task);
-}
-
-#[inline]
-pub fn spawn_new_with_id<Id, T>(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    id: Id,
-    task: T,
-) where
-    T: Task<Id>,
-{
-    spawn_with_id(task_set, id, task, RunnableState::New);
+    spawn_future(task_set, task.id(), task.run(RunnableState::New));
 }
 
 #[inline]
@@ -68,18 +34,7 @@ pub fn spawn_restarting<Id, T>(task_set: &mut TaskSet<Id, Result<()>>, task: T)
 where
     T: Task<Id>,
 {
-    spawn_restarting_with_id(task_set, T::ID, task);
-}
-
-#[inline]
-pub fn spawn_restarting_with_id<Id, T>(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    id: Id,
-    task: T,
-) where
-    T: Task<Id>,
-{
-    spawn_with_id(task_set, id, task, RunnableState::Restart);
+    spawn_future(task_set, task.id(), task.run(RunnableState::Restart));
 }
 
 #[inline]
@@ -90,24 +45,14 @@ pub fn spawn_restarting_delayed<Id, T>(
 ) where
     T: Task<Id>,
 {
-    spawn_restarting_with_id_delayed(task_set, T::ID, task, delay);
-}
+    spawn_future(task_set, task.id(), {
+        let future = task.run(RunnableState::Restart);
 
-#[inline]
-pub fn spawn_restarting_with_id_delayed<Id, T>(
-    task_set: &mut TaskSet<Id, Result<()>>,
-    id: Id,
-    task: T,
-    delay: Duration,
-) where
-    T: Task<Id>,
-{
-    let future = task.run(RunnableState::Restart);
+        async move {
+            sleep(delay).await;
 
-    spawn_future(task_set, id, async move {
-        sleep(delay).await;
-
-        future.await
+            future.await
+        }
     });
 }
 

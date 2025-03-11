@@ -51,8 +51,8 @@ macro_rules! log_broadcast_with_source {
 }
 
 pub struct Environment {
-    pub delay_duration: Duration,
-    pub retry_delay_duration: Duration,
+    delay_duration: Duration,
+    retry_delay_duration: Duration,
 }
 
 impl Environment {
@@ -76,12 +76,37 @@ pub struct State<TxExpiration>
 where
     TxExpiration: Send,
 {
-    pub broadcast_tx: BroadcastTx,
-    pub signer: Arc<Mutex<Signer>>,
-    pub transaction_rx:
-        Arc<Mutex<unbounded::Receiver<TxPackage<TxExpiration>>>>,
-    pub delay_duration: Duration,
-    pub retry_delay_duration: Duration,
+    broadcast_tx: BroadcastTx,
+    signer: Arc<Mutex<Signer>>,
+    transaction_rx: Arc<Mutex<unbounded::Receiver<TxPackage<TxExpiration>>>>,
+    delay_duration: Duration,
+    retry_delay_duration: Duration,
+}
+
+impl<TxExpiration> State<TxExpiration>
+where
+    TxExpiration: Send,
+{
+    #[inline]
+    pub const fn new(
+        Environment {
+            delay_duration,
+            retry_delay_duration,
+        }: Environment,
+        broadcast_tx: BroadcastTx,
+        signer: Arc<Mutex<Signer>>,
+        transaction_rx: Arc<
+            Mutex<unbounded::Receiver<TxPackage<TxExpiration>>>,
+        >,
+    ) -> Self {
+        Self {
+            broadcast_tx,
+            signer,
+            transaction_rx,
+            delay_duration,
+            retry_delay_duration,
+        }
+    }
 }
 
 impl<TxExpiration> Run for State<TxExpiration>

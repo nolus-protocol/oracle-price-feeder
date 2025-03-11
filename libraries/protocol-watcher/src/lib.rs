@@ -1,9 +1,9 @@
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use tokio::time::sleep;
 
-use channel::{bounded, Sender};
+use channel::{Sender, bounded};
 use contract::{Admin, CheckedContract};
 use task::{Run, RunnableState};
 use task_set::TaskSet;
@@ -28,8 +28,21 @@ pub enum Command {
 #[derive(Clone)]
 #[must_use]
 pub struct State {
-    pub admin_contract: CheckedContract<Admin>,
-    pub action_tx: bounded::Sender<Command>,
+    admin_contract: CheckedContract<Admin>,
+    action_tx: bounded::Sender<Command>,
+}
+
+impl State {
+    #[inline]
+    pub const fn new(
+        admin_contract: CheckedContract<Admin>,
+        action_tx: bounded::Sender<Command>,
+    ) -> Self {
+        Self {
+            admin_contract,
+            action_tx,
+        }
+    }
 }
 
 impl Run for State {

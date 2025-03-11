@@ -2,13 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context as _, Result};
 use cosmrs::{
+    Any as ProtocolAny,
     proto::{
         cosmos::base::abci::v1beta1::TxResponse,
         cosmwasm::wasm::v1::MsgExecuteContract,
     },
     tendermint::{abci::Code as TxCode, block::Height},
     tx::Body as TxBody,
-    Any as ProtocolAny,
 };
 use serde::{Deserialize, Serialize};
 use tokio::{sync::oneshot, time::sleep};
@@ -87,45 +87,6 @@ where
             source: self.source.clone(),
             alarms: self.alarms.clone(),
         }
-    }
-}
-
-impl AlarmsGenerator<PriceAlarms> {
-    #[inline]
-    pub fn new_price_alarms(
-        configuration: Configuration,
-        contract: CheckedContract<<PriceAlarms as Alarms>::Contract>,
-        gas_per_alarm: Gas,
-        alarms_per_message: u32,
-        alarms: PriceAlarms,
-    ) -> Result<Self> {
-        Self::with_source(
-            configuration,
-            format!("Price Alarms; Protocol={}", alarms.protocol()).into(),
-            contract,
-            gas_per_alarm,
-            alarms_per_message,
-            alarms,
-        )
-    }
-}
-
-impl AlarmsGenerator<TimeAlarms> {
-    #[inline]
-    pub fn new_time_alarms(
-        configuration: Configuration,
-        contract: CheckedContract<<TimeAlarms as Alarms>::Contract>,
-        gas_per_alarm: Gas,
-        alarms_per_message: u32,
-    ) -> Result<Self> {
-        Self::with_source(
-            configuration,
-            "Time Alarms".into(),
-            contract,
-            gas_per_alarm,
-            alarms_per_message,
-            TimeAlarms {},
-        )
     }
 }
 
@@ -300,6 +261,50 @@ where
             })
             .map(|()| response_receiver)
             .context("Failed to send transaction for broadcasting!")
+    }
+}
+
+impl AlarmsGenerator<PriceAlarms> {
+    #[inline]
+    pub fn new_price_alarms(
+        configuration: Configuration,
+        contract: CheckedContract<<PriceAlarms as Alarms>::Contract>,
+        gas_per_alarm: Gas,
+        alarms_per_message: u32,
+        alarms: PriceAlarms,
+    ) -> Result<Self> {
+        Self::with_source(
+            configuration,
+            format!("Price Alarms; Protocol={}", alarms.protocol()).into(),
+            contract,
+            gas_per_alarm,
+            alarms_per_message,
+            alarms,
+        )
+    }
+
+    #[inline]
+    pub const fn protocol(&self) -> &Arc<str> {
+        self.alarms.protocol()
+    }
+}
+
+impl AlarmsGenerator<TimeAlarms> {
+    #[inline]
+    pub fn new_time_alarms(
+        configuration: Configuration,
+        contract: CheckedContract<<TimeAlarms as Alarms>::Contract>,
+        gas_per_alarm: Gas,
+        alarms_per_message: u32,
+    ) -> Result<Self> {
+        Self::with_source(
+            configuration,
+            "Time Alarms".into(),
+            contract,
+            gas_per_alarm,
+            alarms_per_message,
+            TimeAlarms {},
+        )
     }
 }
 

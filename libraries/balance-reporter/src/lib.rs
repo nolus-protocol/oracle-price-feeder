@@ -8,7 +8,7 @@ use environment::ReadFromVar;
 use task::{Run, RunnableState};
 
 pub struct Environment {
-    pub idle_duration: Duration,
+    idle_duration: Duration,
 }
 
 impl Environment {
@@ -45,6 +45,23 @@ pub struct State {
     pub address: Arc<str>,
     pub denom: Arc<str>,
     pub idle_duration: Duration,
+}
+
+impl State {
+    #[inline]
+    pub const fn new(
+        Environment { idle_duration }: Environment,
+        query_bank: QueryBank,
+        address: Arc<str>,
+        denom: Arc<str>,
+    ) -> Self {
+        Self {
+            query_bank,
+            address,
+            denom,
+            idle_duration,
+        }
+    }
 }
 
 impl Run for State {

@@ -12,13 +12,22 @@ pub enum Id {
 }
 
 impl Task<Id> for balance_reporter::State {
-    const ID: Id = Id::BalanceReporter;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::BalanceReporter
+    }
 }
 
 impl Task<Id> for broadcaster::State<TimeBasedExpiration> {
-    const ID: Id = Id::Broadcaster;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::Broadcaster
+    }
 }
 
 impl Task<Id> for protocol_watcher::State {
-    const ID: Id = Id::ProtocolWatcher;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::ProtocolWatcher
+    }
 }

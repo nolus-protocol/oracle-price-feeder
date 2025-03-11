@@ -14,7 +14,7 @@ use service::supervisor::configuration::Service;
 use tx::{TimeBasedExpiration, TxPackage};
 
 pub struct State {
-    error_handler: error_handler::State,
+    error_handler: error_handler::State<Arc<str>>,
     balance_reporter: balance_reporter::State,
     broadcaster: broadcaster::State<TimeBasedExpiration>,
     protocol_watcher: protocol_watcher::State,
@@ -46,10 +46,8 @@ impl State {
         let broadcaster =
             Self::new_broadcaster(node_client.clone(), signer, transaction_rx)?;
 
-        let protocol_watcher = protocol_watcher::State {
-            admin_contract: admin_contract.clone(),
-            action_tx,
-        };
+        let protocol_watcher =
+            protocol_watcher::State::new(admin_contract.clone(), action_tx);
 
         let price_fetcher = Self::new_price_fetcher(
             node_client,
@@ -69,8 +67,10 @@ impl State {
     }
 
     #[inline]
-    pub const fn error_handler(&self) -> &error_handler::State {
-        &self.error_handler
+    pub const fn error_handler_mut(
+        &mut self,
+    ) -> &mut error_handler::State<Arc<str>> {
+        &mut self.error_handler
     }
 
     #[inline]
@@ -95,18 +95,10 @@ impl State {
         &self.price_fetcher
     }
 
-    fn new_error_handler() -> Result<error_handler::State> {
+    fn new_error_handler() -> Result<error_handler::State<Arc<str>>> {
         use error_handler::{Environment, State};
 
-        Environment::read_from_env().map(
-            |Environment {
-                 non_delayed_task_retries_count,
-                 failed_retry_margin,
-             }| State {
-                non_delayed_task_retries_count,
-                failed_retry_margin,
-            },
-        )
+        Environment::read_from_env().map(State::new)
     }
 
     fn new_balance_reporter(
@@ -116,33 +108,30 @@ impl State {
     ) -> Result<balance_reporter::State> {
         use balance_reporter::{Environment, State};
 
-        Environment::read_from_env().map(|Environment { idle_duration }| {
-            State {
-                query_bank: node_client.clone().query_bank(),
+        Environment::read_from_env().map(|environment| {
+            State::new(
+                environment,
+                node_client.clone().query_bank(),
                 address,
                 denom,
-                idle_duration,
-            }
+            )
         })
     }
 
     fn new_broadcaster(
         node_client: node::Client,
         signer: Signer,
-        transaction_rx: tokio::sync::mpsc::UnboundedReceiver<
-            TxPackage<TimeBasedExpiration>,
-        >,
-    ) -> Result<broadcaster::State<TimeBasedExpiration>, anyhow::Error> {
-        let broadcaster::Environment {
-            delay_duration,
-            retry_delay_duration,
-        } = broadcaster::Environment::read_from_env()?;
-        Ok(broadcaster::State {
-            broadcast_tx: node_client.broadcast_tx(),
-            signer: Arc::new(Mutex::new(signer)),
-            transaction_rx: Arc::new(Mutex::new(transaction_rx)),
-            delay_duration,
-            retry_delay_duration,
+        transaction_rx: unbounded::Receiver<TxPackage<TimeBasedExpiration>>,
+    ) -> Result<broadcaster::State<TimeBasedExpiration>> {
+        use broadcaster::{Environment, State};
+
+        Environment::read_from_env().map(|environment| {
+            State::new(
+                environment,
+                node_client.broadcast_tx(),
+                Arc::new(Mutex::new(signer)),
+                Arc::new(Mutex::new(transaction_rx)),
+            )
         })
     }
 

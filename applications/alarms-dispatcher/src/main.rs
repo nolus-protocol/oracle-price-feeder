@@ -7,12 +7,12 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result};
 use tokio::sync::Mutex;
 
-use ::task::{spawn_new, spawn_restarting, Run, RunnableState, Task};
+use ::task::{Run, RunnableState, Task, spawn_new, spawn_restarting};
 use chain_ops::{
     node,
     signer::{Gas, Signer},
 };
-use channel::{bounded, unbounded, Channel as _};
+use channel::{Channel as _, bounded, unbounded};
 use contract::{
     Admin, CheckedContract, GeneralizedProtocol, GeneralizedProtocolContracts,
     Platform,
@@ -182,19 +182,40 @@ enum Id {
 }
 
 impl Task<Id> for balance_reporter::State {
-    const ID: Id = Id::BalanceReporter;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::BalanceReporter
+    }
 }
 
 impl Task<Id> for broadcaster::State<NoExpiration> {
-    const ID: Id = Id::Broadcaster;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::Broadcaster
+    }
 }
 
 impl Task<Id> for protocol_watcher::State {
-    const ID: Id = Id::ProtocolWatcher;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::ProtocolWatcher
+    }
 }
 
 impl Task<Id> for AlarmsGenerator<TimeAlarms> {
-    const ID: Id = Id::TimeAlarms;
+    #[inline]
+    fn id(&self) -> Id {
+        Id::TimeAlarms
+    }
+}
+
+impl Task<Id> for AlarmsGenerator<PriceAlarms> {
+    #[inline]
+    fn id(&self) -> Id {
+        Id::PriceAlarms {
+            protocol: self.protocol().clone(),
+        }
+    }
 }
 
 #[must_use]
@@ -238,10 +259,10 @@ impl State {
             .await
             .context("Failed to connect to time alarms contract!")?;
 
-        let protocol_watcher = protocol_watcher::State {
-            admin_contract: service.admin_contract.clone(),
+        let protocol_watcher = protocol_watcher::State::new(
+            service.admin_contract.clone(),
             action_tx,
-        };
+        );
 
         let configuration = Configuration {
             transaction_tx: transaction_tx.clone(),
@@ -315,11 +336,13 @@ fn balance_reporter(
 ) -> Result<balance_reporter::State> {
     use balance_reporter::{Environment, State};
 
-    Environment::read_from_env().map(|Environment { idle_duration }| State {
-        query_bank: node_client.query_bank(),
-        address: signer.address().into(),
-        denom: signer.fee_token().into(),
-        idle_duration,
+    Environment::read_from_env().map(|environment| {
+        State::new(
+            environment,
+            node_client.query_bank(),
+            signer.address().into(),
+            signer.fee_token().into(),
+        )
     })
 }
 
@@ -330,18 +353,14 @@ fn broadcaster(
 ) -> Result<broadcaster::State<NoExpiration>> {
     use broadcaster::{Environment, State};
 
-    Environment::read_from_env().map(
-        |Environment {
-             delay_duration,
-             retry_delay_duration,
-         }| State {
-            broadcast_tx: node_client.broadcast_tx(),
-            signer: Arc::new(Mutex::new(signer)),
-            transaction_rx: Arc::new(Mutex::new(transaction_rx)),
-            delay_duration,
-            retry_delay_duration,
-        },
-    )
+    Environment::read_from_env().map(|environment| {
+        State::new(
+            environment,
+            node_client.broadcast_tx(),
+            Arc::new(Mutex::new(signer)),
+            Arc::new(Mutex::new(transaction_rx)),
+        )
+    })
 }
 
 pub struct ApplicationDefinedContext {
