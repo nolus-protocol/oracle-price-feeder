@@ -230,22 +230,22 @@ async fn get_or_connect_dex_client(
     })
 }
 
-pub struct TaskWithProvider<Dex>
+struct TaskWithProvider<Dex>
 where
     Dex: self::Dex,
 {
-    pub protocol: Arc<str>,
-    pub source: Arc<str>,
-    pub query_tx: node::QueryTx,
-    pub dex_node_client: node::Client,
-    pub duration_before_start: Duration,
-    pub execute_template: ExecuteTemplate,
-    pub idle_duration: Duration,
-    pub timeout_duration: Duration,
-    pub hard_gas_limit: Gas,
-    pub oracle: Oracle<Dex>,
-    pub provider: Dex,
-    pub transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
+    protocol: Arc<str>,
+    source: Arc<str>,
+    query_tx: node::QueryTx,
+    dex_node_client: node::Client,
+    duration_before_start: Duration,
+    execute_template: ExecuteTemplate,
+    idle_duration: Duration,
+    timeout_duration: Duration,
+    hard_gas_limit: Gas,
+    oracle: Oracle<Dex>,
+    provider: Dex,
+    transaction_tx: unbounded::Sender<TxPackage<TimeBasedExpiration>>,
 }
 
 impl<P> TaskWithProvider<P>
