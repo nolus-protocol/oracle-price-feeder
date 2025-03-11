@@ -159,8 +159,7 @@ impl TaskSpawner<'_> {
             .context("Failed to connect to oracle contract!")?;
 
         let source =
-            format!("{dex}; Protocol: {name}", dex = Dex::PROVIDER_TYPE,)
-                .into();
+            format!("{dex}; Protocol: {name}", dex = Dex::PROVIDER_TYPE).into();
 
         let dex_node_client =
             get_or_connect_dex_client(network, dex_node_clients).await?;
