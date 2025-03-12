@@ -1,12 +1,9 @@
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::Result;
 use tokio::sync::Mutex;
 
-use chain_ops::{
-    node::{self, QueryTx},
-    signer::{Gas, Signer},
-};
+use chain_ops::{node, signer::Signer};
 use channel::{bounded, unbounded};
 use contract::{Admin, CheckedContract};
 use protocol_watcher::Command;
@@ -18,7 +15,7 @@ pub struct State {
     balance_reporter: balance_reporter::State,
     broadcaster: broadcaster::State<TimeBasedExpiration>,
     protocol_watcher: protocol_watcher::State,
-    price_fetcher: PriceFetcher,
+    price_fetcher: price_fetcher::State,
 }
 
 impl State {
@@ -27,8 +24,8 @@ impl State {
             node_client,
             signer,
             admin_contract,
-            idle_duration,
-            timeout_duration,
+            idle_duration: _,
+            timeout_duration: _,
         }: Service,
         transaction_rx: unbounded::Receiver<TxPackage<TimeBasedExpiration>>,
         action_tx: bounded::Sender<Command>,
@@ -52,10 +49,8 @@ impl State {
         let price_fetcher = Self::new_price_fetcher(
             node_client,
             admin_contract,
-            idle_duration,
-            timeout_duration,
             signer_address,
-        );
+        )?;
 
         Ok(State {
             error_handler,
@@ -91,7 +86,7 @@ impl State {
     }
 
     #[inline]
-    pub const fn price_fetcher(&self) -> &PriceFetcher {
+    pub const fn price_fetcher(&self) -> &price_fetcher::State {
         &self.price_fetcher
     }
 
@@ -138,30 +133,97 @@ impl State {
     fn new_price_fetcher(
         node_client: node::Client,
         admin_contract: CheckedContract<Admin>,
-        idle_duration: Duration,
-        timeout_duration: Duration,
         signer_address: Arc<str>,
-    ) -> PriceFetcher {
-        PriceFetcher {
-            admin_contract,
-            dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
-            idle_duration,
-            signer_address,
-            hard_gas_limit: 0,
-            query_tx: node_client.query_tx(),
-            timeout_duration,
-        }
+    ) -> Result<price_fetcher::State> {
+        use self::price_fetcher::{Environment, State};
+
+        Environment::read_from_env().map(|environment| {
+            State::new(
+                environment,
+                admin_contract,
+                signer_address,
+                node_client.query_tx(),
+            )
+        })
     }
 }
 
-#[derive(Clone)]
-#[must_use]
-pub struct PriceFetcher {
-    pub admin_contract: CheckedContract<Admin>,
-    pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
-    pub idle_duration: Duration,
-    pub signer_address: Arc<str>,
-    pub hard_gas_limit: Gas,
-    pub query_tx: QueryTx,
-    pub timeout_duration: Duration,
+pub mod price_fetcher {
+    use std::{collections::BTreeMap, sync::Arc, time::Duration};
+
+    use anyhow::Result;
+    use tokio::sync::Mutex;
+
+    use chain_ops::{
+        node::{self, QueryTx},
+        signer::Gas,
+    };
+    use contract::{Admin, CheckedContract};
+    use environment::ReadFromVar;
+
+    pub struct Environment {
+        duration_before_start: Duration,
+        idle_duration: Duration,
+        timeout_duration: Duration,
+    }
+
+    impl Environment {
+        pub fn read_from_env() -> Result<Self> {
+            let duration_before_start =
+                ReadFromVar::read_from_var("DURATION_SECONDS_BEFORE_START")
+                    .map(Duration::from_secs)?;
+
+            let idle_duration =
+                ReadFromVar::read_from_var("IDLE_DURATION_SECONDS")
+                    .map(Duration::from_secs)?;
+
+            let timeout_duration =
+                ReadFromVar::read_from_var("TIMEOUT_DURATION_SECONDS")
+                    .map(Duration::from_secs)?;
+
+            Ok(Self {
+                duration_before_start,
+                idle_duration,
+                timeout_duration,
+            })
+        }
+    }
+
+    #[derive(Clone)]
+    #[must_use]
+    pub struct State {
+        pub admin_contract: CheckedContract<Admin>,
+        pub dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+        pub duration_before_start: Duration,
+        pub idle_duration: Duration,
+        pub signer_address: Arc<str>,
+        pub hard_gas_limit: Gas,
+        pub query_tx: QueryTx,
+        pub timeout_duration: Duration,
+    }
+
+    impl State {
+        #[inline]
+        pub fn new(
+            Environment {
+                duration_before_start,
+                idle_duration,
+                timeout_duration,
+            }: Environment,
+            admin_contract: CheckedContract<Admin>,
+            signer_address: Arc<str>,
+            query_tx: QueryTx,
+        ) -> Self {
+            Self {
+                admin_contract,
+                dex_node_clients: Arc::new(Mutex::new(BTreeMap::new())),
+                duration_before_start,
+                idle_duration,
+                signer_address,
+                hard_gas_limit: 0,
+                query_tx,
+                timeout_duration,
+            }
+        }
+    }
 }

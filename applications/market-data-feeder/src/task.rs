@@ -12,7 +12,7 @@ use serde::Serialize;
 use tokio::{
     spawn,
     sync::{Mutex, oneshot},
-    task::{AbortHandle, JoinSet},
+    task::{AbortHandle, JoinError, JoinSet},
     time::{Instant, Interval, MissedTickBehavior, interval, sleep, timeout},
 };
 
@@ -38,10 +38,7 @@ use task::{
 use task_set::TaskSet;
 
 use crate::{
-    dex_node_grpc_var::dex_node_grpc_var,
-    id::Id,
-    oracle::Oracle,
-    state::{self, State},
+    dex_node_grpc_var::dex_node_grpc_var, id::Id, oracle::Oracle, state::State,
 };
 
 macro_rules! log {
@@ -78,31 +75,28 @@ pub async fn spawn_price_fetcher(
 ) -> Result<State> {
     tracing::info!(%protocol, "Price fetcher is starting...");
 
-    let state::PriceFetcher {
-        mut admin_contract,
-        dex_node_clients,
-        idle_duration,
-        signer_address,
-        hard_gas_limit,
-        query_tx,
-        timeout_duration,
-    } = state.price_fetcher().clone();
+    let price_fetcher = state.price_fetcher();
 
     let Protocol {
         network,
         provider_and_contracts,
-    } = admin_contract.protocol(&protocol).await?;
+    } = price_fetcher
+        .admin_contract
+        .clone()
+        .protocol(&protocol)
+        .await?;
 
     let task = TaskSpawner {
         task_set,
         name: protocol,
-        idle_duration,
+        idle_duration: price_fetcher.idle_duration,
         transaction_tx: transaction_tx.clone(),
-        signer_address: signer_address.clone(),
-        hard_gas_limit,
-        query_tx,
-        dex_node_clients: dex_node_clients.clone(),
-        timeout_duration,
+        signer_address: price_fetcher.signer_address.clone(),
+        hard_gas_limit: price_fetcher.hard_gas_limit,
+        query_tx: price_fetcher.query_tx.clone(),
+        dex_node_clients: price_fetcher.dex_node_clients.clone(),
+        duration_before_start: price_fetcher.duration_before_start,
+        timeout_duration: price_fetcher.timeout_duration,
         network,
         runnable_state,
     };
@@ -118,10 +112,11 @@ pub async fn spawn_price_fetcher(
     .map(|()| state)
 }
 
-struct TaskSpawner<'r> {
-    task_set: &'r mut TaskSet<Id, Result<()>>,
+struct TaskSpawner<'task_set> {
+    task_set: &'task_set mut TaskSet<Id, Result<()>>,
     name: Arc<str>,
     dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
+    duration_before_start: Duration,
     idle_duration: Duration,
     signer_address: Arc<str>,
     hard_gas_limit: Gas,
@@ -140,61 +135,50 @@ impl TaskSpawner<'_> {
     where
         Dex: self::Dex<ProviderTypeDescriptor = ProviderType>,
     {
-        let Self {
-            task_set,
-            name,
-            dex_node_clients,
-            idle_duration,
-            signer_address,
-            hard_gas_limit,
-            transaction_tx,
-            query_tx,
-            timeout_duration,
-            network,
-            runnable_state,
-        } = self;
-
         let oracle = ::oracle::Oracle::new(oracle)
             .await
             .context("Failed to connect to oracle contract!")?;
 
-        let source =
-            format!("{dex}; Protocol: {name}", dex = Dex::PROVIDER_TYPE).into();
-
-        let dex_node_client =
-            get_or_connect_dex_client(network, dex_node_clients).await?;
-
-        let execute_template = ExecuteTemplate::new(
-            (&*signer_address).into(),
-            oracle.address().into(),
-        );
-
-        let oracle = Oracle::new(oracle, Duration::from_secs(15))
-            .await
-            .context("Failed to fetch oracle contract data!")?;
+        let source = format!(
+            "{dex}; Protocol: {name}",
+            dex = Dex::PROVIDER_TYPE,
+            name = self.name,
+        )
+        .into();
 
         let task = TaskWithProvider {
-            protocol: name,
+            protocol: self.name,
             source,
-            query_tx,
-            dex_node_client,
-            duration_before_start: Duration::default(),
-            execute_template,
-            idle_duration,
-            timeout_duration,
-            hard_gas_limit,
-            oracle,
+            query_tx: self.query_tx,
+            dex_node_client: get_or_connect_dex_client(
+                self.network,
+                self.dex_node_clients,
+            )
+            .await?,
+            duration_before_start: self.duration_before_start,
+            execute_template: ExecuteTemplate::new(
+                self.signer_address.as_ref().into(),
+                oracle.address().into(),
+            ),
+            idle_duration: self.idle_duration,
+            timeout_duration: self.timeout_duration,
+            hard_gas_limit: self.hard_gas_limit,
+            oracle: Oracle::new(oracle, Duration::from_secs(15))
+                .await
+                .context("Failed to fetch oracle contract data!")?,
             provider,
-            transaction_tx,
+            transaction_tx: self.transaction_tx,
         };
 
-        match runnable_state {
-            PriceFetcherRunnableState::New => spawn_new(task_set, task),
+        match self.runnable_state {
+            PriceFetcherRunnableState::New => {
+                spawn_new(self.task_set, task);
+            },
             PriceFetcherRunnableState::ImmediateRestart => {
-                spawn_restarting(task_set, task)
+                spawn_restarting(self.task_set, task);
             },
             PriceFetcherRunnableState::DelayedRestart(delay) => {
-                spawn_restarting_delayed(task_set, task, delay)
+                spawn_restarting_delayed(self.task_set, task, delay);
             },
         }
 
@@ -205,12 +189,13 @@ impl TaskSpawner<'_> {
 async fn get_or_connect_dex_client(
     provider_network: String,
     dex_node_clients: Arc<Mutex<BTreeMap<Box<str>, node::Client>>>,
-) -> Result<node::Client, anyhow::Error> {
-    let client = {
-        let guard = dex_node_clients.clone().lock_owned().await;
-
-        guard.get(&*provider_network).cloned()
-    };
+) -> Result<node::Client> {
+    let client = dex_node_clients
+        .clone()
+        .lock_owned()
+        .await
+        .get(&*provider_network)
+        .cloned();
 
     Ok(if let Some(client) = client {
         client
@@ -278,8 +263,8 @@ where
 
     async fn initial_fetch_and_print(
         &mut self,
-        queries_task_set: &mut QueryTasksSet,
-    ) -> Result<()> {
+        mut queries_task_set: QueryTasksSet,
+    ) -> Result<QueryTasksSet> {
         let mut prices = vec![];
 
         let mut fetch_errors = vec![];
@@ -304,7 +289,7 @@ where
 
         sleep(self.duration_before_start).await;
 
-        Ok(())
+        Ok(queries_task_set)
     }
 
     fn log_prices_and_errors(
@@ -374,10 +359,10 @@ where
         quote_ticker: &str,
         quote_amount: &Amount<Quote>,
     ) -> String {
-        struct ProcessedAmount<'r> {
-            whole: &'r str,
+        struct ProcessedAmount<'whole, 'fraction> {
+            whole: &'whole str,
             zeroes_after_point: usize,
-            fraction: &'r str,
+            fraction: &'fraction str,
         }
 
         fn process(amount: &Decimal) -> ProcessedAmount {
@@ -531,10 +516,7 @@ where
         fetch_delivered_set: &mut JoinSet<Result<Option<TxResponse>>>,
         fallback_gas: Gas,
         currency_pair: CurrencyPair,
-        result: Result<
-            Result<(Amount<Base>, Amount<Quote>)>,
-            tokio::task::JoinError,
-        >,
+        result: Result<Result<(Amount<Base>, Amount<Quote>)>, JoinError>,
     ) -> Result<PriceFetcherContext<<P as Dex>::PriceQueryMessage>> {
         self.handle_price_query_result(
             &mut price_fetcher_context.price_collection_buffer,
@@ -564,7 +546,7 @@ where
     fn handle_delivered_task_join_result(
         &self,
         fallback_gas: Gas,
-        result: Result<Result<Option<TxResponse>>, tokio::task::JoinError>,
+        result: Result<Result<Option<TxResponse>>, JoinError>,
     ) -> Result<Gas> {
         self.handle_fetch_delivered_result(
             fallback_gas,
@@ -826,10 +808,15 @@ where
         Ok(price_fetcher_context)
     }
 
-    pub(crate) fn spawn_query_task<'r>(
-        &'r self,
-        task_set: &'r mut QueryTasksSet,
-    ) -> impl FnMut((&CurrencyPair, &P::PriceQueryMessage)) + 'r {
+    pub(crate) fn spawn_query_task<'self_, 'task_set>(
+        &'self_ self,
+        task_set: &'task_set mut QueryTasksSet,
+    ) -> impl for<'currency_pair, 'price_query_message> FnMut(
+        (
+            &'currency_pair CurrencyPair,
+            &'price_query_message P::PriceQueryMessage,
+        ),
+    ) + use<'self_, 'task_set, P> {
         let duration = self.idle_duration;
 
         move |(currency_pair, message)| {
@@ -867,13 +854,12 @@ where
                 .await
                 .context("Failed to spawn price querying tasks!")?;
 
-            self.initial_fetch_and_print(
-                &mut price_fetcher_context.queries_task_set,
-            )
-            .await
-            .context(
-                "Failed to fetch and print prices in initialization phase!",
-            )?;
+            price_fetcher_context.queries_task_set = self
+                .initial_fetch_and_print(price_fetcher_context.queries_task_set)
+                .await
+                .context(
+                    "Failed to fetch and print prices in initialization phase!",
+                )?;
         }
 
         let mut fetch_delivered_set =

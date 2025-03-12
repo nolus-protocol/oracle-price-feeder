@@ -31,6 +31,7 @@
       <sourceFolder url="file://$MODULE_DIR$/libraries/supervisor/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/libraries/task/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/libraries/tx/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/libraries/error-handler/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/test-encoding-compatibility/target" />
     </content>
